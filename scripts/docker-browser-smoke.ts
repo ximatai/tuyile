@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { chromium } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
@@ -44,6 +45,143 @@ try {
     .boundingBox();
   const quota = await page.locator(".quota-details summary").boundingBox();
   assert(submit && quota && submit.y + submit.height <= quota.y);
+  const projectId = new URL(page.url()).pathname.split("/").at(-1)!;
+  const session = await (
+    await page.request.get("http://127.0.0.1:8792/api/auth/me")
+  ).json();
+  async function command(path: string, data: unknown) {
+    const response = await page.request.post(
+      `http://127.0.0.1:8792/api${path}`,
+      {
+        headers: {
+          Origin: "http://127.0.0.1:8792",
+          "X-CSRF-Token": session.csrfToken,
+        },
+        data,
+      },
+    );
+    assert(response.ok(), `SYNTHETIC_COMMAND_HTTP_${response.status()}`);
+    return response.json();
+  }
+  await command("/image-admin/planning-providers", {
+    mode: "fake",
+    baseUrl: "",
+    model: "docker-synthetic-planner",
+  });
+  const assets = await (
+    await page.request.get(
+      `http://127.0.0.1:8792/api/images/tasks?projectId=${projectId}`,
+    )
+  ).json();
+  const referenceId = assets.tasks.flatMap((task: any) => task.outputs)[0].id;
+  const spec = {
+    prompt: "Synthetic product composition",
+    model: "test-image",
+    width: 256,
+    height: 256,
+    quality: "medium",
+    format: "png",
+    referenceIds: [referenceId],
+  };
+  const job = await command("/agent/planning", {
+    ...spec,
+    projectId,
+    requestKey: randomUUID(),
+  });
+  for (let i = 0; i < 40; i++) {
+    const result = await (
+      await page.request.get(
+        `http://127.0.0.1:8792/api/agent/jobs?projectId=${projectId}`,
+      )
+    ).json();
+    if (
+      result.jobs.find((item: any) => item.id === job.id)?.state === "succeeded"
+    )
+      break;
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  await command(`/agent/jobs/${job.id}/revisions`, {
+    requestKey: randomUUID(),
+    document: {
+      message: "Synthetic two-step review",
+      steps: [
+        {
+          ...spec,
+          title: "Product composition",
+          count: 2,
+          tool: { id: "image.edit", version: 1 },
+          usePrevious: false,
+        },
+        {
+          ...spec,
+          title: "Product detail",
+          count: 1,
+          tool: { id: "image.edit", version: 1 },
+          usePrevious: true,
+        },
+      ],
+    },
+  });
+  await page.reload();
+  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await page.getByLabel("计划步骤摘要").waitFor();
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 1920, height: 1080 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.screenshot({
+      path: `.codex-temp/docker-agent-review-${viewport.width}-before.png`,
+      animations: "disabled",
+    });
+    await page
+      .waitForFunction(() => {
+        const card = document
+          .querySelector(".agent-plan-form")
+          ?.getBoundingClientRect();
+        const conversation = document
+          .querySelector(".agent-conversation")
+          ?.getBoundingClientRect();
+        return (
+          card &&
+          conversation &&
+          card.top >= conversation.top - 1 &&
+          card.bottom <= conversation.bottom + 1
+        );
+      })
+      .catch(async (error) => {
+        console.log(
+          "PLAN_REVIEW_GEOMETRY",
+          await page.evaluate(() =>
+            [".agent-plan-form", ".agent-conversation"].map((selector) => {
+              const box = document
+                .querySelector(selector)
+                ?.getBoundingClientRect();
+              return {
+                selector,
+                top: box?.top,
+                bottom: box?.bottom,
+                height: box?.height,
+              };
+            }),
+          ),
+        );
+        throw error;
+      });
+    const confirm = await page
+      .getByRole("button", { name: "确认执行", exact: true })
+      .boundingBox();
+    assert(confirm && confirm.y + confirm.height <= viewport.height);
+    assert.equal(
+      await page.getByLabel("计划步骤摘要").locator("li").count(),
+      2,
+    );
+    await page.screenshot({
+      path: `.codex-temp/docker-agent-review-${viewport.width}.png`,
+      animations: "disabled",
+    });
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole("tab", { name: "Agent", exact: true }).click();
   await page.getByLabel("告诉 Agent 你的想法", { exact: true }).waitFor();
   await page.getByRole("tab", { name: "直接创作", exact: true }).click();
@@ -96,12 +234,10 @@ try {
     .getByText("图片统计日、逐单预留和规划计次对账一致。", { exact: true })
     .waitFor();
   await page.getByLabel("每日规划次数", { exact: true }).waitFor();
-  await page
-    .locator(".operations-admin")
-    .screenshot({
-      path: ".codex-temp/docker-administration.png",
-      animations: "disabled",
-    });
+  await page.locator(".operations-admin").screenshot({
+    path: ".codex-temp/docker-administration.png",
+    animations: "disabled",
+  });
   assert.deepEqual(errors, []);
   console.log(
     "Built Docker Chromium: nonce styles, themed button, Select popup, confirmation dialog and medium/large desktop layout passed",

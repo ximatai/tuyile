@@ -357,7 +357,7 @@ export function CreationPage({
               onReference={chooseReference}
             />
           </Suspense>
-          <details className="canvas-task-history" open>
+          <details className="canvas-task-history" open={tasks.length > 0}>
             <summary>任务与结果 · {tasks.length}</summary>
             <TaskResults
               tasks={tasks}
@@ -532,6 +532,7 @@ export function CreationPage({
           </div>
           <div className="agent-creation" hidden={mode !== "agent"}>
             <AgentPanel
+              visible={mode === "agent"}
               projectId={projectId}
               usage={usage}
               tasks={tasks}

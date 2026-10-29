@@ -14,6 +14,7 @@ import {
 } from "@tuyile/contracts";
 import {
   Button,
+  Collapse,
   ControlScope,
   Checkbox,
   ChoiceField,
@@ -34,6 +35,7 @@ const states: Record<string, string> = {
   cancelled: "规划已取消",
 };
 export function AgentPanel({
+  visible,
   projectId,
   usage,
   references,
@@ -42,6 +44,7 @@ export function AgentPanel({
   uploadBusy,
   tasks,
 }: {
+  visible: boolean;
   projectId: string;
   usage?: ImageUsage;
   references: { id: string; name: string }[];
@@ -132,6 +135,7 @@ export function AgentPanel({
     try {
       const job = await api<PlanningJob>("/agent/planning", input);
       setCurrent(job.id);
+      setSettingsOpen(false);
       setPending(null);
       setPrompt("");
       await refresh();
@@ -178,6 +182,7 @@ export function AgentPanel({
       setBusy(false);
     }
   }
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const active = !!plan?.taskIds.some((id) =>
     tasks.some((t) => t.id === id && ["queued", "running"].includes(t.state)),
   );
@@ -185,6 +190,7 @@ export function AgentPanel({
     <div className="agent-panel">
       {history.length > 0 && (
         <Button
+          className="agent-clear-history"
           disabled={busy || !!pending}
           onClick={() => void clearHistory()}
         >
@@ -246,6 +252,7 @@ export function AgentPanel({
           <PlanCard
             key={plan.id}
             plan={plan}
+            visible={visible}
             models={usage?.models ?? []}
             references={references}
             busy={busy}
@@ -270,29 +277,75 @@ export function AgentPanel({
       >
         <ControlScope componentDisabled={busy || !!pending || uploadBusy}>
           <fieldset disabled={busy || !!pending || uploadBusy}>
-            <div className="agent-options">
-              <ChoiceField
-                label="创作技能"
-                value={skillId}
-                onValueChange={setSkillId}
-                options={[
-                  { value: "", label: "通用创作" },
-                  ...(skills.data?.skills ?? []).map((s) => ({
-                    value: s.id,
-                    label: `${s.name} v${s.version}`,
-                  })),
-                ]}
-              />
-              <ChoiceField
-                label="Agent 图片模型"
-                value={model}
-                onValueChange={setModel}
-                options={(usage?.models ?? []).map((m) => ({
-                  value: m,
-                  label: m,
-                }))}
-              />
-            </div>
+            <Collapse
+              size="small"
+              activeKey={settingsOpen ? ["settings"] : []}
+              onChange={(keys) => setSettingsOpen(keys.includes("settings"))}
+              items={[
+                {
+                  key: "settings",
+                  label: `创作设置 · ${skillId ? "已选技能" : "通用创作"} · ${model || "未配置模型"}`,
+                  children: (
+                    <>
+                      {" "}
+                      <div className="agent-options">
+                        <ChoiceField
+                          label="创作技能"
+                          value={skillId}
+                          onValueChange={setSkillId}
+                          options={[
+                            { value: "", label: "通用创作" },
+                            ...(skills.data?.skills ?? []).map((s) => ({
+                              value: s.id,
+                              label: `${s.name} v${s.version}`,
+                            })),
+                          ]}
+                        />
+                        <ChoiceField
+                          label="Agent 图片模型"
+                          value={model}
+                          onValueChange={setModel}
+                          options={(usage?.models ?? []).map((m) => ({
+                            value: m,
+                            label: m,
+                          }))}
+                        />
+                      </div>
+                      <div className="agent-references">
+                        <Upload
+                          accept="image/png,image/jpeg,image/webp"
+                          showUploadList={false}
+                          beforeUpload={(file) => {
+                            onUpload(file);
+                            return false;
+                          }}
+                          disabled={
+                            busy || uploadBusy || references.length >= 4
+                          }
+                        >
+                          <Button type="button">添加 Agent 参考图</Button>
+                        </Upload>
+                        {references.map((r) => (
+                          <span className="agent-reference" key={r.id}>
+                            <img
+                              src={`/api/images/assets/${r.id}/preview`}
+                              alt={r.name}
+                            />
+                            <Button
+                              type="button"
+                              aria-label={`移除 Agent 参考图 ${r.name}`}
+                              onClick={() => onRemove(r.id)}
+                            >
+                              移除
+                            </Button>
+                          </span>
+                        ))}
+                      </div>
+                    </>
+                  ),
+                },
+              ]}
+            />
             <label className="field">
               <span>告诉 Agent 你的想法</span>
               <Input.TextArea
@@ -304,34 +357,6 @@ export function AgentPanel({
                 placeholder="例如：为这款产品设计一组简洁的宣传图"
               />
             </label>
-            <div className="agent-references">
-              <Upload
-                accept="image/png,image/jpeg,image/webp"
-                showUploadList={false}
-                beforeUpload={(file) => {
-                  onUpload(file);
-                  return false;
-                }}
-                disabled={busy || uploadBusy || references.length >= 4}
-              >
-                <Button type="button">添加 Agent 参考图</Button>
-              </Upload>
-              {references.map((r) => (
-                <span className="agent-reference" key={r.id}>
-                  <img
-                    src={`/api/images/assets/${r.id}/preview`}
-                    alt={r.name}
-                  />
-                  <Button
-                    type="button"
-                    aria-label={`移除 Agent 参考图 ${r.name}`}
-                    onClick={() => onRemove(r.id)}
-                  >
-                    移除
-                  </Button>
-                </span>
-              ))}
-            </div>
           </fieldset>
         </ControlScope>
         <Button
@@ -384,6 +409,7 @@ export function AgentPanel({
 }
 function PlanCard({
   plan,
+  visible,
   models,
   references,
   busy,
@@ -392,6 +418,7 @@ function PlanCard({
   onRefresh,
 }: {
   plan: AgentPlanVersion;
+  visible: boolean;
   models: string[];
   references: { id: string; name: string }[];
   busy: boolean;
@@ -412,7 +439,16 @@ function PlanCard({
     [confirmation, setConfirmation] = useState<string | null>(null),
     [locallyConfirmed, setConfirmed] = useState(plan.confirmed);
   const confirmed = locallyConfirmed || plan.confirmed;
+  const [editing, setEditing] = useState(false);
   const active = useRef(false);
+  const card = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    if (visible && !editing) card.current?.scrollIntoView({ block: "end" });
+  }, [plan.id, editing, visible]);
+  useEffect(() => {
+    // Another device can confirm this immutable version while local edits are unsaved.
+    if (plan.confirmed) setDocument(structuredClone(plan.document));
+  }, [plan.confirmed, plan.document]);
   useEffect(
     () => onCount(document.steps.reduce((n, s) => n + s.count, 0)),
     [document, onCount],
@@ -514,6 +550,7 @@ function PlanCard({
   }
   return (
     <form
+      ref={card}
       id={`confirm-${plan.id}`}
       className="agent-plan-form"
       onSubmit={confirm}
@@ -523,220 +560,272 @@ function PlanCard({
         <strong>创作计划 · v{plan.version}</strong>
         <span>{confirmed ? "已确认" : "待确认"}</span>
       </div>
+      <Button
+        type="button"
+        className="plan-edit-toggle"
+        disabled={busy || (!confirmed && (!!pending || !!confirmation))}
+        onClick={() => setEditing((value) => !value)}
+      >
+        {editing ? "查看计划摘要" : confirmed ? "查看完整计划" : "修改计划"}
+      </Button>
+      {!editing && (
+        <ol className="agent-plan-summary" aria-label="计划步骤摘要">
+          {document.steps.map((step, index) => (
+            <li key={index}>
+              <span className="plan-step-number">{index + 1}</span>
+              <div className="plan-step-content">
+                <strong>
+                  {step.title}
+                  <span>{step.count} 张</span>
+                </strong>
+                <p>{step.prompt}</p>
+                <small>
+                  {step.width} × {step.height} · {step.model} · {step.quality} ·{" "}
+                  {step.format.toUpperCase()}
+                </small>
+                {step.usePrevious && (
+                  <small className="plan-dependency">
+                    使用上一步第一张结果
+                  </small>
+                )}
+                {!!step.referenceIds.length && (
+                  <div className="plan-reference-previews">
+                    {step.referenceIds.map((id) => (
+                      <img
+                        key={id}
+                        src={`/api/images/assets/${id}/preview`}
+                        alt={`步骤 ${index + 1} 参考图`}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
       {error && !confirmed && <Notice error>{error}</Notice>}
       {(pending || confirmation) && !confirmed && (
         <p className="hint">
           正在确认这份版本；结果不明时再次点击确认可找回原提交。
         </p>
       )}
-      <ControlScope
-        componentDisabled={busy || confirmed || !!pending || !!confirmation}
-      >
-        <fieldset disabled={busy || confirmed || !!pending || !!confirmation}>
-          {document.steps.map((step, index) => (
-            <section className="agent-step" key={index}>
-              <Field
-                label={`步骤 ${index + 1} 名称`}
-                value={step.title}
-                maxLength={100}
-                required
-                onChange={(e) => patch(index, { title: e.target.value })}
-              />
-              <label className="field">
-                <span>步骤 {index + 1} 提示词</span>
-                <Input.TextArea
-                  aria-label={`步骤 ${index + 1} 提示词`}
-                  value={step.prompt}
-                  rows={3}
-                  maxLength={12000}
-                  required
-                  onChange={(e) => patch(index, { prompt: e.target.value })}
-                />
-              </label>
-              <div className="parameter-grid">
+      <div hidden={!editing}>
+        <ControlScope
+          componentDisabled={
+            !editing || busy || confirmed || !!pending || !!confirmation
+          }
+        >
+          <fieldset
+            disabled={
+              !editing || busy || confirmed || !!pending || !!confirmation
+            }
+          >
+            {document.steps.map((step, index) => (
+              <section className="agent-step" key={index}>
                 <Field
-                  label={`步骤 ${index + 1} 张数`}
-                  type="number"
-                  min={1}
-                  max={16}
-                  value={step.count}
+                  label={`步骤 ${index + 1} 名称`}
+                  value={step.title}
+                  maxLength={100}
                   required
-                  onChange={(e) =>
-                    patch(index, { count: Number(e.target.value) })
-                  }
+                  onChange={(e) => patch(index, { title: e.target.value })}
                 />
-                <ChoiceField
-                  label={`步骤 ${index + 1} 模型`}
-                  value={step.model}
-                  onValueChange={(model) => patch(index, { model })}
-                  options={[...new Set([...models, step.model])].map((m) => ({
-                    value: m,
-                    label: m,
-                  }))}
-                />
-                <Field
-                  label={`步骤 ${index + 1} 宽度`}
-                  type="number"
-                  min={256}
-                  max={8192}
-                  step={16}
-                  value={step.width}
-                  required
-                  onChange={(e) =>
-                    patch(index, { width: Number(e.target.value) })
-                  }
-                />
-                <Field
-                  label={`步骤 ${index + 1} 高度`}
-                  type="number"
-                  min={256}
-                  max={8192}
-                  step={16}
-                  value={step.height}
-                  required
-                  onChange={(e) =>
-                    patch(index, { height: Number(e.target.value) })
-                  }
-                />
-                <ChoiceField
-                  label={`步骤 ${index + 1} 质量`}
-                  value={step.quality}
-                  onValueChange={(quality) =>
-                    patch(index, { quality: quality as AgentStep["quality"] })
-                  }
-                  options={[
-                    { value: "low", label: "低" },
-                    { value: "medium", label: "中" },
-                    { value: "high", label: "高" },
-                  ]}
-                />
-                <ChoiceField
-                  label={`步骤 ${index + 1} 格式`}
-                  value={step.format}
-                  onValueChange={(format) =>
-                    patch(index, { format: format as AgentStep["format"] })
-                  }
-                  options={[
-                    { value: "png", label: "PNG" },
-                    { value: "jpeg", label: "JPEG" },
-                    { value: "webp", label: "WebP" },
-                  ]}
-                />
-              </div>
-              <label className="field">
-                <span>步骤 {index + 1} 参考图</span>
-                <Select
-                  mode="multiple"
-                  value={step.referenceIds}
-                  onChange={(referenceIds) => patch(index, { referenceIds })}
-                  options={[
-                    ...new Map(
-                      [
-                        ...references,
-                        ...step.referenceIds.map((id) => ({
-                          id,
-                          name: "计划参考图",
-                        })),
-                      ].map((r) => [r.id, { value: r.id, label: r.name }]),
-                    ).values(),
-                  ]}
-                />
-              </label>
-              {index > 0 && (
-                <Checkbox
-                  checked={step.usePrevious}
-                  onChange={(e) =>
-                    patch(index, { usePrevious: e.target.checked })
+                <label className="field">
+                  <span>步骤 {index + 1} 提示词</span>
+                  <Input.TextArea
+                    aria-label={`步骤 ${index + 1} 提示词`}
+                    value={step.prompt}
+                    rows={3}
+                    maxLength={12000}
+                    required
+                    onChange={(e) => patch(index, { prompt: e.target.value })}
+                  />
+                </label>
+                <div className="parameter-grid">
+                  <Field
+                    label={`步骤 ${index + 1} 张数`}
+                    type="number"
+                    min={1}
+                    max={16}
+                    value={step.count}
+                    required
+                    onChange={(e) =>
+                      patch(index, { count: Number(e.target.value) })
+                    }
+                  />
+                  <ChoiceField
+                    label={`步骤 ${index + 1} 模型`}
+                    value={step.model}
+                    onValueChange={(model) => patch(index, { model })}
+                    options={[...new Set([...models, step.model])].map((m) => ({
+                      value: m,
+                      label: m,
+                    }))}
+                  />
+                  <Field
+                    label={`步骤 ${index + 1} 宽度`}
+                    type="number"
+                    min={256}
+                    max={8192}
+                    step={16}
+                    value={step.width}
+                    required
+                    onChange={(e) =>
+                      patch(index, { width: Number(e.target.value) })
+                    }
+                  />
+                  <Field
+                    label={`步骤 ${index + 1} 高度`}
+                    type="number"
+                    min={256}
+                    max={8192}
+                    step={16}
+                    value={step.height}
+                    required
+                    onChange={(e) =>
+                      patch(index, { height: Number(e.target.value) })
+                    }
+                  />
+                  <ChoiceField
+                    label={`步骤 ${index + 1} 质量`}
+                    value={step.quality}
+                    onValueChange={(quality) =>
+                      patch(index, { quality: quality as AgentStep["quality"] })
+                    }
+                    options={[
+                      { value: "low", label: "低" },
+                      { value: "medium", label: "中" },
+                      { value: "high", label: "高" },
+                    ]}
+                  />
+                  <ChoiceField
+                    label={`步骤 ${index + 1} 格式`}
+                    value={step.format}
+                    onValueChange={(format) =>
+                      patch(index, { format: format as AgentStep["format"] })
+                    }
+                    options={[
+                      { value: "png", label: "PNG" },
+                      { value: "jpeg", label: "JPEG" },
+                      { value: "webp", label: "WebP" },
+                    ]}
+                  />
+                </div>
+                <label className="field">
+                  <span>步骤 {index + 1} 参考图</span>
+                  <Select
+                    mode="multiple"
+                    value={step.referenceIds}
+                    onChange={(referenceIds) => patch(index, { referenceIds })}
+                    options={[
+                      ...new Map(
+                        [
+                          ...references,
+                          ...step.referenceIds.map((id) => ({
+                            id,
+                            name: "计划参考图",
+                          })),
+                        ].map((r) => [r.id, { value: r.id, label: r.name }]),
+                      ).values(),
+                    ]}
+                  />
+                </label>
+                {index > 0 && (
+                  <Checkbox
+                    checked={step.usePrevious}
+                    onChange={(e) =>
+                      patch(index, { usePrevious: e.target.checked })
+                    }
+                  >
+                    使用上一步第一张图片
+                  </Checkbox>
+                )}
+                <p className="hint">
+                  工具：{step.tool.id} v{step.tool.version}
+                </p>
+                <Button
+                  type="button"
+                  onClick={() =>
+                    setDocument((old) => ({
+                      ...old,
+                      steps: old.steps
+                        .filter((_, i) => i !== index)
+                        .map((s, i) =>
+                          i === 0
+                            ? {
+                                ...s,
+                                usePrevious: false,
+                                tool:
+                                  s.tool.version === 1 &&
+                                  ["image.generate", "image.edit"].includes(
+                                    s.tool.id,
+                                  )
+                                    ? {
+                                        id: s.referenceIds.length
+                                          ? "image.edit"
+                                          : "image.generate",
+                                        version: 1,
+                                      }
+                                    : s.tool,
+                              }
+                            : s,
+                        ),
+                    }))
                   }
                 >
-                  使用上一步第一张图片
-                </Checkbox>
-              )}
-              <p className="hint">
-                工具：{step.tool.id} v{step.tool.version}
-              </p>
+                  移除步骤
+                </Button>
+              </section>
+            ))}
+            {document.steps.length > 0 && document.steps.length < 16 && (
               <Button
                 type="button"
                 onClick={() =>
                   setDocument((old) => ({
                     ...old,
-                    steps: old.steps
-                      .filter((_, i) => i !== index)
-                      .map((s, i) =>
-                        i === 0
-                          ? {
-                              ...s,
-                              usePrevious: false,
-                              tool:
-                                s.tool.version === 1 &&
-                                ["image.generate", "image.edit"].includes(
-                                  s.tool.id,
-                                )
-                                  ? {
-                                      id: s.referenceIds.length
-                                        ? "image.edit"
-                                        : "image.generate",
-                                      version: 1,
-                                    }
-                                  : s.tool,
-                            }
-                          : s,
-                      ),
+                    steps: [
+                      ...old.steps,
+                      {
+                        ...old.steps.at(-1)!,
+                        title: `步骤 ${old.steps.length + 1}`,
+                        referenceIds: [...old.steps.at(-1)!.referenceIds],
+                        usePrevious: false,
+                        tool:
+                          old.steps.at(-1)!.tool.version === 1 &&
+                          ["image.generate", "image.edit"].includes(
+                            old.steps.at(-1)!.tool.id,
+                          )
+                            ? {
+                                id: old.steps.at(-1)!.referenceIds.length
+                                  ? "image.edit"
+                                  : "image.generate",
+                                version: 1,
+                              }
+                            : old.steps.at(-1)!.tool,
+                      },
+                    ],
                   }))
                 }
               >
-                移除步骤
+                添加步骤
               </Button>
-            </section>
-          ))}
-          {document.steps.length > 0 && document.steps.length < 16 && (
-            <Button
-              type="button"
-              onClick={() =>
-                setDocument((old) => ({
-                  ...old,
-                  steps: [
-                    ...old.steps,
-                    {
-                      ...old.steps.at(-1)!,
-                      title: `步骤 ${old.steps.length + 1}`,
-                      referenceIds: [...old.steps.at(-1)!.referenceIds],
-                      usePrevious: false,
-                      tool:
-                        old.steps.at(-1)!.tool.version === 1 &&
-                        ["image.generate", "image.edit"].includes(
-                          old.steps.at(-1)!.tool.id,
-                        )
-                          ? {
-                              id: old.steps.at(-1)!.referenceIds.length
-                                ? "image.edit"
-                                : "image.generate",
-                              version: 1,
-                            }
-                          : old.steps.at(-1)!.tool,
-                    },
-                  ],
-                }))
-              }
-            >
-              添加步骤
-            </Button>
-          )}
-        </fieldset>
-      </ControlScope>
-      {!confirmed && !confirmation && (
-        <Button
-          type="button"
-          disabled={
-            busy ||
-            (!pending &&
-              JSON.stringify(document) === JSON.stringify(plan.document))
-          }
-          onClick={() => void saveDraft()}
-        >
-          {pending ? "重试保存本次修改" : "保存计划修改"}
-        </Button>
-      )}
+            )}
+          </fieldset>
+        </ControlScope>
+        {editing && !confirmed && !confirmation && (
+          <Button
+            type="button"
+            disabled={
+              busy ||
+              (!pending &&
+                JSON.stringify(document) === JSON.stringify(plan.document))
+            }
+            onClick={() => void saveDraft()}
+          >
+            {pending ? "重试保存本次修改" : "保存计划修改"}
+          </Button>
+        )}
+      </div>
     </form>
   );
 }

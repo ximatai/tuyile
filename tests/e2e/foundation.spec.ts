@@ -550,6 +550,9 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
     .click();
   const projectId = page.url().split("/").at(-1)!;
   await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await page
+    .getByText("创作设置 · 通用创作 · test-image", { exact: true })
+    .click();
   const referenceBytes = await (
     await import("sharp")
   )
@@ -572,9 +575,10 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
     .getByLabel("告诉 Agent 你的想法", { exact: true })
     .fill("合成验收：先生成基准图，再参考基准图改图");
   await page.getByRole("button", { name: "发送规划需求", exact: true }).click();
-  await expect(page.getByLabel("步骤 1 提示词", { exact: true })).toBeVisible({
-    timeout: 15000,
-  });
+  await expect(page.getByLabel("计划步骤摘要")).toBeVisible({ timeout: 15000 });
+  await expect(page.getByLabel("步骤 1 提示词", { exact: true })).toBeHidden();
+  await page.getByRole("button", { name: "修改计划", exact: true }).click();
+  await expect(page.getByLabel("步骤 1 提示词", { exact: true })).toBeVisible();
   expect(
     (
       await (
@@ -596,6 +600,8 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
   await expect(page.getByText("创作计划 · v2", { exact: true })).toBeVisible();
   await page.reload();
   await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await expect(page.getByLabel("计划步骤摘要")).toBeVisible();
+  await page.getByRole("button", { name: "修改计划", exact: true }).click();
   await expect(page.getByLabel("步骤 1 张数", { exact: true })).toHaveValue(
     "2",
   );
@@ -607,6 +613,8 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
       ).json()
     ).tasks,
   ).toEqual([]);
+  await page.getByRole("button", { name: "查看计划摘要", exact: true }).click();
+  await expect(page.getByLabel("计划步骤摘要").locator("li")).toHaveCount(2);
   const confirm = (await page
     .getByRole("button", { name: "确认执行", exact: true })
     .boundingBox())!;

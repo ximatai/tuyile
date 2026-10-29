@@ -1350,3 +1350,127 @@ form {
   min-height: 32px;
   height: 32px;
 }
+
+/* Plan review is the default; full parameter editing is an explicit action. */
+.agent-plan-summary {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+}
+.agent-plan-summary li {
+  display: flex;
+  gap: 10px;
+  padding: 12px 0;
+  border-top: 1px solid #e6ecf4;
+}
+.plan-step-number {
+  flex: 0 0 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #eaf3ff;
+  color: #0062b0;
+  text-align: center;
+  line-height: 22px;
+  font-weight: 600;
+}
+.plan-step-content {
+  min-width: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 8px;
+}
+.plan-step-content strong {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: #24354a;
+}
+.plan-step-content strong span {
+  white-space: nowrap;
+  color: #0062b0;
+  font-weight: 400;
+}
+.plan-step-content p {
+  grid-column: 1;
+  margin: 5px 0;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.plan-step-content small {
+  grid-column: 1;
+  display: block;
+  color: #65748b;
+  overflow-wrap: anywhere;
+}
+.plan-step-content .plan-dependency {
+  color: #0062b0;
+  margin-top: 4px;
+}
+.plan-reference-previews {
+  grid-column: 2;
+  grid-row: 2 / span 4;
+  align-self: start;
+  display: grid;
+  grid-template-columns: repeat(2, 32px);
+  gap: 4px;
+  margin-top: 6px;
+}
+.plan-reference-previews:has(img:only-child) {
+  grid-template-columns: 32px;
+}
+.plan-reference-previews img {
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: 1px solid #e6ecf4;
+}
+.agent-plan-form .plan-edit-toggle {
+  min-height: 30px;
+  height: 30px;
+  margin-top: 8px;
+  font-size: 12px;
+}
+.workspace-shell .creation-layout {
+  grid-template-columns: minmax(0, 1fr) clamp(360px, 28vw, 460px);
+}
+.agent-compose .button {
+  min-height: 36px;
+  height: 36px;
+}
+.agent-compose .field {
+  font-size: 12px;
+  gap: 4px;
+}
+
+.agent-panel .agent-clear-history {
+  align-self: flex-end;
+  min-height: 28px;
+  height: 28px;
+  font-size: 12px;
+}
+.agent-message {
+  padding: 6px 0;
+}
+.agent-message p {
+  margin: 6px 0;
+}
+.agent-compose .ant-collapse {
+  width: 100%;
+  font-size: 12px;
+}
+.agent-compose .ant-collapse-header {
+  padding: 6px 10px !important;
+}
+.agent-compose .ant-collapse-content-box {
+  padding: 10px !important;
+}
+.agent-compose .agent-references {
+  margin-top: 8px;
+}
