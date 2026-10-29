@@ -1223,7 +1223,7 @@ form {
 }
 .library-toolbar {
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 12px;
   flex-wrap: wrap;
   margin: 12px 0 24px;
@@ -1235,6 +1235,13 @@ form {
 .library-toolbar .field {
   min-width: 200px;
   margin: 0;
+}
+.library-toolbar > a,
+.library-toolbar > span,
+.library-toolbar > small {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
 }
 .library-toolbar small {
   color: var(--muted);
