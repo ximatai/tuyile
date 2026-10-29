@@ -140,7 +140,7 @@ export class PgAssetsRepository extends PgCreationContext {
     if (
       (
         await c.query(
-          "SELECT 1 FROM image_references WHERE asset_id=$1 LIMIT 1",
+          "SELECT 1 FROM image_references WHERE asset_id=$1 UNION ALL SELECT 1 FROM canvas_references WHERE asset_id=$1 LIMIT 1",
           [id],
         )
       ).rowCount

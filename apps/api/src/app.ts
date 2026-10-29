@@ -1,3 +1,5 @@
+import { canvasRoutes } from "./canvas-routes.js";
+import type { CanvasService } from "@tuyile/core";
 import { extensionRoutes } from "./extension-routes.js";
 import type { ExtensionService } from "@tuyile/core";
 import { creationRoutes } from "./creation-routes.js";
@@ -37,6 +39,7 @@ export function createApp(
   clientAddress: (c: Context) => string = () => "direct",
   creation?: CreationService,
   extensions?: ExtensionService,
+  canvas?: CanvasService,
 ) {
   const app = new Hono<ApiEnv>();
   app.use("*", async (c, next) => {
@@ -67,8 +70,9 @@ export function createApp(
   });
   app.use("/api/*", async (c, next) =>
     bodyLimit({
-      maxSize:
-        c.req.path === "/api/images/uploads"
+      maxSize: /^\/api\/projects\/[^/]+\/canvas/.test(c.req.path)
+        ? 1024 * 1024
+        : c.req.path === "/api/images/uploads"
           ? 20 * 1024 * 1024
           : c.req.path.startsWith("/api/images/") ||
               c.req.path.startsWith("/api/image-admin/")
@@ -227,6 +231,7 @@ export function createApp(
     return c.json({ ok: true });
   });
   if (creation) creationRoutes(app, creation);
+  if (canvas) canvasRoutes(app, canvas);
   if (extensions) extensionRoutes(app, extensions);
   app.notFound((c) =>
     c.json(

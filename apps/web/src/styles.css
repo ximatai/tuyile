@@ -818,3 +818,237 @@ form {
 .quota-details .ant-alert {
   font-size: 12px;
 }
+/* Project workspace follows the approved desktop canvas composition. */
+.sidebar-projects {
+  margin: 20px 14px;
+  display: grid;
+  gap: 6px;
+  overflow: auto;
+}
+.sidebar-projects small {
+  color: #8493a4;
+  padding: 8px;
+}
+.sidebar-projects a {
+  padding: 8px 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-radius: 6px;
+}
+.sidebar-projects a[aria-current="page"] {
+  background: #eaf3ff;
+  color: #1677ff;
+}
+.collapsed .sidebar-projects {
+  display: none;
+}
+.workspace-shell .content {
+  padding: 0;
+  height: calc(100dvh - 64px);
+  overflow: hidden;
+}
+.workspace-shell .project-workspace {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.workspace-title {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  padding: 8px 20px;
+  border-bottom: 1px solid #e4eaf1;
+}
+.workspace-title h1 {
+  font-size: 16px;
+  margin: 0;
+}
+.workspace-shell .creation-workbench {
+  flex: 1;
+  min-height: 0;
+}
+.workspace-shell .creation-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  height: 100%;
+  gap: 0;
+}
+.workspace-shell .creation-results {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+}
+.workspace-shell .creation-panel {
+  height: 100%;
+  max-height: none;
+  border-radius: 0;
+  border: 0;
+  border-left: 1px solid #e4eaf1;
+  box-shadow: none;
+}
+.workspace-shell .mobile-creation-switch {
+  display: none;
+}
+.canvas-surface {
+  flex: 1;
+  min-height: 300px;
+  position: relative;
+  background: #f6f8fb;
+}
+.canvas-status {
+  position: absolute;
+  top: 12px;
+  left: 14px;
+  z-index: 4;
+  background: #ffffffed;
+  border: 1px solid #e4eaf1;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: #65748b;
+}
+.canvas-error {
+  position: absolute;
+  top: 46px;
+  left: 14px;
+  right: 14px;
+  z-index: 6;
+}
+.canvas-toolbar {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 4px;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid #dde5ef;
+  border-radius: 10px;
+  box-shadow: 0 4px 12px #294d7712;
+  white-space: nowrap;
+  z-index: 4;
+}
+.canvas-toolbar button {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+.canvas-image {
+  width: 100%;
+  height: 100%;
+  background: #fff;
+  border: 1px solid #dce4ef;
+  border-radius: 8px;
+  box-shadow: 0 3px 12px #294d7712;
+}
+.canvas-image img {
+  width: 100%;
+  height: calc(100% - 36px);
+  object-fit: contain;
+  pointer-events: none;
+}
+.canvas-image-caption {
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 8px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.canvas-image-caption button {
+  font-size: 11px;
+  height: 24px;
+  padding: 0 5px;
+}
+.react-flow__node.selected .canvas-image {
+  outline: 2px solid #1677ff;
+}
+.canvas-group {
+  width: 100%;
+  height: 100%;
+  border: 1px dashed #86aada;
+  background: #1677ff08;
+  border-radius: 12px;
+  padding: 8px;
+  color: #6684a8;
+}
+.canvas-task-history {
+  max-height: 35%;
+  overflow: auto;
+  border-top: 1px solid #e4eaf1;
+  background: #fff;
+}
+.canvas-task-history summary {
+  padding: 10px 18px;
+  cursor: pointer;
+  font-size: 12px;
+  color: #66788e;
+}
+.canvas-task-history .task-list {
+  padding: 12px;
+}
+.canvas-task-history .output-grid img {
+  max-height: 120px;
+}
+.workspace-shell .creation-layout {
+  align-items: stretch;
+  min-height: 0;
+}
+.workspace-shell .creation-results {
+  height: 100%;
+  max-height: none;
+}
+.canvas-surface > .react-flow {
+  position: absolute;
+  inset: 0;
+}
+.canvas-task-card {
+  background: #fff;
+  border: 1px solid #adc9ee;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 12px;
+  color: #597391;
+}
+.canvas-task-card p {
+  margin: 8px 0 0;
+}
+.workspace-shell .creation-panel > .product-notice {
+  font-size: 12px;
+  padding: 8px;
+  margin: 6px 0;
+}
+.main-column header .workspace-title {
+  padding: 0;
+  border: 0;
+}
+.workspace-shell .content {
+  height: calc(100dvh - 72px);
+}
+.canvas-copy-message {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  top: 150px;
+  z-index: 6;
+}
+.workspace-shell .content {
+  max-width: none;
+  margin: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.workspace-shell .project-workspace {
+  height: auto;
+  flex: 1;
+  min-height: 0;
+}
+.workspace-shell .creation-panel {
+  min-height: 0;
+}

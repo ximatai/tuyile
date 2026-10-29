@@ -7,3 +7,4 @@ export * from "./image-provider.js";
 export * from "./image-worker.js";
 export * from "./creation-config.js";
 export * from "./planning-provider.js";
+export * from "./canvas.js";

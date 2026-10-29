@@ -1,3 +1,10 @@
+import { Link } from "react-router-dom";
+import { lazy, Suspense, useCallback } from "react";
+const CanvasEditor = lazy(() =>
+  import("./editor/canvas").then((m) => ({ default: m.CanvasEditor })),
+);
+import { useQuery } from "@tanstack/react-query";
+import { useSessionState } from "./session-state";
 import { useState, useEffect, useRef, type FormEvent } from "react";
 import type { ImageInput, ImageTask, ImageUsage } from "@tuyile/contracts";
 import {
@@ -180,46 +187,49 @@ export function CreationPage({
   csrfToken: string;
   projectId: string;
 }) {
-  const [usage, setUsage] = useState<ImageUsage | null>(null),
-    [tasks, setTasks] = useState<ImageTask[]>([]),
-    [error, setError] = useState(""),
+  const sessionState = useSessionState();
+  const [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [model, setModel] = useState(""),
     [prompt, setPrompt] = useState(""),
     [references, setReferences] = useState<{ id: string; name: string }[]>([]),
     [pending, setPending] = useState<ImageInput | null>(null),
     [mobile, setMobile] = useState("create");
-  const active = useRef(false),
-    mounted = useRef(true),
-    version = useRef(0);
-  async function refresh() {
-    const run = ++version.current;
-    try {
-      const [u, t] = await Promise.all([
-        client(csrfToken)<ImageUsage>("/images/usage"),
-        client(csrfToken)<{ tasks: ImageTask[] }>(
-          `/images/tasks?projectId=${projectId}`,
-        ),
-      ]);
-      if (mounted.current && run === version.current) {
-        setUsage(u);
-        setTasks(t.tasks);
-        setModel((m) => (u.models.includes(m) ? m : (u.models[0] ?? "")));
-      }
-    } catch (e) {
-      if (mounted.current) setError((e as Error).message);
-    }
-  }
+  const chooseReference = useCallback(
+    (id: string) =>
+      setReferences((v) =>
+        v.some((r) => r.id === id) || v.length >= 4
+          ? v
+          : [...v, { id, name: "画布参考图" }],
+      ),
+    [],
+  );
+  const active = useRef(false);
+  const usageQuery = useQuery({
+    queryKey: sessionState.key("usage"),
+    queryFn: ({ signal }) =>
+      client(csrfToken)<ImageUsage>("/images/usage", undefined, signal),
+    refetchInterval: 1500,
+  });
+  const taskQuery = useQuery({
+    queryKey: sessionState.key("tasks", projectId),
+    queryFn: ({ signal }) =>
+      client(csrfToken)<{ tasks: ImageTask[] }>(
+        `/images/tasks?projectId=${projectId}`,
+        undefined,
+        signal,
+      ),
+    refetchInterval: 1500,
+  });
+  const usage = usageQuery.data,
+    tasks = taskQuery.data?.tasks ?? [];
   useEffect(() => {
-    mounted.current = true;
-    void refresh();
-    const timer = setInterval(() => void refresh(), 1500);
-    return () => {
-      mounted.current = false;
-      version.current++;
-      clearInterval(timer);
-    };
-  }, [csrfToken, projectId]);
+    if (usage)
+      setModel((m) => (usage.models.includes(m) ? m : (usage.models[0] ?? "")));
+  }, [usage]);
+  async function refresh() {
+    await Promise.all([usageQuery.refetch(), taskQuery.refetch()]);
+  }
   async function upload(file: File | undefined) {
     if (!file) return;
     if (file.size > 20 * 1024 * 1024) {
@@ -326,14 +336,29 @@ export function CreationPage({
       </div>
       <div className={`creation-layout show-${mobile}`}>
         <div className="creation-results">
-          <TaskResults
-            tasks={tasks}
-            csrfToken={csrfToken}
-            refresh={() => void refresh()}
-          />
+          <Suspense fallback={<p role="status">正在加载画布…</p>}>
+            <CanvasEditor
+              tasks={tasks}
+              projectId={projectId}
+              onReference={chooseReference}
+            />
+          </Suspense>
+          <details className="canvas-task-history" open>
+            <summary>任务与结果 · {tasks.length}</summary>
+            <TaskResults
+              tasks={tasks}
+              csrfToken={csrfToken}
+              refresh={() => void refresh()}
+            />
+          </details>
         </div>
         <aside className="creation-panel" aria-label="图片创作">
-          <h2>图片创作</h2>
+          <h2>直接创作</h2>
+          {(usageQuery.error || taskQuery.error) && (
+            <Notice error>
+              {usageQuery.error?.message || taskQuery.error?.message}
+            </Notice>
+          )}
           {usage?.providerMode === "fake" && (
             <Notice>
               本地测试模型：生成测试色块，不调用真实服务，不产生模型费用。
@@ -480,7 +505,7 @@ export function CreationPage({
               <UsageSummary usage={usage} />
             </details>
           )}
-          <a href="/usage">查看全部任务与额度</a>
+          <Link to="/usage">查看全部任务与额度</Link>
         </aside>
       </div>
     </section>

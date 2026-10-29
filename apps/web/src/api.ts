@@ -1,5 +1,6 @@
 import type { ErrorResponse } from "@tuyile/contracts";
 const messages: Record<string, string> = {
+  CANVAS_CONFLICT: "画布已在其他页面修改。本地内容已保留，请重新加载或另存副本。",
   MODEL_CAPABILITY_UNSUPPORTED:
     "此模型不支持当前尺寸、格式、质量或参考图，请调整参数。",
   TOOL_UNAVAILABLE: "所需工具已停用或撤销，不能提交新的创作。",
@@ -79,7 +80,7 @@ export function client(csrfToken = "") {
         location.pathname !== "/login" &&
         path !== "/auth/me"
       )
-        location.replace("/login");
+        window.dispatchEvent(new Event("tuyile-unauthenticated"));
       throw new ApiError(
         body?.error.code ?? "INTERNAL_ERROR",
         body?.error.requestId,

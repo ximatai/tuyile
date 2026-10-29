@@ -24,7 +24,10 @@ test("desktop and mobile: persistent projects, activation, account boundaries an
   await page.getByLabel("项目名称").fill("品牌视觉方案");
   await page.getByRole("button", { name: "创建项目", exact: true }).click();
   await expect(page.getByLabel("项目名称")).toHaveValue("");
-  await page.getByRole("link", { name: /品牌视觉方案/ }).click();
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "品牌视觉方案" })
+    .click();
   await expect(
     page.getByRole("heading", { name: "品牌视觉方案" }),
   ).toBeVisible();
@@ -182,7 +185,10 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   await login(page);
   await page.getByLabel("项目名称").fill("后台创作验证");
   await page.getByRole("button", { name: "创建项目", exact: true }).click();
-  await page.getByRole("link", { name: /后台创作验证/ }).click();
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "后台创作验证" })
+    .click();
   await expect(page.getByText("本地测试模型：生成测试色块")).toBeVisible();
   const projectUrl = page.url();
   await page.getByLabel("创作需求").fill("合成测试：关闭页面后继续执行");
@@ -192,11 +198,16 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   const context = page.context();
   await page.close();
   const reopened = await context.newPage();
+  await reopened.setViewportSize({ width: 1440, height: 900 });
   await reopened.goto(projectUrl);
   await expect(
     reopened.getByRole("heading", { name: "已完成", exact: true }),
   ).toBeVisible({ timeout: 15000 });
-  await expect(reopened.getByRole("link", { name: "下载原图" })).toHaveCount(2);
+  await expect(
+    reopened
+      .locator(".canvas-task-history")
+      .getByRole("link", { name: "下载原图" }),
+  ).toHaveCount(2);
   await reopened.getByLabel("创作需求").fill("合成测试：注销后继续");
   await reopened.getByLabel("图片张数").fill("2");
   await reopened
@@ -248,18 +259,20 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   expect(submitBox).not.toBeNull();
   expect(quotaBox).not.toBeNull();
   expect(submitBox!.y + submitBox!.height).toBeLessThanOrEqual(quotaBox!.y);
-  await reopened.setViewportSize({ width: 390, height: 844 });
-  await reopened
-    .getByRole("button", { name: "任务与结果", exact: true })
-    .click();
-  await expect(reopened.getByRole("link", { name: "下载原图" })).toHaveCount(5);
+  await reopened.setViewportSize({ width: 1920, height: 1080 });
+  await expect(reopened.locator(".react-flow__node-image")).toHaveCount(5);
+  await expect(
+    reopened
+      .locator(".canvas-task-history")
+      .getByRole("link", { name: "下载原图" }),
+  ).toHaveCount(5);
   expect(
     await reopened.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
   await reopened.screenshot({
-    path: ".codex-temp/stage2-mobile-results.png",
+    path: ".codex-temp/m3-step3-wide-results.png",
     fullPage: true,
   });
   await reopened.getByRole("link", { name: "额度与任务", exact: true }).click();
@@ -279,7 +292,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     ),
   ).toBe(true);
   await reopened.screenshot({
-    path: ".codex-temp/stage2-mobile-admin.png",
+    path: ".codex-temp/m3-step3-wide-admin.png",
     fullPage: true,
   });
 });
@@ -344,4 +357,171 @@ test("desktop administration saves independent planning configuration and versio
     path: ".codex-temp/m3-step2-admin-1440.png",
     fullPage: true,
   });
+});
+
+test("desktop canvas saves geometry, handles conflicts and never replaces removed outputs", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.getByLabel("项目名称").fill("画布保存验证");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "画布保存验证" })
+    .click();
+  await page.getByLabel("创作需求").fill("合成画布图片");
+  await page.getByRole("button", { name: "提交图片任务", exact: true }).click();
+  const node = page.locator(".react-flow__node-image").first();
+  await expect(node).toBeVisible({ timeout: 20000 });
+  await expect(page.locator(".canvas-status")).toContainText("画布已保存");
+  const projectUrl = page.url(),
+    projectId = projectUrl.split("/").at(-1)!;
+  const first = await (
+    await page.request.get(`/api/projects/${projectId}/canvas`)
+  ).json();
+  const box = (await node.boundingBox())!;
+  await page.mouse.move(box.x + 70, box.y + 70);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 170, box.y + 130, { steps: 10 });
+  await page.mouse.up();
+  await expect
+    .poll(async () => {
+      const saved = await (
+        await page.request.get(`/api/projects/${projectId}/canvas`)
+      ).json();
+      return saved.document.nodes[0].x;
+    })
+    .not.toBe(first.document.nodes[0].x);
+  await page.getByRole("button", { name: "复制", exact: true }).click();
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(2);
+  await page.getByRole("button", { name: "撤销", exact: true }).click();
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(1);
+  await page.getByRole("button", { name: "重做", exact: true }).click();
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(2);
+  await page.getByRole("button", { name: "撤销", exact: true }).click();
+  await page.getByRole("button", { name: "移除节点", exact: true }).click();
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(0);
+  await expect(page.locator(".canvas-status")).toContainText("画布已保存");
+  await page.reload();
+  await expect(page.locator(".canvas-status")).toContainText("画布已保存");
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(0);
+  const session = await (await page.request.get("/api/auth/me")).json();
+  const remote = await (
+    await page.request.get(`/api/projects/${projectId}/canvas`)
+  ).json();
+  const response = await page.request.post(
+    `/api/projects/${projectId}/canvas`,
+    {
+      headers: {
+        Origin: new URL(page.url()).origin,
+        "X-CSRF-Token": session.csrfToken,
+      },
+      data: {
+        ...remote,
+        requestKey: crypto.randomUUID(),
+        placements: [],
+        document: { ...remote.document, viewport: { x: 90, y: 0, zoom: 1 } },
+      },
+    },
+  );
+  expect(response.ok()).toBe(true);
+  await page.locator(".react-flow__controls-zoomin").click();
+  await expect(page.getByText(/画布已在其他页面修改/)).toBeVisible();
+  await page.getByRole("link", { name: "查看全部任务与额度" }).click();
+  await expect(page).toHaveURL(projectUrl);
+  await expect(page.getByText(/未能保存画布/)).toBeVisible();
+  let rejectedRequest:
+    | { requestKey: string; document: { viewport: { zoom: number } } }
+    | undefined;
+  await page.route(
+    `**/api/projects/${projectId}/canvas/copy`,
+    async (route) => {
+      rejectedRequest = route.request().postDataJSON();
+      await route.fulfill({
+        status: 409,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { code: "REFERENCE_UNAVAILABLE" } }),
+      });
+    },
+  );
+  await page.getByRole("button", { name: "另存副本", exact: true }).click();
+  await expect(page.getByText("参考图已不可用，请重新选择。")).toBeVisible();
+  await page.locator(".react-flow__controls-zoomout").click();
+  await page.waitForTimeout(500);
+  await page.unroute(`**/api/projects/${projectId}/canvas/copy`);
+  let release!: () => void, started!: () => void;
+  const blocked = new Promise<void>((r) => (release = r)),
+    requested = new Promise<void>((r) => (started = r));
+  let copiedId = "";
+  await page.route(
+    `**/api/projects/${projectId}/canvas/copy`,
+    async (route) => {
+      const nextRequest = route.request().postDataJSON();
+      expect(nextRequest.requestKey).not.toBe(rejectedRequest!.requestKey);
+      expect(nextRequest.document.viewport.zoom).not.toBe(
+        rejectedRequest!.document.viewport.zoom,
+      );
+      const response = await route.fetch();
+      copiedId = (await response.json()).id;
+      started();
+      await blocked;
+      await route.fulfill({ response });
+    },
+  );
+  await page.getByRole("button", { name: "另存副本", exact: true }).click();
+  await requested;
+  await page.locator(".react-flow__controls-zoomout").click();
+  await expect(page.locator(".react-flow__viewport")).toHaveCSS(
+    "transform",
+    /matrix/,
+  );
+  // React Flow animates viewport changes; wait for its final onMoveEnd before acknowledging the copy.
+  await page.waitForTimeout(500);
+  release();
+  await expect(page.getByText(/等待期间的新修改仍保留/)).toBeVisible();
+  await expect(page).toHaveURL(projectUrl);
+  const earlierCopy = await (
+    await page.request.get(`/api/projects/${copiedId}/canvas`)
+  ).json();
+  await page.unroute(`**/api/projects/${projectId}/canvas/copy`);
+  await page.getByRole("button", { name: "另存副本", exact: true }).click();
+  await expect(page).not.toHaveURL(projectUrl);
+  await expect(
+    page.getByRole("heading", { name: "画布保存验证（副本）" }),
+  ).toBeVisible();
+  await expect(page.locator(".canvas-status")).toContainText("画布已保存");
+  const finalCopy = await (
+    await page.request.get(
+      `/api/projects/${page.url().split("/").at(-1)}/canvas`,
+    )
+  ).json();
+  expect(finalCopy.document.viewport.zoom).not.toBe(
+    earlierCopy.document.viewport.zoom,
+  );
+  await expect(page.getByText(/未能保存画布/)).toHaveCount(0);
+  async function checkWorkspaceBounds() {
+    const panel = (await page.locator(".creation-panel").boundingBox())!;
+    const canvas = (await page.locator(".canvas-surface").boundingBox())!;
+    const navigation = (await page.locator(".sidebar").boundingBox())!;
+    const submit = (await page
+      .getByRole("button", { name: "提交图片任务", exact: true })
+      .boundingBox())!;
+    const quota = (await page.locator(".quota-details summary").boundingBox())!;
+    const viewport = page.viewportSize()!;
+    expect(
+      Math.abs(canvas.x - (navigation.x + navigation.width)),
+    ).toBeLessThanOrEqual(2);
+    expect(
+      Math.abs(panel.x + panel.width - viewport.width),
+    ).toBeLessThanOrEqual(2);
+    expect(submit.y + submit.height).toBeLessThanOrEqual(viewport.height);
+    expect(quota.y + quota.height).toBeLessThanOrEqual(viewport.height);
+  }
+  await checkWorkspaceBounds();
+  await page.screenshot({ path: ".codex-temp/m3-step3-canvas-1440.png" });
+  await page.getByRole("button", { name: "收起导航" }).click();
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await checkWorkspaceBounds();
+  await page.screenshot({ path: ".codex-temp/m3-step3-canvas-1920.png" });
 });

@@ -1,7 +1,15 @@
-import { UsagePage } from "./creation";
-import { ImageAdminPage } from "./image-admin";
-import React, { useState, useEffect } from "react";
+import React, { lazy, Suspense, useState, useEffect } from "react";
 import { createRoot } from "react-dom/client";
+import {
+  createBrowserRouter,
+  RouterProvider,
+  Routes,
+  Route,
+  Link,
+  Navigate,
+  useLocation,
+  useBlocker,
+} from "react-router-dom";
 import {
   Folder,
   Users,
@@ -13,28 +21,49 @@ import {
 import type { SessionView } from "@tuyile/contracts";
 import { Button, Notice, UiProvider } from "@tuyile/ui";
 import { client, ApiError, notifySessionChange, sessionTabId } from "./api";
-import { AuthPage } from "./auth";
-import { ProjectsPage } from "./projects";
-import { AdminPage, AccountPage } from "./accounts";
+import { SessionProvider, useSessionState } from "./session-state";
 import "./styles.css";
+const AuthPage = lazy(() =>
+  import("./auth").then((m) => ({ default: m.AuthPage })),
+);
+const ProjectsPage = lazy(() =>
+  import("./projects").then((m) => ({ default: m.ProjectsPage })),
+);
+const ProjectWorkspace = lazy(() =>
+  import("./projects").then((m) => ({ default: m.ProjectWorkspace })),
+);
+const ProjectHeading = lazy(() =>
+  import("./projects").then((m) => ({ default: m.ProjectHeading })),
+);
+const ProjectNavigation = lazy(() =>
+  import("./projects").then((m) => ({ default: m.ProjectNavigation })),
+);
+const UsagePage = lazy(() =>
+  import("./creation").then((m) => ({ default: m.UsagePage })),
+);
+const ImageAdminPage = lazy(() =>
+  import("./image-admin").then((m) => ({ default: m.ImageAdminPage })),
+);
+const AdminPage = lazy(() =>
+  import("./accounts").then((m) => ({ default: m.AdminPage })),
+);
+const AccountPage = lazy(() =>
+  import("./accounts").then((m) => ({ default: m.AccountPage })),
+);
 function App() {
+  const path = useLocation().pathname;
   const [session, setSession] = useState<SessionView | null>(null),
     [loading, setLoading] = useState(true),
-    [error, setError] = useState(""),
-    [busy, setBusy] = useState(false);
-  const [collapsed, setCollapsed] = useState(() => {
-    try {
-      return localStorage.getItem("tuyile.sidebar") === "collapsed";
-    } catch {
-      return false;
-    }
-  });
+    [error, setError] = useState("");
   useEffect(() => {
-    if (location.pathname === "/login") {
+    if (path === "/login") {
+      setSession(null);
       setLoading(false);
       return;
     }
+    if (session) return;
     const c = new AbortController();
+    setLoading(true);
     void client()<SessionView>("/auth/me", undefined, c.signal)
       .then(setSession)
       .catch((e) => {
@@ -47,16 +76,29 @@ function App() {
         if (!c.signal.aborted) setLoading(false);
       });
     return () => c.abort();
-  }, []);
+  }, [path, session]);
   useEffect(() => {
-    if (typeof BroadcastChannel === "undefined") return;
+    function revoked() {
+      setSession(null);
+      location.replace("/login");
+    }
+    window.addEventListener("tuyile-unauthenticated", revoked);
+    if (typeof BroadcastChannel === "undefined")
+      return () =>
+        window.removeEventListener("tuyile-unauthenticated", revoked);
     const channel = new BroadcastChannel("tuyile-session");
-    channel.onmessage = (event) => {
-      if (event.data?.sender !== sessionTabId) location.reload();
+    channel.onmessage = (e) => {
+      if (e.data?.sender !== sessionTabId) {
+        setSession(null);
+        location.reload();
+      }
     };
-    return () => channel.close();
+    return () => {
+      channel.close();
+      window.removeEventListener("tuyile-unauthenticated", revoked);
+    };
   }, []);
-  if (location.pathname === "/login") return <AuthPage />;
+  if (path === "/login") return <AuthPage />;
   if (loading)
     return (
       <main className="loading" role="status">
@@ -67,25 +109,71 @@ function App() {
     return (
       <main className="loading">
         <Notice error>{error || "请重新登录。"}</Notice>
-        <a href="/login">前往登录</a>
+        <Link to="/login">前往登录</Link>
       </main>
     );
-  const path = location.pathname;
-  const page =
-    path === "/usage"
-      ? "usage"
-      : path === "/admin/images"
-        ? "image-admin"
-        : path === "/admin/users"
-          ? "admin"
-          : path === "/account"
-            ? "account"
-            : "projects";
+  return (
+    <SessionProvider
+      key={`${session.user.id}:${session.user.executionVersion}`}
+      session={session}
+    >
+      <Shell />
+    </SessionProvider>
+  );
+}
+function Shell() {
+  const state = useSessionState(),
+    { session } = state,
+    path = useLocation().pathname;
+  const [error, setError] = useState(""),
+    [busy, setBusy] = useState(false),
+    [collapsed, setCollapsed] = useState(() => {
+      try {
+        return localStorage.getItem("tuyile.sidebar") === "collapsed";
+      } catch {
+        return false;
+      }
+    });
+  useEffect(() => setError(""), [path]);
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      currentLocation.pathname !== nextLocation.pathname && state.dirty(),
+  );
+  useEffect(() => {
+    if (blocker.state !== "blocked") return;
+    let alive = true;
+    void state
+      .flush()
+      .then(() => {
+        if (alive) blocker.proceed();
+      })
+      .catch((e) => {
+        if (alive) {
+          setError(`未能保存画布，已留在当前项目。${e.message}`);
+          blocker.reset();
+        }
+      });
+    return () => {
+      alive = false;
+    };
+  }, [blocker, state]);
+  useEffect(() => {
+    const before = (e: BeforeUnloadEvent) => {
+      if (state.dirty()) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", before);
+    return () => window.removeEventListener("beforeunload", before);
+  }, [state]);
   async function logout() {
     setBusy(true);
     setError("");
     try {
-      await client(session!.csrfToken)("/auth/logout", {});
+      await state.flush();
+      await client(session.csrfToken)("/auth/logout", {});
+      state.clear();
       notifySessionChange();
       location.assign("/login");
     } catch (e) {
@@ -93,66 +181,53 @@ function App() {
       setBusy(false);
     }
   }
-  function toggle() {
-    setCollapsed((v) => {
-      try {
-        localStorage.setItem("tuyile.sidebar", v ? "expanded" : "collapsed");
-      } catch {}
-      return !v;
-    });
-  }
+  const workspace = /^\/projects\/[^/]+$/.test(path);
+  const nav = (to: string, label: string, icon: React.ReactNode) => (
+    <Link to={to} aria-current={path === to ? "page" : undefined}>
+      {icon}
+      <span>{label}</span>
+    </Link>
+  );
   return (
-    <div className={`shell ${collapsed ? "collapsed" : ""}`}>
+    <div
+      className={`shell ${collapsed ? "collapsed" : ""} ${workspace ? "workspace-shell" : ""}`}
+    >
       <aside className="sidebar" aria-label="主导航">
-        <a className="brand" href="/projects">
+        <Link className="brand" to="/projects">
           <span className="brand-mark">图</span>
           <span className="full-label">
             图一乐<small>Tuyile</small>
           </span>
-        </a>
+        </Link>
         <nav>
-          <a
-            aria-current={page === "projects" ? "page" : undefined}
-            href="/projects"
-          >
-            <Folder size={20} />
-            <span>项目</span>
-          </a>
+          {nav("/projects", "项目", <Folder size={20} />)}
+          {nav("/usage", "额度与任务", <Folder size={20} />)}
           {session.user.role === "admin" && (
-            <a
-              aria-current={page === "admin" ? "page" : undefined}
-              href="/admin/users"
-            >
-              <Users size={20} />
-              <span>账号管理</span>
-            </a>
+            <>
+              {nav("/admin/users", "账号管理", <Users size={20} />)}
+              {nav("/admin/images", "图片服务", <Users size={20} />)}
+            </>
           )}
-          <a href="/usage" aria-current={page === "usage" ? "page" : undefined}>
-            <Folder size={20} />
-            <span>额度与任务</span>
-          </a>
-          {session.user.role === "admin" && (
-            <a
-              href="/admin/images"
-              aria-current={page === "image-admin" ? "page" : undefined}
-            >
-              <Users size={20} />
-              <span>图片服务</span>
-            </a>
-          )}
-          <a
-            aria-current={page === "account" ? "page" : undefined}
-            href="/account"
-          >
-            <ShieldCheck size={20} />
-            <span>账户安全</span>
-          </a>
+          {nav("/account", "账户安全", <ShieldCheck size={20} />)}
         </nav>
+        <Suspense fallback={null}>
+          <ProjectNavigation />
+        </Suspense>
         <div className="sidebar-bottom">
           <Button
             className="collapse-control"
             aria-label={collapsed ? "展开导航" : "收起导航"}
-            onClick={toggle}
+            onClick={() =>
+              setCollapsed((v) => {
+                try {
+                  localStorage.setItem(
+                    "tuyile.sidebar",
+                    v ? "expanded" : "collapsed",
+                  );
+                } catch {}
+                return !v;
+              })
+            }
           >
             {collapsed ? (
               <PanelLeftOpen size={20} />
@@ -165,13 +240,13 @@ function App() {
       </aside>
       <div className="main-column">
         <header>
-          <span>
-            {page === "admin"
-              ? "账号管理"
-              : page === "account"
-                ? "账户安全"
-                : "项目空间"}
-          </span>
+          {workspace ? (
+            <Suspense fallback={null}>
+              <ProjectHeading />
+            </Suspense>
+          ) : (
+            <span>项目空间</span>
+          )}
           <div className="actions">
             <span className="username">{session.user.username}</span>
             <Button disabled={busy} onClick={() => void logout()}>
@@ -182,26 +257,62 @@ function App() {
         </header>
         <main className="content">
           {error && <Notice error>{error}</Notice>}
-          {page === "usage" ? (
-            <UsagePage csrfToken={session.csrfToken} />
-          ) : page === "image-admin" ? (
-            <ImageAdminPage csrfToken={session.csrfToken} />
-          ) : page === "admin" ? (
-            <AdminPage csrfToken={session.csrfToken} ownId={session.user.id} />
-          ) : page === "account" ? (
-            <AccountPage csrfToken={session.csrfToken} />
-          ) : (
-            <ProjectsPage csrfToken={session.csrfToken} />
-          )}
+          <Suspense fallback={<p role="status">正在加载页面…</p>}>
+            <Routes>
+              <Route
+                path="/projects"
+                element={<ProjectsPage csrfToken={session.csrfToken} />}
+              />
+              <Route
+                path="/projects/:projectId"
+                element={<ProjectWorkspace csrfToken={session.csrfToken} />}
+              />
+              <Route
+                path="/usage"
+                element={<UsagePage csrfToken={session.csrfToken} />}
+              />
+              <Route
+                path="/account"
+                element={<AccountPage csrfToken={session.csrfToken} />}
+              />
+              <Route
+                path="/admin/users"
+                element={
+                  session.user.role === "admin" ? (
+                    <AdminPage
+                      csrfToken={session.csrfToken}
+                      ownId={session.user.id}
+                    />
+                  ) : (
+                    <Notice error>你没有执行此操作的权限。</Notice>
+                  )
+                }
+              />
+              <Route
+                path="/admin/images"
+                element={
+                  session.user.role === "admin" ? (
+                    <ImageAdminPage csrfToken={session.csrfToken} />
+                  ) : (
+                    <Notice error>你没有执行此操作的权限。</Notice>
+                  )
+                }
+              />
+              <Route path="*" element={<Navigate to="/projects" replace />} />
+            </Routes>
+          </Suspense>
         </main>
       </div>
     </div>
   );
 }
+const router = createBrowserRouter([{ path: "*", element: <App /> }]);
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <UiProvider>
-      <App />
+      <Suspense fallback={<p role="status">正在加载…</p>}>
+        <RouterProvider router={router} />
+      </Suspense>
     </UiProvider>
   </React.StrictMode>,
 );

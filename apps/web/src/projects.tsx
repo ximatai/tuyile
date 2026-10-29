@@ -1,118 +1,57 @@
-import { CreationPage } from "./creation";
-import { useEffect, useState, type FormEvent } from "react";
-import { Folder, Plus, ArrowLeft } from "lucide-react";
+import { useState, type FormEvent } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Link, useParams, useLocation } from "react-router-dom";
 import type {
   Project,
   ProjectsPage as ProjectPageResponse,
 } from "@tuyile/contracts";
 import { Button, Field, Notice } from "@tuyile/ui";
+import { useSessionState } from "./session-state";
 import { client } from "./api";
+import { lazy, Suspense } from "react";
+const CreationPage = lazy(() =>
+  import("./creation").then((m) => ({ default: m.CreationPage })),
+);
 export function ProjectsPage({ csrfToken }: { csrfToken: string }) {
-  const [createVersion, setCreateVersion] = useState(0);
-  const [projects, setProjects] = useState<Project[]>([]),
-    [selected, setSelected] = useState<Project | null>(null),
-    [loading, setLoading] = useState(true),
+  const state = useSessionState();
+  const [name, setName] = useState(""),
     [error, setError] = useState(""),
-    [busy, setBusy] = useState(false);
-  const [hasMore, setHasMore] = useState(false),
-    [offset, setOffset] = useState(50);
-  const selectedId = location.pathname.match(/^\/projects\/([^/]+)$/)?.[1];
-  useEffect(() => {
-    const c = new AbortController();
-    const api = client(csrfToken);
-    void (async () => {
-      try {
-        if (selectedId)
-          setSelected(
-            await api<Project>(
-              `/projects/${encodeURIComponent(selectedId)}`,
-              undefined,
-              c.signal,
-            ),
-          );
-        else {
-          const page = await api<ProjectPageResponse>(
-            "/projects",
+    [busy, setBusy] = useState(false),
+    [limit, setLimit] = useState(50);
+  const query = useQuery({
+    queryKey: state.key("projects", String(limit)),
+    queryFn: async ({ signal }) => {
+      const pages: ProjectPageResponse[] = [];
+      for (let offset = 0; offset < limit; offset += 50)
+        pages.push(
+          await client(csrfToken)<ProjectPageResponse>(
+            `/projects?offset=${offset}`,
             undefined,
-            c.signal,
-          );
-          if (!c.signal.aborted) {
-            setProjects(page.projects);
-            setHasMore(page.hasMore);
-            setOffset(50);
-          }
-        }
-      } catch (e) {
-        if (!c.signal.aborted) setError((e as Error).message);
-      } finally {
-        if (!c.signal.aborted) setLoading(false);
-      }
-    })();
-    return () => c.abort();
-  }, [csrfToken, selectedId]);
-  async function create(e: FormEvent<HTMLFormElement>) {
+            signal,
+          ),
+        );
+      return {
+        projects: pages.flatMap((p) => p.projects),
+        hasMore: pages.at(-1)?.hasMore,
+      };
+    },
+  });
+  async function create(e: FormEvent) {
     e.preventDefault();
-    const form = e.currentTarget;
     setBusy(true);
     setError("");
     try {
-      const p = await client(csrfToken)<Project>("/projects", {
-        name: new FormData(form).get("name"),
+      await client(csrfToken)("/projects", { name });
+      setName("");
+      await state.queries.invalidateQueries({
+        queryKey: state.key("projects"),
       });
-      setProjects((old) => [p, ...old]);
-      setOffset((v) => v + 1);
-      setCreateVersion((v) => v + 1);
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
     }
   }
-  async function more() {
-    setBusy(true);
-    setError("");
-    try {
-      const page = await client(csrfToken)<ProjectPageResponse>(
-        `/projects?offset=${offset}`,
-      );
-      setProjects((old) => [
-        ...new Map([...old, ...page.projects].map((p) => [p.id, p])).values(),
-      ]);
-      setOffset((v) => v + 50);
-      setHasMore(page.hasMore);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (selectedId)
-    return (
-      <section className="project-workspace">
-        <a className="back" href="/projects">
-          <ArrowLeft size={16} />
-          返回项目
-        </a>
-        {loading ? (
-          <p role="status">正在加载项目…</p>
-        ) : selected ? (
-          <>
-            <p className="eyebrow">个人项目</p>
-            <h1>{selected.name}</h1>
-            <p className="muted">
-              创建于 {new Date(selected.createdAt).toLocaleString("zh-CN")}
-            </p>
-            <CreationPage
-              key={selected.id}
-              csrfToken={csrfToken}
-              projectId={selected.id}
-            />
-          </>
-        ) : null}
-        {error && <Notice error>{error}</Notice>}
-      </section>
-    );
   return (
     <section>
       <div className="page-heading">
@@ -121,53 +60,118 @@ export function ProjectsPage({ csrfToken }: { csrfToken: string }) {
           <h1>我的项目</h1>
           <p className="muted">按创作主题整理你的项目，内容仅自己可见。</p>
         </div>
-        <span className="count">已显示 {projects.length} 个项目</span>
       </div>
-      <form
-        key={createVersion}
-        className="create-project"
-        onSubmit={create}
-        aria-label="创建项目"
-      >
+      <form className="create-project" onSubmit={create} aria-label="创建项目">
         <Field
           label="项目名称"
           name="name"
-          placeholder="例如：秋日品牌视觉"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
           required
           maxLength={80}
         />
         <Button className="primary" disabled={busy}>
-          <Plus size={17} />
-          {busy ? "正在创建…" : "创建项目"}
+          创建项目
         </Button>
       </form>
-      {error && <Notice error>{error}</Notice>}
-      {loading ? (
+      {(error || query.error) && (
+        <Notice error>{error || query.error?.message}</Notice>
+      )}
+      {query.isPending ? (
         <p role="status">正在加载项目…</p>
-      ) : projects.length ? (
+      ) : (
         <div className="project-grid">
-          {projects.map((p) => (
-            <a className="project-card" href={`/projects/${p.id}`} key={p.id}>
-              <Folder size={24} />
+          {query.data?.projects.map((p) => (
+            <Link className="project-card" key={p.id} to={`/projects/${p.id}`}>
               <h2>{p.name}</h2>
               <span className="hint">
                 {new Date(p.createdAt).toLocaleDateString("zh-CN")} 创建
               </span>
-            </a>
+            </Link>
           ))}
         </div>
-      ) : (
+      )}
+      {!query.isPending && query.data?.projects.length === 0 && (
         <div className="empty">
-          <Folder size={32} />
           <h2>从第一个项目开始</h2>
           <p>给项目起个名字，把一次创作整理在一起。</p>
         </div>
       )}
-      {hasMore && (
-        <Button disabled={busy} onClick={() => void more()}>
-          {busy ? "正在加载…" : "加载更多项目"}
-        </Button>
+      {query.data?.hasMore && (
+        <Button onClick={() => setLimit((v) => v + 50)}>加载更多项目</Button>
       )}
     </section>
+  );
+}
+export function ProjectWorkspace({ csrfToken }: { csrfToken: string }) {
+  const { projectId } = useParams();
+  const state = useSessionState();
+  const query = useQuery({
+    queryKey: state.key("project", projectId!),
+    queryFn: ({ signal }) =>
+      client(csrfToken)<Project>(`/projects/${projectId}`, undefined, signal),
+  });
+  if (query.error) return <Notice error>{query.error.message}</Notice>;
+  if (!query.data) return <p role="status">正在加载项目…</p>;
+  return (
+    <section className="project-workspace">
+      <Suspense fallback={<p role="status">正在加载创作面板…</p>}>
+        <CreationPage
+          key={projectId}
+          csrfToken={csrfToken}
+          projectId={projectId!}
+        />
+      </Suspense>
+    </section>
+  );
+}
+export function ProjectNavigation() {
+  const state = useSessionState();
+  const query = useQuery({
+    queryKey: state.key("projects", "50"),
+    queryFn: ({ signal }) =>
+      client(state.session.csrfToken)<ProjectPageResponse>(
+        "/projects",
+        undefined,
+        signal,
+      ),
+  });
+  const location = useLocation();
+  return (
+    <div className="sidebar-projects">
+      <small>我的项目</small>
+      {query.data?.projects.map((p) => (
+        <Link
+          to={`/projects/${p.id}`}
+          key={p.id}
+          title={p.name}
+          aria-current={
+            location.pathname === `/projects/${p.id}` ? "page" : undefined
+          }
+        >
+          {p.name}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+export function ProjectHeading() {
+  const state = useSessionState(),
+    projectId = useLocation().pathname.split("/")[2];
+  const query = useQuery({
+    queryKey: state.key("project", projectId),
+    queryFn: ({ signal }) =>
+      client(state.session.csrfToken)<Project>(
+        `/projects/${projectId}`,
+        undefined,
+        signal,
+      ),
+  });
+  return (
+    <span className="workspace-title">
+      <Link to="/projects">返回项目</Link>
+      <h1>{query.data?.name ?? "项目画布"}</h1>
+    </span>
   );
 }

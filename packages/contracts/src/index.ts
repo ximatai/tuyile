@@ -65,3 +65,4 @@ export interface UsersPage {
 export const pageOffset = z.coerce.number().int().min(0).max(100000).default(0);
 export * from "./creation.js";
 export * from "./extensions.js";
+export * from "./canvas.js";

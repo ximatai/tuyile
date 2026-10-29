@@ -285,3 +285,4 @@ export { checkAdmissionBudget, completedTaskState } from "./creation-policy.js";
 export * from "./tools.js";
 export * from "./capabilities.js";
 export * from "./extensions.js";
+export * from "./canvas.js";

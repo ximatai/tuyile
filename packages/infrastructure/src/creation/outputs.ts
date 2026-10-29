@@ -37,6 +37,10 @@ export class PgOutputsRepository extends PgCreationContext {
       "UPDATE image_tasks SET used=used+1,held=held-1 WHERE id=$1",
       [t.id],
     );
+    await c.query(
+      "INSERT INTO image_output_sources(workspace_id,output_id,asset_id) SELECT $1,$2,unnest($3::uuid[]) ON CONFLICT DO NOTHING",
+      [a.workspaceId, output.id, t.input.referenceIds],
+    );
     return {
       outputId: output.id,
       taskId: t.id,
