@@ -1,0 +1,30 @@
+# Local agents, secrets and machine state
+.codex-temp/
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log
+
+# Dependencies and generated output
+node_modules/
+dist/
+build/
+coverage/
+playwright-report/
+test-results/
+.cache/
+
+# Private runtime files and backups
+/data/
+/storage/
+/uploads/
+/backups/
+/output/
+/tmp/
+*.sqlite
+*.sqlite-*
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
