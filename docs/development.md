@@ -103,6 +103,8 @@ API 负责准入，单 Worker 读取 PostgreSQL 队列并执行。每用户等�
 
 管理员待核验入口只展示元数据和额度，不展示私人正文、图片或 Key。人工确认成功张数只结算额度，不生成或恢复本地文件；同样处置幂等，不同重复处置拒绝。未解决 unknown 保留相关额度和引用保护。
 
+上述为 M2 当前实现说明。用户随后确认图片额度只计本地成功持久化输出，上游收费但无法取得图片应在核验后释放图片预留，尝试/费用另记。当前人工核验入口尚未符合此细化口径，列入 [专项治理 G2](architecture-governance.md)，不能以历史测试通过视为已修正。
+
 标准按钮、输入、选择器、表格、上传、提示和确认弹窗采用 Ant Design 6.6.8；共享 UI 包提供工程蓝主题与薄封装。构建 HTML 每次响应生成样式 nonce，经 ConfigProvider 传入动态样式，保持 CSP 的 script-src self，不使用 unsafe-inline。
 
 新增 API 为 `/api/images/usage`、`/api/images/tasks`（提交/列表/详情/取消）、`/api/images/recover`、`/api/images/uploads`、`/api/images/assets/:id/{original,preview,download}`；管理配置为 `/api/image-admin/providers`、`policies/:userId` 和 `review`。全部按服务端工作区鉴权，管理员没有内容越权特例。

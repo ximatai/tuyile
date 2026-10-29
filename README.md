@@ -8,6 +8,7 @@
 
 - [产品基线与已确认边界](docs/product-baseline.md)
 - [架构设计](docs/architecture.md)
+- [架构专项治理：M3 前置与集成要求](docs/architecture-governance.md)
 - [本地开发与阶段验收](docs/development.md)
 - [工程执行计划](docs/exec-plans/active/tuyile-foundation.md)
 - [开发与里程碑计划](docs/delivery-roadmap.md)
