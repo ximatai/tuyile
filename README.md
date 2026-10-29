@@ -8,6 +8,7 @@
 
 - [产品基线与已确认边界](docs/product-baseline.md)
 - [架构设计](docs/architecture.md)
-- [执行计划](docs/exec-plans/active/tuyile-foundation.md)
+- [工程执行计划](docs/exec-plans/active/tuyile-foundation.md)
+- [开发与里程碑计划](docs/delivery-roadmap.md)
 
 先搭好中期基础，保持职责和模块边界清晰，保留长期演进空间，再在受控范围内尽快上线。
