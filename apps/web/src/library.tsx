@@ -18,7 +18,6 @@ import {
   Field,
   Input,
   Notice,
-  Tabs,
   useConfirm,
 } from "@tuyile/ui";
 import { ApiError, client } from "./api";
@@ -201,8 +200,11 @@ export function LibraryPage({ mode }: { mode: Mode }) {
     if (!mounted.current) return;
     state.editors.get(request.project)?.dispose();
     state.editors.delete(request.project);
-    await state.queries.invalidateQueries({
+    // A returning editor must not initialize from the pre-reuse document while
+    // an inactive query refreshes. Its new revision is already committed.
+    state.queries.removeQueries({
       queryKey: state.key("canvas", request.project),
+      exact: true,
     });
     setPendingReuse(null);
     navigate(`/projects/${request.project}`);
@@ -308,7 +310,6 @@ export function LibraryPage({ mode }: { mode: Mode }) {
     <section className="library-page">
       <div className="page-heading">
         <div>
-          <p className="eyebrow">个人素材空间</p>
           <h1>
             {mode === "gallery"
               ? "我的图库"
@@ -319,35 +320,6 @@ export function LibraryPage({ mode }: { mode: Mode }) {
           <p className="muted">图片可在自己的项目间复用，不新增生图计次。</p>
         </div>
       </div>
-      <Tabs
-        activeKey={mode}
-        onChange={(value) => {
-          if (!pendingReuse && !pendingFavorite.current) {
-            setError("");
-            setMessage("");
-            setEditing(null);
-            setReferences([]);
-            navigate(value === "gallery" ? "/gallery" : `/${value}`);
-          }
-        }}
-        items={[
-          {
-            key: "gallery",
-            label: "图库",
-            disabled: busy || !!pendingReuse || !!pendingFavorite.current,
-          },
-          {
-            key: "prompts",
-            label: "提示池",
-            disabled: busy || !!pendingReuse || !!pendingFavorite.current,
-          },
-          {
-            key: "favorites",
-            label: "收藏",
-            disabled: busy || !!pendingReuse || !!pendingFavorite.current,
-          },
-        ]}
-      />
       {(error || queryError) && (
         <Notice error>{error || queryError?.message}</Notice>
       )}
@@ -494,7 +466,10 @@ export function LibraryPage({ mode }: { mode: Mode }) {
         <>
           <div className="gallery-grid">
             {allAssets.map((asset) => (
-              <article className="gallery-card" key={asset.id}>
+              <article
+                className={`gallery-card ${selected.includes(asset.id) ? "is-selected" : ""}`}
+                key={asset.id}
+              >
                 <Checkbox
                   aria-label={`选择图片 ${asset.id}`}
                   checked={selected.includes(asset.id)}
@@ -507,7 +482,7 @@ export function LibraryPage({ mode }: { mode: Mode }) {
                     )
                   }
                 >
-                  选择图片
+                  <span className="sr-only">选择图片</span>
                 </Checkbox>
                 <a
                   href={`/api/images/assets/${asset.id}/original`}
@@ -520,10 +495,37 @@ export function LibraryPage({ mode }: { mode: Mode }) {
                     loading="lazy"
                   />
                 </a>
+                <div className="gallery-card-title">
+                  <strong>
+                    {asset.origin === "upload" ? "上传素材" : "生成图片"} ·{" "}
+                    {new Date(asset.createdAt).toLocaleDateString("zh-CN", {
+                      month: "2-digit",
+                      day: "2-digit",
+                    })}
+                  </strong>
+                  <span>{asset.mime.replace("image/", "").toUpperCase()}</span>
+                </div>
                 <p className="hint">
                   {asset.width} × {asset.height} ·{" "}
                   {(asset.bytes / 1048576).toFixed(2)} MiB
                 </p>
+                <div className="gallery-reuse-actions">
+                  <Button
+                    className="primary"
+                    disabled={busy || !!pendingReuse}
+                    onClick={() => void reuse([asset.id])}
+                  >
+                    加入画布
+                  </Button>
+                  <Button
+                    disabled={busy || !!pendingReuse}
+                    onClick={() =>
+                      void openProjectDraft({ referenceIds: [asset.id] })
+                    }
+                  >
+                    用作参考
+                  </Button>
+                </div>
                 <div className="actions">
                   <a href={`/api/images/assets/${asset.id}/download`}>
                     下载原图

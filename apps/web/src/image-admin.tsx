@@ -15,6 +15,7 @@ import type {
 } from "@tuyile/contracts";
 import {
   Collapse,
+  Tabs,
   Button,
   Field,
   Notice,
@@ -35,6 +36,7 @@ const fields: Record<string, string> = {
 };
 export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
   const [providerVersion, setProviderVersion] = useState(0);
+  const [section, setSection] = useState("images");
   const [modelsText, setModelsText] = useState("");
   const [capabilities, setCapabilities] = useState<
     Record<string, ImageCapability>
@@ -187,32 +189,37 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
       setError((e as Error).message);
     }
   }
-  return (
-    <section className="image-admin">
-      <p className="eyebrow">管理</p>
-      <h1>创作服务与额度</h1>
-      <p className="muted">
-        统一维护模型服务、用户限制与未知结果。这里不展示其他用户的提示词、图片或正文。
-      </p>
-      {(error ||
-        providersQuery.error ||
-        reviewQuery.error ||
-        usersQuery.error ||
-        policyQuery.error) && (
-        <Notice error>
-          {error ||
-            providersQuery.error?.message ||
-            reviewQuery.error?.message ||
-            usersQuery.error?.message ||
-            policyQuery.error?.message}
-        </Notice>
-      )}
-      {message && <Notice>{message}</Notice>}
+  const imagesContent = (
+    <>
+      <section className="settings-section current-provider">
+        <h2>当前服务</h2>
+        {providers.find((p) => p.active && !p.revoked) ? (
+          (() => {
+            const current = providers.find((p) => p.active && !p.revoked)!;
+            return (
+              <dl className="provider-summary">
+                <dt>服务地址</dt>
+                <dd>{current.baseUrl || "本地合成测试"}</dd>
+                <dt>模型</dt>
+                <dd>{current.models.join("、")}</dd>
+                <dt>模式</dt>
+                <dd>{current.mode === "fake" ? "本地测试" : "OpenAI 兼容"}</dd>
+              </dl>
+            );
+          })()
+        ) : (
+          <p className="hint">尚未配置可用图片服务，请先保存服务版本。</p>
+        )}
+      </section>
       <section className="settings-section">
-        <h2>模型服务</h2>
+        <h2>新服务版本</h2>
+        <p className="hint">
+          保存新版本不会改变已接受的任务。密钥仅在服务端加密保存，不返回浏览器。
+        </p>
         <form
           key={providerVersion}
           onSubmit={provider}
+          className="provider-form"
           aria-label="保存图片服务"
         >
           <ChoiceField
@@ -225,24 +232,13 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
             ]}
           />
           {mode === "openai" && (
-            <>
-              <Field
-                label="服务地址"
-                name="baseUrl"
-                type="url"
-                placeholder="https://api.openai.com/v1"
-                required
-              />
-              <Field
-                label="API Key"
-                name="apiKey"
-                type="password"
-                autoComplete="new-password"
-              />
-              <Checkbox name="preserveKey">
-                显式沿用当前 Key（仅同一服务地址）
-              </Checkbox>
-            </>
+            <Field
+              label="服务地址"
+              name="baseUrl"
+              type="url"
+              placeholder="https://api.openai.com/v1"
+              required
+            />
           )}
           <Field
             label="允许的模型（英文逗号分隔）"
@@ -252,6 +248,19 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
             placeholder={mode === "fake" ? "test-image" : "模型 ID"}
             required
           />
+          {mode === "openai" && (
+            <div className="provider-key-field">
+              <Field
+                label="API Key"
+                name="apiKey"
+                type="password"
+                autoComplete="new-password"
+              />
+              <Checkbox name="preserveKey">
+                显式沿用当前 Key（仅同一服务地址）
+              </Checkbox>
+            </div>
+          )}
           <p className="hint">
             按服务商文档声明各模型支持的规格；这里的声明不代表已完成真实模型测试。
           </p>
@@ -296,7 +305,9 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
                       max={32000000}
                       value={cap.maxPixels}
                       onChange={(e) =>
-                        capability(model, { maxPixels: Number(e.target.value) })
+                        capability(model, {
+                          maxPixels: Number(e.target.value),
+                        })
                       }
                     />
                     <Field
@@ -396,6 +407,10 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
           ))}
         </ul>
       </section>
+    </>
+  );
+  const policiesContent = (
+    <>
       <section className="settings-section">
         <h2>个人策略</h2>
         <ChoiceField
@@ -460,8 +475,16 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
           </form>
         )}
       </section>
-      <OperationsAdmin />
+    </>
+  );
+  const extensionsContent = (
+    <>
       <ExtensionsAdmin csrfToken={csrfToken} />
+    </>
+  );
+  const operationsContent = (
+    <>
+      <OperationsAdmin />
       <section className="settings-section">
         <h2>结果待核验</h2>
         <p className="hint">
@@ -504,6 +527,56 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
           </form>
         ))}
       </section>
+    </>
+  );
+  return (
+    <section className="image-admin">
+      <h1>图片服务</h1>
+      <p className="muted">管理图片与规划服务、执行边界和可扩展技能。</p>
+      {(error ||
+        providersQuery.error ||
+        reviewQuery.error ||
+        usersQuery.error ||
+        policyQuery.error) && (
+        <Notice error>
+          {error ||
+            providersQuery.error?.message ||
+            reviewQuery.error?.message ||
+            usersQuery.error?.message ||
+            policyQuery.error?.message}
+        </Notice>
+      )}
+      {message && <Notice>{message}</Notice>}
+      <Tabs
+        activeKey={section}
+        onChange={setSection}
+        items={[
+          {
+            key: "images",
+            label: "图片服务",
+            children: imagesContent,
+            forceRender: true,
+          },
+          {
+            key: "extensions",
+            label: "规划与技能",
+            children: extensionsContent,
+            forceRender: true,
+          },
+          {
+            key: "policies",
+            label: "用户策略",
+            children: policiesContent,
+            forceRender: true,
+          },
+          {
+            key: "operations",
+            label: "运行与核验",
+            children: operationsContent,
+            forceRender: true,
+          },
+        ]}
+      />
     </section>
   );
 }

@@ -27,6 +27,15 @@ import type {
   CanvasSources,
   Project,
 } from "@tuyile/contracts";
+import {
+  Undo2,
+  Redo2,
+  Copy,
+  Trash2,
+  Group,
+  Ungroup,
+  AlignStartVertical,
+} from "lucide-react";
 import { Button, Notice, useConfirm } from "@tuyile/ui";
 import { useNavigate } from "react-router-dom";
 import { EditorStore } from "./store";
@@ -46,13 +55,16 @@ function ImageCard({ data, selected }: NodeProps<ImageNode>) {
         keepAspectRatio
       />
       <Handle type="target" position={Position.Left} isConnectable={false} />
+      <div className="canvas-image-heading" title={data.label}>
+        {data.label}
+      </div>
       <img
         draggable={false}
         src={`/api/images/assets/${data.assetId}/preview`}
         alt={data.label}
       />
       <div className="canvas-image-caption">
-        <span>{data.label}</span>
+        <span title={data.label}>{data.label}</span>
         <a
           className="nodrag"
           href={`/api/images/assets/${data.assetId}/download`}
@@ -509,41 +521,61 @@ function CanvasView({
         <Controls showInteractive={false} />
       </ReactFlow>
       <div className="canvas-toolbar" role="toolbar" aria-label="画布操作">
-        <Button disabled={!snap.canUndo} onClick={() => store.undo()}>
-          撤销
-        </Button>
-        <Button disabled={!snap.canRedo} onClick={() => store.redo()}>
-          重做
+        <Button
+          aria-label="撤销"
+          title="撤销"
+          disabled={!snap.canUndo}
+          onClick={() => store.undo()}
+        >
+          <Undo2 size={16} />
         </Button>
         <Button
+          aria-label="重做"
+          title="重做"
+          disabled={!snap.canRedo}
+          onClick={() => store.redo()}
+        >
+          <Redo2 size={16} />
+        </Button>
+        <Button
+          aria-label="复制"
+          title="复制"
           disabled={!snap.selected.length}
           onClick={() => command("copy")}
         >
-          复制
+          <Copy size={16} />
         </Button>
         <Button
+          aria-label="移除节点"
+          title="移除节点"
           disabled={!snap.selected.length}
           onClick={() => command("remove")}
         >
-          移除节点
+          <Trash2 size={16} />
         </Button>
         <Button
+          aria-label="分组"
+          title="分组"
           disabled={snap.selected.length < 2}
           onClick={() => command("group")}
         >
-          分组
+          <Group size={16} />
         </Button>
         <Button
+          aria-label="解除分组"
+          title="解除分组"
           disabled={!snap.selected.length}
           onClick={() => command("ungroup")}
         >
-          解除分组
+          <Ungroup size={16} />
         </Button>
         <Button
+          aria-label="左对齐"
+          title="左对齐"
           disabled={snap.selected.length < 2}
           onClick={() => command("align")}
         >
-          左对齐
+          <AlignStartVertical size={16} />
         </Button>
       </div>
     </section>

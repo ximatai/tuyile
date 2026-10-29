@@ -284,7 +284,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   ).toBeVisible();
   await reopened.getByRole("link", { name: "图片服务", exact: true }).click();
   await expect(
-    reopened.getByRole("heading", { name: "创作服务与额度" }),
+    reopened.getByRole("heading", { name: "图片服务" }),
   ).toBeVisible();
   expect(
     await reopened.evaluate(
@@ -303,6 +303,7 @@ test("desktop administration saves independent planning configuration and versio
   await page.setViewportSize({ width: 1440, height: 1000 });
   await login(page);
   await page.goto("/admin/images");
+  await page.getByRole("tab", { name: "规划与技能", exact: true }).click();
   await page.getByLabel("规划服务类型", { exact: true }).click();
   await page
     .getByText("本地测试规划（不调用真实模型）", { exact: true })
@@ -330,6 +331,7 @@ test("desktop administration saves independent planning configuration and versio
   await page.getByRole("button", { name: "保存并启用新技能版本" }).click();
   await expect(page.getByText("合成商品图 v2", { exact: true })).toBeVisible();
   await expect(row.getByText("已停用", { exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "图片服务", exact: true }).click();
   await page.getByLabel("允许的模型（英文逗号分隔）").fill("test-image");
   await page.getByText("test-image 的能力声明", { exact: true }).click();
   await expect(page.getByLabel("模型最大边长", { exact: true })).toBeVisible();
@@ -337,6 +339,13 @@ test("desktop administration saves independent planning configuration and versio
   const sizes = page.getByLabel(/^限定尺寸/);
   await sizes.pressSequentially("1024x1024,512x512");
   await expect(sizes).toHaveValue("1024x1024,512x512");
+  await page.getByRole("tab", { name: "规划与技能", exact: true }).click();
+  await page.getByLabel("技能名称").fill("待保存的技能");
+  await page.getByRole("tab", { name: "图片服务", exact: true }).click();
+  await expect(sizes).toHaveValue("1024x1024,512x512");
+  await page.getByRole("tab", { name: "规划与技能", exact: true }).click();
+  await expect(page.getByLabel("技能名称")).toHaveValue("待保存的技能");
+  await page.getByRole("tab", { name: "图片服务", exact: true }).click();
   await page.getByLabel("服务类型", { exact: true }).click();
   await page
     .getByText("本地测试服务（不调用真实模型）", { exact: true })
@@ -532,6 +541,7 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page);
   await page.goto("/admin/images");
+  await page.getByRole("tab", { name: "规划与技能", exact: true }).click();
   await page.getByLabel("规划服务类型", { exact: true }).click();
   await page
     .getByText("本地测试规划（不调用真实模型）", { exact: true })
@@ -615,6 +625,37 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
   ).toEqual([]);
   await page.getByRole("button", { name: "查看计划摘要", exact: true }).click();
   await expect(page.getByLabel("计划步骤摘要").locator("li")).toHaveCount(2);
+  for (const viewport of [
+    { width: 1920, height: 1080 },
+    { width: 1536, height: 960 },
+    { width: 1440, height: 900 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const card = document
+            .querySelector(".agent-plan-form")!
+            .getBoundingClientRect();
+          const conversation = document
+            .querySelector(".agent-conversation")!
+            .getBoundingClientRect();
+          return {
+            visible:
+              card.top >= conversation.top - 1 &&
+              card.bottom <= conversation.bottom + 1,
+            card: { top: card.top, bottom: card.bottom, height: card.height },
+            conversation: {
+              top: conversation.top,
+              bottom: conversation.bottom,
+              height: conversation.height,
+            },
+            viewport: { width: innerWidth, height: innerHeight },
+          };
+        }),
+      )
+      .toMatchObject({ visible: true });
+  }
   const confirm = (await page
     .getByRole("button", { name: "确认执行", exact: true })
     .boundingBox())!;
@@ -712,6 +753,7 @@ test("Gallery reuse, ZIP export, favorites, prompt application and project clean
     page.getByRole("link", { name: "收藏：素材测试收藏", exact: true }),
   ).toBeVisible();
   await card.getByRole("checkbox").check();
+  await expect(card).toHaveClass(/is-selected/);
   const downloading = page.waitForEvent("download");
   await page.getByRole("button", { name: "导出所选 ZIP", exact: true }).click();
   const download = await downloading;
@@ -733,8 +775,24 @@ test("Gallery reuse, ZIP export, favorites, prompt application and project clean
     (await (await page.request.get("/api/images/usage")).json()).used,
   ).toBe(before.used);
   await page.getByRole("link", { name: "图库", exact: true }).click();
-  await page.locator(".gallery-card").first().getByRole("checkbox").check();
-  await page.getByRole("button", { name: "设为参考图", exact: true }).click();
+  await page
+    .locator(".gallery-card")
+    .first()
+    .getByRole("button", { name: "加入画布", exact: true })
+    .click();
+  await expect(page).toHaveURL(new RegExp(`${targetHref}$`));
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(2);
+  await page.reload();
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(2);
+  expect(
+    (await (await page.request.get("/api/images/usage")).json()).used,
+  ).toBe(before.used);
+  await page.getByRole("link", { name: "图库", exact: true }).click();
+  await page
+    .locator(".gallery-card")
+    .first()
+    .getByRole("button", { name: "用作参考", exact: true })
+    .click();
   await expect(page.getByText("图库参考图", { exact: true })).toBeVisible();
   await page.getByRole("link", { name: "提示池", exact: true }).click();
   await expect(
@@ -811,6 +869,7 @@ test("administration saves bounded execution policies and clearing ended Agent h
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page);
   await page.goto("/admin/images");
+  await page.getByRole("tab", { name: "运行与核验", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "运行概览与规划策略", exact: true }),
   ).toBeVisible();

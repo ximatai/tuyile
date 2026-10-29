@@ -347,7 +347,7 @@ export function AgentPanel({
               ]}
             />
             <label className="field">
-              <span>告诉 Agent 你的想法</span>
+              <span className="sr-only">告诉 Agent 你的想法</span>
               <Input.TextArea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
@@ -443,7 +443,37 @@ function PlanCard({
   const active = useRef(false);
   const card = useRef<HTMLFormElement>(null);
   useEffect(() => {
-    if (visible && !editing) card.current?.scrollIntoView({ block: "end" });
+    const element = card.current;
+    const conversation = element?.closest<HTMLElement>(".agent-conversation");
+    if (!visible || editing || !element || !conversation) return;
+    let frame = 0;
+    const place = () => {
+      const box = element.getBoundingClientRect();
+      const viewport = conversation.getBoundingClientRect();
+      // Scroll only the conversation. A browser-wide scrollIntoView can move
+      // the whole workspace; a desktop resize must also reveal the latest card.
+      const delta =
+        box.height > viewport.height - 8
+          ? box.top - viewport.top
+          : box.bottom > viewport.bottom - 4
+            ? box.bottom - viewport.bottom + 4
+            : box.top < viewport.top
+              ? box.top - viewport.top
+              : 0;
+      if (Math.abs(delta) > 1) conversation.scrollTop += delta;
+    };
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(place);
+    };
+    const observer = new ResizeObserver(schedule);
+    observer.observe(conversation);
+    observer.observe(element);
+    schedule();
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+    };
   }, [plan.id, editing, visible]);
   useEffect(() => {
     // Another device can confirm this immutable version while local edits are unsaved.
@@ -558,7 +588,9 @@ function PlanCard({
     >
       <div className="agent-plan-title">
         <strong>创作计划 · v{plan.version}</strong>
-        <span>{confirmed ? "已确认" : "待确认"}</span>
+        <span className={`plan-status ${confirmed ? "confirmed" : ""}`}>
+          {confirmed ? "已确认" : "待确认"}
+        </span>
       </div>
       <Button
         type="button"

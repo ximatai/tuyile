@@ -12,6 +12,11 @@ import {
 } from "react-router-dom";
 import {
   Folder,
+  Images,
+  WandSparkles,
+  Star,
+  Database,
+  ImagePlus,
   Users,
   LogOut,
   PanelLeftClose,
@@ -186,7 +191,14 @@ function Shell() {
   }
   const workspace = /^\/projects\/[^/]+$/.test(path);
   const nav = (to: string, label: string, icon: React.ReactNode) => (
-    <Link to={to} aria-current={path === to ? "page" : undefined}>
+    <Link
+      to={to}
+      aria-label={label}
+      title={label}
+      aria-current={
+        path === to || (to === "/projects" && workspace) ? "page" : undefined
+      }
+    >
       {icon}
       <span>{label}</span>
     </Link>
@@ -204,14 +216,14 @@ function Shell() {
         </Link>
         <nav>
           {nav("/projects", "项目", <Folder size={20} />)}
-          {nav("/gallery", "图库", <Folder size={20} />)}
-          {nav("/prompts", "提示池", <Folder size={20} />)}
-          {nav("/favorites", "收藏", <Folder size={20} />)}
-          {nav("/usage", "额度与任务", <Folder size={20} />)}
+          {nav("/gallery", "图库", <Images size={20} />)}
+          {nav("/prompts", "提示池", <WandSparkles size={20} />)}
+          {nav("/favorites", "收藏", <Star size={20} />)}
+          {nav("/usage", "额度与任务", <Database size={20} />)}
           {session.user.role === "admin" && (
             <>
               {nav("/admin/users", "账号管理", <Users size={20} />)}
-              {nav("/admin/images", "图片服务", <Users size={20} />)}
+              {nav("/admin/images", "图片服务", <ImagePlus size={20} />)}
             </>
           )}
           {nav("/account", "账户安全", <ShieldCheck size={20} />)}
@@ -251,10 +263,24 @@ function Shell() {
               <ProjectHeading />
             </Suspense>
           ) : (
-            <span>项目空间</span>
+            <span>
+              {(
+                {
+                  "/gallery": "图库",
+                  "/prompts": "提示池",
+                  "/favorites": "收藏",
+                  "/usage": "额度与任务",
+                  "/admin/users": "账号管理",
+                  "/admin/images": "图片服务",
+                  "/account": "账户安全",
+                } as Record<string, string>
+              )[path] ?? "项目空间"}
+            </span>
           )}
           <div className="actions">
-            <span className="username">{session.user.username}</span>
+            <span className="username" title={session.user.username}>
+              {session.user.username}
+            </span>
             <Button disabled={busy} onClick={() => void logout()}>
               <LogOut size={16} />
               <span>{busy ? "正在退出…" : "退出登录"}</span>
