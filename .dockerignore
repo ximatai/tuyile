@@ -1,0 +1,11 @@
+.git
+.codex-temp
+.env
+.env.*
+**/node_modules
+**/dist
+**/*.log
+data
+storage
+test-results
+playwright-report

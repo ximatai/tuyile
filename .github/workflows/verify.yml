@@ -1,0 +1,32 @@
+name: Verify
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  foundation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm env:init
+      - run: docker compose up -d --wait postgres
+      - run: docker compose --env-file .env.test -p tuyile-test up -d --wait postgres
+      - run: pnpm db:migrate
+      - run: pnpm typecheck
+      - run: pnpm build
+      - run: pnpm test:unit
+      - run: pnpm test:integration
+      - run: pnpm test:runtime
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+      - run: docker compose config --quiet --no-env-resolution
+      - run: docker compose --profile app up -d --build --wait
+      - run: curl --fail http://127.0.0.1:8792/api/ready
+      - if: always()
+        run: |
+          docker compose --profile app down
+          docker compose --env-file .env.test -p tuyile-test down

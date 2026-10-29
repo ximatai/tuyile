@@ -1,0 +1,12 @@
+{
+  "name": "@tuyile/core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {},
+  "dependencies": {
+    "@tuyile/contracts": "workspace:*"
+  },
+  "devDependencies": {},
+  "exports": "./src/index.ts"
+}

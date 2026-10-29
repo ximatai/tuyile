@@ -1,0 +1,64 @@
+name: tuyile-dev
+services:
+  postgres:
+    image: postgres:18.4-alpine@sha256:9a8afca54e7861fd90fab5fdf4c42477a6b1cb7d293595148e674e0a3181de15
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: ${POSTGRES_DB:?Run pnpm env:init}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run pnpm env:init}
+      MIGRATOR_PASSWORD: ${MIGRATOR_PASSWORD:?Run pnpm env:init}
+      RUNTIME_PASSWORD: ${RUNTIME_PASSWORD:?Run pnpm env:init}
+    ports:
+      - "127.0.0.1:${PG_PORT:-55439}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./deploy/init-db.sh:/docker-entrypoint-initdb.d/10-tuyile.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -U postgres -d "$${POSTGRES_DB}"']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  migrate:
+    profiles: [app]
+    build: .
+    image: tuyile-local:foundation
+    command: ["node", "--import", "tsx", "scripts/migrate.ts"]
+    environment:
+      MIGRATION_DATABASE_URL: postgresql://tuyile_migrator:${MIGRATOR_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    depends_on:
+      postgres: { condition: service_healthy }
+  api:
+    profiles: [app]
+    image: tuyile-local:foundation
+    build: .
+    command: ["node", "dist/api/main.js"]
+    environment: &runtime
+      NODE_ENV: development
+      DATABASE_URL: postgresql://tuyile_runtime:${RUNTIME_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      APP_ORIGIN: ${DOCKER_APP_ORIGIN:-http://127.0.0.1:8792}
+      HOST: 0.0.0.0
+      PORT: 8792
+    ports: ["127.0.0.1:8792:8792"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          'fetch("http://127.0.0.1:8792/api/ready").then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))',
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  worker:
+    profiles: [app]
+    image: tuyile-local:foundation
+    build: .
+    command: ["node", "dist/worker/main.js"]
+    environment: *runtime
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+volumes:
+  pgdata:

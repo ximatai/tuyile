@@ -1,0 +1,13 @@
+{
+  "name": "@tuyile/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {},
+  "dependencies": {
+    "@tuyile/core": "workspace:*",
+    "@tuyile/infrastructure": "workspace:*",
+    "@tuyile/contracts": "workspace:*"
+  },
+  "devDependencies": {}
+}

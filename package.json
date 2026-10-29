@@ -1,0 +1,45 @@
+{
+  "name": "tuyile",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n api,web,worker \"corepack pnpm api:dev\" \"corepack pnpm web:dev\" \"corepack pnpm worker:dev\"",
+    "api:dev": "node --env-file=.env --import tsx apps/api/src/main.ts",
+    "worker:dev": "node --env-file=.env --import tsx apps/worker/src/main.ts",
+    "web:dev": "corepack pnpm --filter @tuyile/web dev",
+    "build": "corepack pnpm --filter @tuyile/web build && node scripts/build.mjs",
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "node --env-file=.env --import tsx scripts/migrate.ts",
+    "admin:init": "node --env-file=.env --import tsx scripts/admin-init.ts",
+    "env:init": "node scripts/init-env.mjs",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "node --env-file=.env.test scripts/run-db-tests.mjs integration",
+    "test:e2e": "node --env-file=.env.test scripts/run-db-tests.mjs e2e",
+    "start": "node --env-file=.env dist/api/main.js",
+    "worker:start": "node --env-file=.env dist/worker/main.js",
+    "admin:recover": "node --env-file=.env --import tsx scripts/admin-recover.ts",
+    "test:runtime": "node --env-file=.env.test scripts/runtime-smoke.mjs"
+  },
+  "dependencies": {
+    "@tuyile/contracts": "workspace:*",
+    "@tuyile/core": "workspace:*",
+    "@tuyile/infrastructure": "workspace:*",
+    "pg": "8.23.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "@types/node": "26.6.6",
+    "@types/pg": "8.23.1",
+    "concurrently": "10.0.6",
+    "esbuild": "0.28.2",
+    "prettier": "3.9.10",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vitest": "5.0.5"
+  },
+  "packageManager": "pnpm@9.14.2",
+  "engines": {
+    "node": "24.15.0"
+  }
+}

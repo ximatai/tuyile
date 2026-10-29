@@ -4,10 +4,11 @@
 
 产品采用服务器多用户形态，支持个人项目、图片生成与参考图创作、Agent 计划、私有图库和后台任务。首版以一个 Worker 消费有界队列，正常运行时关页、刷新和普通注销不影响执行；Worker 中断允许任务失败，进度通过轮询查看。视觉方向为工程蓝，工作台采用左侧项目导航、中央画布、右侧创作面板，侧栏可收起。
 
-当前交付产品基线、架构设计与执行计划，尚未开始应用代码实现。
+阶段 1 已完成并通过自查与独立 review：独立工程、账号/会话、个人工作区和项目基础。图片任务、完整画布与 Agent 在后续阶段交付。
 
 - [产品基线与已确认边界](docs/product-baseline.md)
 - [架构设计](docs/architecture.md)
+- [本地开发与阶段 1 验收](docs/development.md)
 - [工程执行计划](docs/exec-plans/active/tuyile-foundation.md)
 - [开发与里程碑计划](docs/delivery-roadmap.md)
 
