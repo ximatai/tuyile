@@ -1,10 +1,11 @@
+import { ImageOperations } from "@tuyile/core";
 import {
   loadConfig,
   createDatabase,
   assertSchema,
   creationConfig,
   PrivateImageFiles,
-  PgCreationRepository,
+  PgCreationStore,
   CompatibleImageProvider,
   ImageWorker,
 } from "@tuyile/infrastructure";
@@ -14,7 +15,9 @@ const config = loadConfig(),
 let stopping = false;
 const worker = new ImageWorker(
   pool,
-  new PgCreationRepository(pool, images.masterKey, images.fakeAllowed),
+  new ImageOperations(
+    new PgCreationStore(pool, images.masterKey, images.fakeAllowed),
+  ),
   new PrivateImageFiles(images.root),
   new CompatibleImageProvider(images.fakeAllowed, images.fakeDelay),
   () => {

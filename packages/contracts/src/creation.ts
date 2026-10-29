@@ -45,6 +45,7 @@ export const providerInput = z.object({
 export type ProviderInput = z.infer<typeof providerInput>;
 export interface ImageAsset {
   id: string;
+  outputId: string;
   deleted: boolean;
   mime: string;
   width: number;

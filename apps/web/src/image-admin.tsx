@@ -302,8 +302,7 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
       <section className="settings-section">
         <h2>结果待核验</h2>
         <p className="hint">
-          根据上游脱敏调用记录确认额外成功张数，或填 0
-          释放预留。此操作不生成图片、不返还已记录的尝试次数，不补造本地文件。处理原因只用于审计。
+          核验确认无法取得图片后释放对应预留。上游可能已收费，但没有本地成功图片不扣图片次数。此操作不生成图片、不返还调用尝试次数。处理原因只用于审计。
         </p>
         {!review.length && <p>暂无待核验任务。</p>}
         {review.map((t) => (
@@ -316,7 +315,7 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
               const f = new FormData(e.currentTarget);
               void run(() =>
                 client(csrfToken)(`/image-admin/review/${t.id}`, {
-                  confirmed: Number(f.get("confirmed")),
+                  confirmed: 0,
                   reason: f.get("reason"),
                 }),
               );
@@ -332,22 +331,13 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
               </p>
             ))}
             <Field
-              label="额外确认成功张数"
-              name="confirmed"
-              type="number"
-              min={0}
-              max={t.held}
-              defaultValue={0}
-              required
-            />
-            <Field
               label="核验原因"
               name="reason"
               minLength={3}
               maxLength={500}
               required
             />
-            <Button disabled={busy}>确认结算</Button>
+            <Button disabled={busy}>确认无法取得图片并释放预留</Button>
           </form>
         ))}
       </section>

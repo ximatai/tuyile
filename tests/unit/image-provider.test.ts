@@ -1,7 +1,8 @@
 import { it, expect } from "vitest";
 import { CompatibleImageProvider } from "@tuyile/infrastructure";
 import { checkImageSpec, defaultImagePolicy, shanghaiDay } from "@tuyile/core";
-import type { ImageInput, ProviderInput } from "@tuyile/contracts";
+import type { ImageInput } from "@tuyile/contracts";
+import type { ImageExecutionConfig } from "@tuyile/core";
 const input: ImageInput = {
   projectId: "",
   requestKey: "",
@@ -14,12 +15,10 @@ const input: ImageInput = {
   count: 2,
   referenceIds: [],
 };
-const config: ProviderInput = {
+const config: ImageExecutionConfig = {
   mode: "openai",
   baseUrl: "https://provider.invalid/v1",
-  models: ["compatible-model"],
   apiKey: "synthetic-only",
-  preserveKey: false,
 };
 it("uses flexible image sizes and one-image dispatches without unsupported response_format", async () => {
   const p = new CompatibleImageProvider(false, 0, async (url, options) => {

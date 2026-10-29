@@ -1,15 +1,13 @@
-import { AppError } from "./index.js";
+import { ImageOperations } from "./image-operations.js";
 import type {
-  ImageInput,
-  ImagePolicy,
-  ImageTask,
-  ImageAsset,
-  ImageUsage,
-  Principal,
-  ProviderInput,
-  ProviderView,
-  ReviewTask,
-} from "@tuyile/contracts";
+  CreationStore,
+  ImageExecutionOperations,
+} from "./creation-ports.js";
+export * from "./creation-ports.js";
+export * from "./image-operations.js";
+import { AppError } from "./index.js";
+import type { ImageExecutionConfig } from "./provider-config.js";
+import type { ImageInput, ImagePolicy, Principal } from "@tuyile/contracts";
 export const ASSET_RESERVE = 21 * 1024 * 1024;
 export const defaultImagePolicy: ImagePolicy = {
   imageLimit: 20,
@@ -57,12 +55,12 @@ export interface StoredAsset {
   userId: string;
   fileKey: string;
   state: string;
-  mime: string;
-  width: number;
-  height: number;
+  mime: string | null;
+  width: number | null;
+  height: number | null;
   bytes: number;
   previewBytes: number;
-  hash: string;
+  hash: string | null;
   taskId: string | null;
 }
 export interface AssetBytes {
@@ -90,100 +88,49 @@ export interface WorkItem {
 }
 export interface Dispatch {
   attemptId: string;
-  provider: ProviderInput;
+  provider: ImageExecutionConfig;
 }
-export interface CreationRepository {
-  admit(p: Principal, input: ImageInput): Promise<ImageTask>;
-  tasks(
-    p: Principal,
-    projectId?: string,
-    offset?: number,
-  ): Promise<ImageTask[]>;
-  task(p: Principal, id: string): Promise<ImageTask>;
-  recover(p: Principal, projectId: string, key: string): Promise<ImageTask>;
-  usage(p: Principal): Promise<ImageUsage>;
-  cancel(p: Principal, id: string): Promise<void>;
-  uploads(p: Principal, offset?: number): Promise<StoredAsset[]>;
-  reserveUpload(p: Principal): Promise<StoredAsset>;
-  commitAsset(
-    asset: StoredAsset,
-    image: AssetBytes,
-    attemptId?: string,
-  ): Promise<void>;
-  abandonAsset(asset: StoredAsset): Promise<boolean>;
-  asset(p: Principal, id: string): Promise<StoredAsset>;
-  deleteAsset(p: Principal, id: string): Promise<StoredAsset>;
-  finalizeDelete(asset: StoredAsset): Promise<void>;
-  saveProvider(p: Principal, input: ProviderInput): Promise<ProviderView>;
-  providers(p: Principal): Promise<ProviderView[]>;
-  revokeProvider(p: Principal, id: string): Promise<void>;
-  setPolicy(p: Principal, userId: string, policy: ImagePolicy): Promise<void>;
-  getPolicy(p: Principal, userId: string): Promise<ImagePolicy>;
-  review(p: Principal): Promise<ReviewTask[]>;
-  resolve(
-    p: Principal,
-    id: string,
-    confirmed: number,
-    reason: string,
-  ): Promise<void>;
-  startWorker(): Promise<void>;
-  claim(activeUserIds: string[], activeCount: number): Promise<WorkItem | null>;
-  dispatch(
-    task: WorkItem,
-    ordinal: number,
-    retry: number,
-  ): Promise<Dispatch | null>;
-  attemptResult(
-    id: string,
-    state: "received" | "rejected" | "unknown",
-    status?: number,
-    code?: string,
-  ): Promise<void>;
-  outputIntent(task: WorkItem, ordinal: number): Promise<StoredAsset>;
-  references(task: WorkItem): Promise<StoredAsset[]>;
-  stopRequested(task: WorkItem): Promise<boolean>;
-  finish(
-    task: WorkItem,
-    errorCode?: string,
-    cancelled?: boolean,
-  ): Promise<void>;
-  staleAssets(): Promise<StoredAsset[]>;
-}
-export class CreationService {
+export class CreationService extends ImageOperations {
   constructor(
-    public repository: CreationRepository,
-    public files: ImageFiles,
-  ) {}
+    store: CreationStore,
+    private readonly files: ImageFiles,
+  ) {
+    super(store);
+  }
   async submit(p: Principal, input: ImageInput) {
     if (!(await this.files.freeSpace())) throw new AppError("DISK_LOW", 507);
-    return this.repository.admit(p, input);
+    return this.admit(p, input);
   }
   async upload(p: Principal, bytes: Uint8Array) {
     if (bytes.length > 20 * 1024 * 1024)
       throw new AppError("UPLOAD_TOO_LARGE", 413);
     if (!(await this.files.freeSpace())) throw new AppError("DISK_LOW", 507);
     const image = await this.files.inspect(bytes);
-    const asset = await this.repository.reserveUpload(p);
+    const asset = await this.reserveUpload(p);
     try {
       await this.files.write(asset.fileKey, image);
-      await this.repository.commitAsset(asset, image);
-      return this.repository.asset(p, asset.id);
+      await this.commitAsset(asset, image);
+      return this.asset(p, asset.id);
     } catch (e) {
-      if (await this.repository.abandonAsset(asset)) {
+      if (await this.abandonAsset(asset)) {
         await this.files.remove(asset.fileKey);
-        await this.repository.finalizeDelete(asset);
+        await this.finalizeDelete(asset);
       }
       throw e;
     }
   }
   async bytes(p: Principal, id: string, preview = false) {
-    const asset = await this.repository.asset(p, id);
-    return { asset, bytes: await this.files.read(asset, preview) };
+    const asset = await this.asset(p, id);
+    if (!asset.mime) throw new AppError("ASSET_UNAVAILABLE", 404);
+    return {
+      asset: { ...asset, mime: asset.mime },
+      bytes: await this.files.read(asset, preview),
+    };
   }
   async delete(p: Principal, id: string) {
-    const asset = await this.repository.deleteAsset(p, id);
+    const asset = await this.deleteAsset(p, id);
     await this.files.remove(asset.fileKey);
-    await this.repository.finalizeDelete(asset);
+    await this.finalizeDelete(asset);
   }
 }
 export class ImageCallError extends Error {
@@ -197,7 +144,7 @@ export class ImageCallError extends Error {
 }
 export interface ImageProvider {
   generate(
-    config: ProviderInput,
+    config: ImageExecutionConfig,
     input: ImageInput,
     references: Uint8Array[],
     signal: AbortSignal,
@@ -205,7 +152,7 @@ export interface ImageProvider {
 }
 export class ImageExecutor {
   constructor(
-    private repo: CreationRepository,
+    private repo: ImageExecutionOperations,
     private files: ImageFiles,
     private provider: ImageProvider,
   ) {}

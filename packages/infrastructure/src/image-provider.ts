@@ -1,6 +1,10 @@
 import sharp from "sharp";
-import { ImageCallError, type ImageProvider } from "@tuyile/core";
-import type { ProviderInput, ImageInput } from "@tuyile/contracts";
+import {
+  ImageCallError,
+  type ImageProvider,
+  type ImageExecutionConfig,
+} from "@tuyile/core";
+import type { ImageInput } from "@tuyile/contracts";
 async function bounded(response: Response) {
   if (Number(response.headers.get("content-length")) > 32 * 1024 * 1024)
     throw new ImageCallError("unknown", "UPSTREAM_RESPONSE_LIMIT");
@@ -29,7 +33,7 @@ export class CompatibleImageProvider implements ImageProvider {
     private fetcher: typeof fetch = fetch,
   ) {}
   async generate(
-    config: ProviderInput,
+    config: ImageExecutionConfig,
     input: ImageInput,
     references: Uint8Array[],
     signal: AbortSignal,

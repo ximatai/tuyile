@@ -225,9 +225,11 @@ export async function assertSchema(pool: pg.Pool) {
     "SELECT version FROM schema_migrations ORDER BY version",
   );
   if (
-    result.rows.length !== 2 ||
+    result.rows.length !== 4 ||
     result.rows[0].version !== 1 ||
-    result.rows[1].version !== 2
+    result.rows[1].version !== 2 ||
+    result.rows[2].version !== 3 ||
+    result.rows[3].version !== 4
   )
     throw new Error("SCHEMA_VERSION_MISMATCH_RUN_MIGRATIONS");
   const r = await pool.query(

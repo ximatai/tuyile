@@ -170,6 +170,8 @@ export class Workbench {
   async reset(p: Principal, userId: string) {
     return this.store.transaction(async (r) => {
       await r.bootstrapLock(); // Serializes multi-user admin mutations with one consistent lock order.
+      for (const id of [...new Set([p.id, userId])].sort())
+        await r.userById(id, true);
       await this.actor(r, p, true);
       const u = await r.userById(userId, true);
       if (!u) throw new AppError("NOT_FOUND", 404);
@@ -204,6 +206,8 @@ export class Workbench {
   async enable(p: Principal, userId: string, enabled: boolean) {
     return this.store.transaction(async (r) => {
       await r.bootstrapLock();
+      for (const id of [...new Set([p.id, userId])].sort())
+        await r.userById(id, true);
       await this.actor(r, p, true);
       if (userId === p.id && !enabled)
         throw new AppError("CANNOT_DISABLE_SELF", 409);
@@ -275,3 +279,6 @@ export class Workbench {
   }
 }
 export * from "./creation.js";
+export type { ImageExecutionConfig } from "./provider-config.js";
+
+export { checkAdmissionBudget, completedTaskState } from "./creation-policy.js";

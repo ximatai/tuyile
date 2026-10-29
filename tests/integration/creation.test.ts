@@ -1,29 +1,49 @@
 import { beforeEach, afterEach, it, expect } from "vitest";
 import { randomUUID } from "node:crypto";
-import { readFile, writeFile, stat } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { CreationService, ImageCallError, ImageExecutor } from "@tuyile/core";
 import {
-  CreationService,
-  ImageCallError,
-  ImageExecutor,
-  ASSET_RESERVE,
-  shanghaiDay,
-} from "@tuyile/core";
-import {
-  PgCreationRepository,
-  PrivateImageFiles,
+  createDatabase,
+  PgCreationStore,
   ImageWorker,
   CompatibleImageProvider,
 } from "@tuyile/infrastructure";
 import { createApp } from "../../apps/api/src/app.js";
 import { imageFixture } from "../creation-fixture.js";
-import { testPassword } from "../test-database.js";
+import { testPassword, testUrls } from "../test-database.js";
 let f: Awaited<ReturnType<typeof imageFixture>>;
 beforeEach(async () => {
   f = await imageFixture();
 });
 afterEach(async () => {
-  await f?.cleanup();
+  try {
+    if (f) {
+      expect(
+        (
+          await f.pool.query(
+            "SELECT * FROM image_quota_reconciliation WHERE used<>ledger_used OR held<>ledger_held",
+          )
+        ).rows,
+      ).toEqual([]);
+      expect(
+        (
+          await f.pool.query(
+            "SELECT * FROM image_reservation_reconciliation WHERE consumed<>task_used OR held<>task_held OR consumed<>ledger_used OR held<>ledger_held",
+          )
+        ).rows,
+      ).toEqual([]);
+      expect(
+        (
+          await f.pool.query(
+            "SELECT t.id FROM image_tasks t WHERE t.used<>(SELECT count(*) FROM image_outputs o WHERE o.task_id=t.id)",
+          )
+        ).rows,
+      ).toEqual([]);
+    }
+  } finally {
+    await f?.cleanup();
+  }
 });
 it("serializes full-order admission and idempotent retries across concurrent submissions", async () => {
   const p = await f.repo.getPolicy(f.principal, f.principal.id);
@@ -218,13 +238,14 @@ it("refuses a second Worker and classifies old running work without replaying un
 });
 it("settles creation-day holds while limiting cross-day attempts on the actual dispatch date", async () => {
   let now = new Date("2026-10-29T15:59:00Z");
-  const repo = new PgCreationRepository(
+  const store = new PgCreationStore(
       f.pool,
       process.env.APP_MASTER_KEY!,
       true,
       () => now,
     ),
-    service = new CreationService(repo, f.files);
+    service = new CreationService(store, f.files),
+    repo = service;
   const t = await service.submit(f.principal, f.input());
   now = new Date("2026-10-29T16:01:00Z");
   const work = await repo.claim([], 0);
@@ -407,4 +428,383 @@ it("retains a ready task output after DB acknowledgement loss without duplicate 
   expect(
     (await f.creation.bytes(f.principal, result.outputs[0].id)).bytes.length,
   ).toBe(f.png.length);
+});
+
+it("reads fresh quota without writes while admission and user locks are held", async () => {
+  const lock = await f.pool.connect();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  let reads: Promise<unknown> | undefined;
+  try {
+    await lock.query("BEGIN");
+    await lock.query("SELECT pg_advisory_xact_lock(72110403)");
+    await lock.query("SELECT id FROM users WHERE id=$1 FOR UPDATE", [
+      f.principal.id,
+    ]);
+    reads = Promise.all([
+      f.repo.usage(f.principal),
+      f.repo.tasks(f.principal),
+      f.repo.uploads(f.principal),
+      f.repo.getPolicy(f.principal, f.principal.id),
+      f.repo.providers(f.principal),
+      f.repo.review(f.principal),
+    ]);
+    const results = (await Promise.race([
+      reads,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error("READ_BLOCKED_BY_WRITE_LOCK")),
+          2000,
+        );
+      }),
+    ])) as Awaited<ReturnType<typeof f.repo.usage>>[];
+    expect(results[0]).toMatchObject({
+      used: 0,
+      held: 0,
+      available: 20,
+      storageUsed: 0,
+    });
+    expect(
+      (await f.pool.query("SELECT count(*)::int n FROM image_policies")).rows[0]
+        .n,
+    ).toBe(0);
+    expect(
+      (await f.pool.query("SELECT count(*)::int n FROM image_days")).rows[0].n,
+    ).toBe(0);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+    await lock.query("ROLLBACK");
+    lock.release();
+    await reads?.catch(() => {});
+  }
+});
+
+it("never charges image quota for an upstream success without a persisted output", async () => {
+  const t = await f.creation.submit(f.principal, f.input());
+  const work = (await f.repo.claim([], 0))!;
+  const dispatch = (await f.repo.dispatch(work, 0, 0))!;
+  await f.repo.attemptResult(dispatch.attemptId, "unknown");
+  await f.repo.finish(work, "RESULT_UNKNOWN");
+  await expect(
+    f.repo.resolve(f.principal, t.id, 1, "Upstream reports billed"),
+  ).rejects.toMatchObject({ code: "INVALID_RESOLUTION" });
+  expect(await f.repo.usage(f.principal)).toMatchObject({
+    used: 0,
+    held: 1,
+    attempts: 1,
+  });
+  await f.repo.resolve(
+    f.principal,
+    t.id,
+    0,
+    "Verified image cannot be obtained",
+  );
+  await f.repo.resolve(
+    f.principal,
+    t.id,
+    0,
+    "Verified image cannot be obtained",
+  );
+  await f.repo.attemptResult(dispatch.attemptId, "received");
+  expect(await f.repo.usage(f.principal)).toMatchObject({
+    used: 0,
+    held: 0,
+    attempts: 1,
+  });
+  expect(await f.repo.task(f.principal, t.id)).toMatchObject({
+    used: 0,
+    held: 0,
+    outputs: [],
+    pendingReview: false,
+  });
+});
+
+it("upgrades synthetic M2 charges without inventing local outputs or erasing audit evidence", async () => {
+  const { pool } = createDatabase(testUrls().owner);
+  const c = await pool.connect();
+  try {
+    await c.query("BEGIN");
+    await c.query("SET LOCAL search_path=pg_temp,pg_catalog");
+    await c.query(
+      (await readFile("migrations/0001_identity.sql", "utf8"))
+        .replaceAll("CREATE TABLE", "CREATE TEMP TABLE")
+        .replaceAll("CREATE VIEW", "CREATE TEMP VIEW"),
+    );
+    await c.query(
+      (await readFile("migrations/0002_creation.sql", "utf8"))
+        .replaceAll("CREATE TABLE", "CREATE TEMP TABLE")
+        .replaceAll("CREATE VIEW", "CREATE TEMP VIEW"),
+    );
+    const uid = randomUUID(),
+      ws = randomUUID(),
+      project = randomUUID(),
+      provider = randomUUID(),
+      task = randomUUID();
+    await c.query(
+      "INSERT INTO users(id,username,role) VALUES($1,'synthetic','admin')",
+      [uid],
+    );
+    await c.query("INSERT INTO workspaces(id,owner_id) VALUES($1,$2)", [
+      ws,
+      uid,
+    ]);
+    await c.query(
+      "INSERT INTO projects(id,workspace_id,name) VALUES($1,$2,'Synthetic')",
+      [project, ws],
+    );
+    await c.query(
+      "INSERT INTO image_provider_versions(id,mode,base_url,models,secret_cipher) VALUES($1,'fake','','[]','')",
+      [provider],
+    );
+    await c.query(
+      "INSERT INTO image_tasks(id,workspace_id,project_id,user_id,execution_version,request_key,input_hash,input,policy,provider_id,day,state,held,used,storage_remaining,deadline,resolved_at) VALUES($1,$2,$3,$4,1,$5,'synthetic','{\"count\":2}','{}',$6,'2026-10-29','partial',0,2,0,now(),now())",
+      [task, ws, project, uid, randomUUID(), provider],
+    );
+    await c.query(
+      "INSERT INTO image_assets(workspace_id,user_id,task_id,ordinal,state,hash) VALUES($1,$2,$3,0,'deleted','synthetic-historical-hash')",
+      [ws, uid, task],
+    );
+    await c.query(
+      "INSERT INTO image_days(user_id,day,used,held,attempts) VALUES($1,'2026-10-29',2,0,2)",
+      [uid],
+    );
+    await c.query(
+      "INSERT INTO image_audit(actor_id,task_id,confirmed,reason) VALUES($1,$2,1,'Synthetic upstream billed')",
+      [uid, task],
+    );
+    await c.query(
+      await readFile("migrations/0003_outputs_and_quota.sql", "utf8"),
+    );
+    await c.query(
+      await readFile("migrations/0004_quota_reservations.sql", "utf8"),
+    );
+    expect(
+      (
+        await c.query(
+          "SELECT accepted,consumed,held,released FROM image_quota_reservations",
+        )
+      ).rows[0],
+    ).toEqual({ accepted: 2, consumed: 1, held: 0, released: 1 });
+    expect(
+      (await c.query("SELECT used,held,attempts FROM image_days")).rows[0],
+    ).toEqual({ used: 1, held: 0, attempts: 2 });
+    expect(
+      (
+        await c.query(
+          "SELECT previous_used,corrected_used FROM image_quota_corrections",
+        )
+      ).rows[0],
+    ).toEqual({ previous_used: 2, corrected_used: 1 });
+    expect(
+      (await c.query("SELECT confirmed FROM image_audit")).rows[0].confirmed,
+    ).toBe(1);
+    expect((await c.query("SELECT * FROM image_outputs")).rows).toHaveLength(1);
+    expect(
+      (
+        await c.query(
+          "SELECT * FROM image_quota_reconciliation WHERE used<>ledger_used OR held<>ledger_held",
+        )
+      ).rows,
+    ).toEqual([]);
+  } finally {
+    await c.query("ROLLBACK");
+    c.release();
+    await pool.end();
+  }
+});
+
+it("does not serialize unrelated asset writes behind the queue admission lock", async () => {
+  const lock = await f.pool.connect();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let write: ReturnType<typeof f.creation.upload> | undefined;
+  try {
+    await lock.query("BEGIN");
+    await lock.query("SELECT pg_advisory_xact_lock(72110403)");
+    write = f.creation.upload(f.principal, f.png);
+    const uploaded = await Promise.race([
+      write,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error("ASSET_WRITE_BLOCKED_BY_QUEUE")),
+          2000,
+        );
+      }),
+    ]);
+    expect(uploaded.state).toBe("ready");
+  } finally {
+    if (timer) clearTimeout(timer);
+    await lock.query("ROLLBACK");
+    lock.release();
+    await write?.catch(() => {});
+  }
+});
+
+it("keeps output identity and its quota history after physical image deletion", async () => {
+  const t = await f.creation.submit(f.principal, f.input());
+  await f.worker();
+  const result = await f.done(t.id);
+  const output = result.outputs[0];
+  expect(output.outputId).toBeTruthy();
+  await f.creation.delete(f.principal, output.id);
+  const deleted = (await f.repo.task(f.principal, t.id)).outputs[0];
+  expect(deleted).toMatchObject({
+    id: output.id,
+    outputId: output.outputId,
+    deleted: true,
+  });
+  expect(await f.repo.usage(f.principal)).toMatchObject({ used: 1, held: 0 });
+  expect(
+    (
+      await f.pool.query(
+        "SELECT count(*)::int n FROM image_quota_entries WHERE output_id=$1",
+        [output.outputId],
+      )
+    ).rows[0].n,
+  ).toBe(1);
+});
+
+it("rolls back task, reservation and pins when admission fails between modules", async () => {
+  const reference = await f.creation.upload(f.principal, f.png);
+  const service = new CreationService(
+    {
+      read: (run) => f.creationStore.read(run),
+      write: (lock, run) =>
+        f.creationStore.write(lock, (r) => {
+          const pin = r.assets.pin.bind(r.assets);
+          r.assets.pin = async (...args) => {
+            await pin(...args);
+            throw new Error("AFTER_REFERENCE_WRITE");
+          };
+          return run(r);
+        }),
+    },
+    f.files,
+  );
+  await expect(
+    service.submit(f.principal, f.input({ referenceIds: [reference.id] })),
+  ).rejects.toThrow("AFTER_REFERENCE_WRITE");
+  for (const table of [
+    "image_tasks",
+    "image_quota_reservations",
+    "image_quota_entries",
+    "image_references",
+  ])
+    expect(
+      (await f.pool.query(`SELECT count(*)::integer n FROM ${table}`)).rows[0]
+        .n,
+    ).toBe(0);
+  expect(await f.repo.usage(f.principal)).toMatchObject({
+    used: 0,
+    held: 0,
+    storageReserved: 0,
+  });
+});
+
+it("rolls back output, consumption and publication together, then permits one safe commit", async () => {
+  const task = await f.creation.submit(f.principal, f.input());
+  const work = (await f.repo.claim([], 0))!;
+  const attempt = (await f.repo.dispatch(work, 0, 0))!;
+  await f.repo.attemptResult(attempt.attemptId, "received");
+  const asset = await f.repo.outputIntent(work, 0);
+  const image = await f.files.inspect(f.png);
+  await f.files.write(asset.fileKey, image);
+  const service = new CreationService(
+    {
+      read: (run) => f.creationStore.read(run),
+      write: (lock, run) =>
+        f.creationStore.write(lock, (r) => {
+          const publish = r.assets.publish.bind(r.assets);
+          r.assets.publish = async (...args) => {
+            await publish(...args);
+            throw new Error("AFTER_ASSET_PUBLICATION");
+          };
+          return run(r);
+        }),
+    },
+    f.files,
+  );
+  await expect(
+    service.commitAsset(asset, image, attempt.attemptId),
+  ).rejects.toThrow("AFTER_ASSET_PUBLICATION");
+  expect(
+    (
+      await f.pool.query("SELECT state FROM image_assets WHERE id=$1", [
+        asset.id,
+      ])
+    ).rows[0].state,
+  ).toBe("staging");
+  expect(
+    (
+      await f.pool.query("SELECT state FROM image_attempts WHERE id=$1", [
+        attempt.attemptId,
+      ])
+    ).rows[0].state,
+  ).toBe("received");
+  expect(
+    (await f.pool.query("SELECT count(*)::integer n FROM image_outputs"))
+      .rows[0].n,
+  ).toBe(0);
+  expect(await f.repo.usage(f.principal)).toMatchObject({ used: 0, held: 1 });
+  await f.repo.commitAsset(asset, image, attempt.attemptId);
+  await f.repo.commitAsset(asset, image, attempt.attemptId);
+  await f.repo.finish(work);
+  expect(await f.repo.task(f.principal, task.id)).toMatchObject({
+    used: 1,
+    held: 0,
+    state: "succeeded",
+  });
+  expect(
+    (
+      await f.pool.query(
+        "SELECT consumed,held,released FROM image_quota_reservations",
+      )
+    ).rows[0],
+  ).toEqual({ consumed: 1, held: 0, released: 0 });
+});
+
+it("orders reference admission against asset deletion without a dangling pin", async () => {
+  const reference = await f.creation.upload(f.principal, f.png);
+  const [submission, deletion] = await Promise.allSettled([
+    f.creation.submit(f.principal, f.input({ referenceIds: [reference.id] })),
+    f.creation.delete(f.principal, reference.id),
+  ]);
+  if (submission.status === "fulfilled") {
+    expect(deletion).toMatchObject({
+      status: "rejected",
+      reason: { code: "ASSET_REFERENCED" },
+    });
+    await f.repo.cancel(f.principal, submission.value.id);
+  } else {
+    expect(submission.reason).toMatchObject({ code: "REFERENCE_UNAVAILABLE" });
+    expect(deletion.status).toBe("fulfilled");
+  }
+  expect(
+    (
+      await f.pool.query(
+        "SELECT r.asset_id FROM image_references r JOIN image_assets a ON a.id=r.asset_id WHERE a.state<>'ready'",
+      )
+    ).rows,
+  ).toEqual([]);
+});
+
+it("serializes manual release against late attempt evidence", async () => {
+  await f.creation.submit(f.principal, f.input());
+  const work = (await f.repo.claim([], 0))!;
+  const attempt = (await f.repo.dispatch(work, 0, 0))!;
+  await f.repo.finish(work, "RESULT_UNKNOWN");
+  await Promise.all([
+    f.repo.resolve(f.principal, work.id, 0, "Verified no retrievable image"),
+    f.repo.attemptResult(attempt.attemptId, "received"),
+  ]);
+  expect(await f.repo.usage(f.principal)).toMatchObject({
+    used: 0,
+    held: 0,
+    attempts: 1,
+  });
+  expect(
+    (
+      await f.pool.query("SELECT state FROM image_attempts WHERE id=$1", [
+        attempt.attemptId,
+      ])
+    ).rows[0].state,
+  ).toBe("resolved");
 });

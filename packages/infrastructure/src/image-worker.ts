@@ -2,7 +2,7 @@ import type pg from "pg";
 import {
   ImageExecutor,
   type WorkItem,
-  type CreationRepository,
+  type ImageExecutionOperations,
   type ImageFiles,
   type ImageProvider,
 } from "@tuyile/core";
@@ -18,7 +18,7 @@ export class ImageWorker {
   private healthy = false;
   constructor(
     private pool: pg.Pool,
-    private repo: CreationRepository,
+    private repo: ImageExecutionOperations,
     private files: ImageFiles,
     private provider: ImageProvider,
     private fatal: () => void,

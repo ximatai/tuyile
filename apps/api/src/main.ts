@@ -3,7 +3,7 @@ import { CreationService } from "@tuyile/core";
 import {
   creationConfig,
   PrivateImageFiles,
-  PgCreationRepository,
+  PgCreationStore,
 } from "@tuyile/infrastructure";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
@@ -30,11 +30,7 @@ const imageConfig = creationConfig();
 const files = new PrivateImageFiles(imageConfig.root);
 await files.init();
 const creation = new CreationService(
-  new PgCreationRepository(
-    pool,
-    imageConfig.masterKey,
-    imageConfig.fakeAllowed,
-  ),
+  new PgCreationStore(pool, imageConfig.masterKey, imageConfig.fakeAllowed),
   files,
 );
 const app = createApp(

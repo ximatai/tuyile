@@ -1,9 +1,9 @@
 import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
+
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
 import {
-  PgCreationRepository,
+  PgCreationStore,
   PrivateImageFiles,
   ImageWorker,
   CompatibleImageProvider,
@@ -12,7 +12,6 @@ import {
   CreationService,
   type ImageProvider,
   type ImageFiles,
-  type WorkItem,
 } from "@tuyile/core";
 import type { ImageInput } from "@tuyile/contracts";
 import { resetDatabase, testPassword } from "./test-database.js";
@@ -20,14 +19,11 @@ export async function imageFixture() {
   const db = await resetDatabase(),
     login = await db.service.login("admin", testPassword),
     principal = (await db.service.authenticate(login.token)).user;
-  const repo = new PgCreationRepository(
-      db.pool,
-      process.env.APP_MASTER_KEY!,
-      true,
-    ),
+  const store = new PgCreationStore(db.pool, process.env.APP_MASTER_KEY!, true),
     root = await mkdtemp(".codex-temp/image-test-"),
     files = new PrivateImageFiles(root, 0),
-    creation = new CreationService(repo, files);
+    creation = new CreationService(store, files),
+    repo = creation;
   await files.init();
   await repo.saveProvider(principal, {
     mode: "fake",
@@ -90,6 +86,7 @@ export async function imageFixture() {
     principal,
     login,
     repo,
+    creationStore: store,
     root,
     files,
     creation,

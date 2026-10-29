@@ -11,9 +11,8 @@ import {
 import { AppError } from "@tuyile/core";
 import type { ApiEnv } from "./app.js";
 export function creationRoutes(app: Hono<ApiEnv>, service: CreationService) {
-  const r = service.repository;
   app.get("/api/images/usage", async (c) =>
-    c.json(await r.usage(c.get("session").user)),
+    c.json(await service.usage(c.get("session").user)),
   );
   app.post("/api/images/tasks", async (c) =>
     c.json(
@@ -25,7 +24,7 @@ export function creationRoutes(app: Hono<ApiEnv>, service: CreationService) {
     ),
   );
   app.get("/api/images/tasks", async (c) => {
-    const tasks = await r.tasks(
+    const tasks = await service.tasks(
       c.get("session").user,
       c.req.query("projectId") ? id.parse(c.req.query("projectId")) : undefined,
       pageOffset.parse(c.req.query("offset")),
@@ -34,7 +33,7 @@ export function creationRoutes(app: Hono<ApiEnv>, service: CreationService) {
   });
   app.get("/api/images/recover", async (c) =>
     c.json(
-      await r.recover(
+      await service.recover(
         c.get("session").user,
         id.parse(c.req.query("projectId")),
         id.parse(c.req.query("requestKey")),
@@ -42,14 +41,16 @@ export function creationRoutes(app: Hono<ApiEnv>, service: CreationService) {
     ),
   );
   app.get("/api/images/tasks/:id", async (c) =>
-    c.json(await r.task(c.get("session").user, id.parse(c.req.param("id")))),
+    c.json(
+      await service.task(c.get("session").user, id.parse(c.req.param("id"))),
+    ),
   );
   app.post("/api/images/tasks/:id/cancel", async (c) => {
-    await r.cancel(c.get("session").user, id.parse(c.req.param("id")));
+    await service.cancel(c.get("session").user, id.parse(c.req.param("id")));
     return c.json({ ok: true });
   });
   app.get("/api/images/uploads", async (c) => {
-    const assets = await r.uploads(
+    const assets = await service.uploads(
       c.get("session").user,
       pageOffset.parse(c.req.query("offset")),
     );
@@ -107,11 +108,11 @@ export function creationRoutes(app: Hono<ApiEnv>, service: CreationService) {
     await next();
   });
   app.get("/api/image-admin/providers", async (c) =>
-    c.json({ providers: await r.providers(c.get("session").user) }),
+    c.json({ providers: await service.providers(c.get("session").user) }),
   );
   app.post("/api/image-admin/providers", async (c) =>
     c.json(
-      await r.saveProvider(
+      await service.saveProvider(
         c.get("session").user,
         providerInput.parse(await c.req.json()),
       ),
@@ -119,16 +120,22 @@ export function creationRoutes(app: Hono<ApiEnv>, service: CreationService) {
     ),
   );
   app.post("/api/image-admin/providers/:id/revoke", async (c) => {
-    await r.revokeProvider(c.get("session").user, id.parse(c.req.param("id")));
+    await service.revokeProvider(
+      c.get("session").user,
+      id.parse(c.req.param("id")),
+    );
     return c.json({ ok: true });
   });
   app.get("/api/image-admin/policies/:id", async (c) =>
     c.json(
-      await r.getPolicy(c.get("session").user, id.parse(c.req.param("id"))),
+      await service.getPolicy(
+        c.get("session").user,
+        id.parse(c.req.param("id")),
+      ),
     ),
   );
   app.post("/api/image-admin/policies/:id", async (c) => {
-    await r.setPolicy(
+    await service.setPolicy(
       c.get("session").user,
       id.parse(c.req.param("id")),
       policyInput.parse(await c.req.json()),
@@ -136,16 +143,16 @@ export function creationRoutes(app: Hono<ApiEnv>, service: CreationService) {
     return c.json({ ok: true });
   });
   app.get("/api/image-admin/review", async (c) =>
-    c.json({ tasks: await r.review(c.get("session").user) }),
+    c.json({ tasks: await service.review(c.get("session").user) }),
   );
   app.post("/api/image-admin/review/:id", async (c) => {
     const input = z
       .object({
-        confirmed: z.number().int().min(0).max(16),
+        confirmed: z.literal(0),
         reason: z.string().trim().min(3).max(500),
       })
       .parse(await c.req.json());
-    await r.resolve(
+    await service.resolve(
       c.get("session").user,
       id.parse(c.req.param("id")),
       input.confirmed,
