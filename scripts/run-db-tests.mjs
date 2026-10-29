@@ -8,7 +8,7 @@ try {
 } catch (error) {
   if (error.code === "EEXIST") {
     console.error(
-      "DATABASE_TESTS_ALREADY_RUNNING: run integration/e2e sequentially; if interrupted, verify no test process remains before removing .codex-temp/database-tests.lock",
+      "DATABASE_TESTS_ALREADY_RUNNING: run integration/runtime/e2e/recovery sequentially; if interrupted, verify no test process remains before removing .codex-temp/database-tests.lock",
     );
     process.exit(1);
   }
@@ -41,6 +41,12 @@ try {
       "run",
       "tests/integration",
       "--maxWorkers=1",
+    ]);
+  else if (process.argv[2] === "recovery")
+    process.exitCode = await run([
+      "--import",
+      "tsx",
+      "tests/recovery/local-recovery.ts",
     ]);
   else if (["e2e", "runtime"].includes(process.argv[2])) {
     const prepared = await run(["--import", "tsx", "scripts/test-prepare.ts"]);

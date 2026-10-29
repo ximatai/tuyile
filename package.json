@@ -19,6 +19,7 @@
     "start": "node --env-file=.env dist/api/main.js",
     "worker:start": "node --env-file=.env dist/worker/main.js",
     "admin:recover": "node --env-file=.env --import tsx scripts/admin-recover.ts",
+    "test:recovery": "node --env-file=.env.test scripts/run-db-tests.mjs recovery",
     "test:runtime": "node --env-file=.env.test scripts/run-db-tests.mjs runtime",
     "test:docker": "node --env-file=.env.docker --import tsx scripts/docker-smoke.ts && node --import tsx scripts/docker-browser-smoke.ts"
   },

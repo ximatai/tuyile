@@ -1,0 +1,10 @@
+# Configuration overlay only; applying this file does not publish a service.
+services:
+  api:
+    environment:
+      NODE_ENV: production
+      APP_ORIGIN: ${PUBLIC_APP_ORIGIN:?Set an exact HTTPS origin}
+  worker:
+    environment:
+      NODE_ENV: production
+      APP_ORIGIN: ${PUBLIC_APP_ORIGIN:?Set an exact HTTPS origin}

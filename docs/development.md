@@ -71,7 +71,10 @@ corepack pnpm test:integration
 corepack pnpm test:runtime
 corepack pnpm exec playwright install chromium
 corepack pnpm test:e2e
+corepack pnpm test:recovery
 ```
+
+`test:recovery` 与其他数据库测试共用排他锁，用合成数据在新卷恢复并验证生产HTTPS；会暂时停止、随后恢复专用 `tuyile-test` PostgreSQL，不改开发库或原测试卷。需要Docker Desktop、OpenSSL和已安装的Chromium；先运行build。详见 [运行与恢复手册](operations.md)。
 
 集成与浏览器测试会清空合成测试库，必须串行；共同启动脚本以本地排他锁拒绝两组同时运行。若强制中断留下锁文件，先核对没有存活测试进程，再移除 `.codex-temp/database-tests.lock`。脚本核对目标为 loopback 55440 的 `tuyile_test`，否则拒绝重置。浏览器测试自行启动/关闭测试 API/Web，并使用运行时随机凭据，截图/trace/合成凭据均被忽略。开发库不被测试重置。首次安装 Linux 浏览器可用 `playwright install --with-deps chromium`。
 
