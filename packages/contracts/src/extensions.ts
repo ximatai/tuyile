@@ -38,6 +38,7 @@ export const planningProviderInput = z
       .regex(/^[^\r\n]+$/)
       .optional(),
     preserveKey: z.boolean().default(false),
+    supportsImages: z.boolean().default(false),
     responseMode: z.enum(["json_object", "text"]).default("json_object"),
     maxOutputTokens: z.number().int().min(256).max(8192).default(4096),
     maxInputCharacters: z.number().int().min(1000).max(64000).default(32000),

@@ -1,3 +1,4 @@
+import type { PlanningLane } from "./planning-lane.js";
 import type pg from "pg";
 import {
   ImageExecutor,
@@ -25,6 +26,7 @@ export class ImageWorker {
     private provider: ImageProvider,
     private fatal: () => void,
     private readonly registry: ToolRegistry = createToolRegistry(),
+    private readonly planning?: PlanningLane,
   ) {}
   async start() {
     this.lock = await this.pool.connect();
@@ -43,6 +45,7 @@ export class ImageWorker {
     this.healthy = true;
     try {
       await this.repo.startWorker();
+      await this.planning?.start();
       await this.cleanup();
       this.timer = setInterval(() => {
         void this.tick();
@@ -62,6 +65,7 @@ export class ImageWorker {
     this.stopping = true;
     if (this.timer) clearInterval(this.timer);
     for (const a of this.active.values()) a.controller.abort();
+    this.planning?.abort();
     this.fatal();
   }
   private async cleanup() {
@@ -108,6 +112,10 @@ export class ImageWorker {
           .finally(() => this.active.delete(task.id));
         this.active.set(task.id, { task, controller, promise });
       }
+      await this.planning?.tick(
+        () => this.healthy && !this.stopping,
+        () => this.fail(),
+      );
       await this.cleanup();
     } catch {
       this.fail();
@@ -118,9 +126,11 @@ export class ImageWorker {
   async stop(timeout = 10000) {
     this.stopping = true;
     if (this.timer) clearInterval(this.timer);
-    const pending = Promise.all(
-      [...this.active.values()].map((v) => v.promise),
-    );
+    const planningStopped = this.planning?.stop(timeout) ?? Promise.resolve();
+    const pending = Promise.all([
+      planningStopped,
+      ...[...this.active.values()].map((v) => v.promise),
+    ]);
     let timer: ReturnType<typeof setTimeout> | undefined;
     await Promise.race([
       pending,
@@ -133,6 +143,7 @@ export class ImageWorker {
     ]);
     if (timer) clearTimeout(timer);
     await Promise.allSettled([...this.active.values()].map((v) => v.promise));
+    await planningStopped;
     this.healthy = false;
     if (this.lock) {
       await this.lock

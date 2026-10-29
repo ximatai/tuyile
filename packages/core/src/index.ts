@@ -286,3 +286,8 @@ export * from "./tools.js";
 export * from "./capabilities.js";
 export * from "./extensions.js";
 export * from "./canvas.js";
+
+export * from "./agent.js";
+export * from "./planning-executor.js";
+export * from "./library.js";
+export * from "./administration.js";

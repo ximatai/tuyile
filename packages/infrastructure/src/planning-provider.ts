@@ -3,6 +3,7 @@ import {
   type PlanningProvider,
   type PlanningExecutionConfig,
   type PlanningReply,
+  type PlanningImage,
 } from "@tuyile/core";
 export class CompatiblePlanningProvider implements PlanningProvider {
   constructor(
@@ -14,6 +15,7 @@ export class CompatiblePlanningProvider implements PlanningProvider {
     messages: { role: "system" | "user" | "assistant"; content: string }[],
     budget: number,
     signal: AbortSignal,
+    images: readonly PlanningImage[] = [],
   ): Promise<PlanningReply> {
     if (
       !Number.isInteger(budget) ||
@@ -23,13 +25,49 @@ export class CompatiblePlanningProvider implements PlanningProvider {
         config.maxInputCharacters
     )
       throw new PlanningCallError("rejected", "PLANNING_BUDGET_EXCEEDED");
+    if (
+      images.length &&
+      (!config.supportsImages ||
+        images.length > 4 ||
+        images.some((i) => !i.bytes.length || i.bytes.length > 1024 * 1024))
+    )
+      throw new PlanningCallError("rejected", "PLANNING_IMAGES_UNSUPPORTED");
     if (signal.aborted)
       throw new PlanningCallError("rejected", "PLANNING_CANCELLED");
     if (config.mode === "fake") {
       if (!this.fakeAllowed)
         throw new PlanningCallError("rejected", "FAKE_PROVIDER_DISABLED");
+      let steps: unknown[] = [];
+      try {
+        const input = JSON.parse(
+          messages.find((m) => m.role === "user")?.content ?? "{}",
+        );
+        if (input.prompt && input.model)
+          steps = [
+            {
+              title: "合成创作",
+              prompt: input.prompt,
+              model: input.model,
+              width: input.width,
+              height: input.height,
+              quality: input.quality,
+              format: input.format,
+              count: 1,
+              referenceIds: input.referenceIds ?? [],
+              tool: {
+                id: input.referenceIds?.length
+                  ? "image.edit"
+                  : "image.generate",
+                version: 1,
+              },
+              usePrevious: false,
+            },
+          ];
+      } catch {
+        /* Protocol tests may send plain text instead of a creation request. */
+      }
       return {
-        text: JSON.stringify({ message: "合成规划服务已响应", steps: [] }),
+        text: JSON.stringify({ message: "合成规划服务已响应", steps }),
         inputTokens: 1,
         outputTokens: 1,
       };
@@ -47,7 +85,29 @@ export class CompatiblePlanningProvider implements PlanningProvider {
           signal,
           body: JSON.stringify({
             model: config.model,
-            messages,
+            messages: messages.map((message, index) => {
+              if (
+                !images.length ||
+                index !== messages.map((m) => m.role).lastIndexOf("user")
+              )
+                return message;
+              return {
+                ...message,
+                content: [
+                  { type: "text", text: message.content },
+                  ...images.flatMap((image) => [
+                    { type: "text", text: `参考图 ID: ${image.assetId}` },
+                    {
+                      type: "image_url",
+                      image_url: {
+                        url: `data:image/webp;base64,${Buffer.from(image.bytes).toString("base64")}`,
+                        detail: "low",
+                      },
+                    },
+                  ]),
+                ],
+              };
+            }),
             stream: false,
             max_completion_tokens: budget,
             ...(config.responseMode === "json_object"

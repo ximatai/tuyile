@@ -1,13 +1,15 @@
+import { AgentPanel } from "./agent-panel";
 import { Link } from "react-router-dom";
 import { lazy, Suspense, useCallback } from "react";
 const CanvasEditor = lazy(() =>
   import("./editor/canvas").then((m) => ({ default: m.CanvasEditor })),
 );
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import { useSessionState } from "./session-state";
 import { useState, useEffect, useRef, type FormEvent } from "react";
 import type { ImageInput, ImageTask, ImageUsage } from "@tuyile/contracts";
 import {
+  Tabs,
   Button,
   Field,
   Notice,
@@ -195,6 +197,17 @@ export function CreationPage({
     [references, setReferences] = useState<{ id: string; name: string }[]>([]),
     [pending, setPending] = useState<ImageInput | null>(null),
     [mobile, setMobile] = useState("create");
+  const transferredDraft = useRef(sessionState.creationDrafts.get(projectId));
+  useEffect(() => {
+    const draft = transferredDraft.current;
+    if (!draft) return;
+    if (draft.prompt !== undefined) setPrompt(draft.prompt);
+    if (draft.referenceIds)
+      setReferences(
+        draft.referenceIds.map((id) => ({ id, name: "图库参考图" })),
+      );
+    sessionState.creationDrafts.delete(projectId);
+  }, [projectId, sessionState]);
   const chooseReference = useCallback(
     (id: string) =>
       setReferences((v) =>
@@ -204,6 +217,7 @@ export function CreationPage({
       ),
     [],
   );
+  const [mode, setMode] = useState("direct");
   const active = useRef(false);
   const usageQuery = useQuery({
     queryKey: sessionState.key("usage"),
@@ -353,202 +367,230 @@ export function CreationPage({
           </details>
         </div>
         <aside className="creation-panel" aria-label="图片创作">
-          <h2>直接创作</h2>
-          {(usageQuery.error || taskQuery.error) && (
-            <Notice error>
-              {usageQuery.error?.message || taskQuery.error?.message}
-            </Notice>
-          )}
-          {usage?.providerMode === "fake" && (
-            <Notice>
-              本地测试模型：生成测试色块，不调用真实服务，不产生模型费用。
-            </Notice>
-          )}
-          {usage && !usage.models.length && (
-            <Notice>尚未配置可用的图片服务，请联系管理员。</Notice>
-          )}
-          <form ref={formRef} onSubmit={submit} aria-label="提交图片任务">
-            <ControlScope
-              componentDisabled={busy || !!pending || !usage?.models.length}
-            >
-              <fieldset disabled={busy || !!pending || !usage?.models.length}>
-                <label className="field">
-                  <span>创作需求</span>
-                  <Input.TextArea
-                    name="prompt"
-                    value={prompt}
-                    onChange={(event) => setPrompt(event.target.value)}
-                    required
-                    maxLength={12000}
-                    rows={5}
-                    placeholder="描述画面、主体、风格和文字要求"
-                  />
-                </label>
-                <ChoiceField
-                  label="图片模型"
-                  value={model}
-                  onValueChange={setModel}
-                  options={(usage?.models ?? []).map((m) => ({
-                    value: m,
-                    label: m,
-                  }))}
-                />
-                <div className="parameter-grid">
-                  <Field
-                    label="宽度"
-                    name="width"
-                    type="number"
-                    defaultValue={1024}
-                    min={256}
-                    max={usage?.policy.maxEdge ?? 2048}
-                    step={16}
-                    required
-                  />
-                  <Field
-                    label="高度"
-                    name="height"
-                    type="number"
-                    defaultValue={1024}
-                    min={256}
-                    max={usage?.policy.maxEdge ?? 2048}
-                    step={16}
-                    required
-                  />
-                  <ChoiceField
-                    label="质量"
-                    name="quality"
-                    defaultValue="medium"
-                    options={[
-                      { value: "low", label: "低" },
-                      { value: "medium", label: "中" },
-                      { value: "high", label: "高" },
-                    ]}
-                  />
-                  <ChoiceField
-                    label="格式"
-                    name="format"
-                    defaultValue="png"
-                    options={[
-                      { value: "png", label: "PNG" },
-                      { value: "jpeg", label: "JPEG" },
-                      { value: "webp", label: "WebP" },
-                    ]}
-                  />
-                  <Field
-                    label="图片张数"
-                    name="count"
-                    type="number"
-                    min={1}
-                    max={usage?.policy.maxCount ?? 4}
-                    defaultValue={1}
-                    required
-                  />
-                </div>
-                <div className="field" data-testid="reference-upload">
-                  <span>上传参考图（可选）</span>
-                  <Upload
-                    accept="image/png,image/jpeg,image/webp"
-                    showUploadList={false}
-                    disabled={busy || references.length >= 4}
-                    beforeUpload={(file) => {
-                      void upload(file);
-                      return false;
-                    }}
-                  >
-                    <Button type="button">选择参考图</Button>
-                  </Upload>
-                </div>
-                {references.map((r) => (
-                  <div className="reference-row" key={r.id}>
-                    <img
-                      src={`/api/images/assets/${r.id}/preview`}
-                      alt="参考图"
-                    />
-                    <span>{r.name}</span>
-                    <Button
-                      type="button"
-                      onClick={() =>
-                        setReferences((v) => v.filter((a) => a.id !== r.id))
-                      }
-                    >
-                      移除引用
-                    </Button>
-                  </div>
-                ))}
-              </fieldset>
-            </ControlScope>
-            {error && <Notice error>{error}</Notice>}
-            <p className="hint">
-              提交后后台排队，关页、刷新和普通退出登录不影响执行。取消可能仍计费；后台中断允许失败，已保存结果保留。整单预留额度，不足时不会自动降低规格。
-            </p>
-            <Button
-              className="primary"
-              disabled={busy || !usage?.models.length}
-            >
-              {busy ? "正在提交…" : pending ? "重试同一提交" : "提交图片任务"}
-            </Button>
-            {pending && (
-              <Button
-                type="button"
-                disabled={busy}
-                onClick={() => void recover()}
-              >
-                查找这次提交
-              </Button>
+          <Tabs
+            activeKey={mode}
+            onChange={setMode}
+            items={[
+              { key: "direct", label: "直接创作" },
+              { key: "agent", label: "Agent" },
+            ]}
+          />
+          <div className="direct-creation" hidden={mode !== "direct"}>
+            {(usageQuery.error || taskQuery.error) && (
+              <Notice error>
+                {usageQuery.error?.message || taskQuery.error?.message}
+              </Notice>
             )}
-          </form>
-          {usage && (
-            <details className="quota-details">
-              <summary>
-                今日可用 {usage.available} 张 · 预留 {usage.held} 张
-              </summary>
-              <UsageSummary usage={usage} />
-            </details>
-          )}
-          <Link to="/usage">查看全部任务与额度</Link>
+            {usage?.providerMode === "fake" && (
+              <Notice>
+                本地测试模型：生成测试色块，不调用真实服务，不产生模型费用。
+              </Notice>
+            )}
+            {usage && !usage.models.length && (
+              <Notice>尚未配置可用的图片服务，请联系管理员。</Notice>
+            )}
+            <form ref={formRef} onSubmit={submit} aria-label="提交图片任务">
+              <ControlScope
+                componentDisabled={busy || !!pending || !usage?.models.length}
+              >
+                <fieldset disabled={busy || !!pending || !usage?.models.length}>
+                  <label className="field">
+                    <span>创作需求</span>
+                    <Input.TextArea
+                      name="prompt"
+                      aria-label="创作需求"
+                      value={prompt}
+                      onChange={(event) => setPrompt(event.target.value)}
+                      required
+                      maxLength={12000}
+                      rows={5}
+                      placeholder="描述画面、主体、风格和文字要求"
+                    />
+                  </label>
+                  <ChoiceField
+                    label="图片模型"
+                    value={model}
+                    onValueChange={setModel}
+                    options={(usage?.models ?? []).map((m) => ({
+                      value: m,
+                      label: m,
+                    }))}
+                  />
+                  <div className="parameter-grid">
+                    <Field
+                      label="宽度"
+                      name="width"
+                      type="number"
+                      defaultValue={1024}
+                      min={256}
+                      max={usage?.policy.maxEdge ?? 2048}
+                      step={16}
+                      required
+                    />
+                    <Field
+                      label="高度"
+                      name="height"
+                      type="number"
+                      defaultValue={1024}
+                      min={256}
+                      max={usage?.policy.maxEdge ?? 2048}
+                      step={16}
+                      required
+                    />
+                    <ChoiceField
+                      label="质量"
+                      name="quality"
+                      defaultValue="medium"
+                      options={[
+                        { value: "low", label: "低" },
+                        { value: "medium", label: "中" },
+                        { value: "high", label: "高" },
+                      ]}
+                    />
+                    <ChoiceField
+                      label="格式"
+                      name="format"
+                      defaultValue="png"
+                      options={[
+                        { value: "png", label: "PNG" },
+                        { value: "jpeg", label: "JPEG" },
+                        { value: "webp", label: "WebP" },
+                      ]}
+                    />
+                    <Field
+                      label="图片张数"
+                      name="count"
+                      type="number"
+                      min={1}
+                      max={usage?.policy.maxCount ?? 4}
+                      defaultValue={1}
+                      required
+                    />
+                  </div>
+                  <div className="field" data-testid="reference-upload">
+                    <span>上传参考图（可选）</span>
+                    <Upload
+                      accept="image/png,image/jpeg,image/webp"
+                      showUploadList={false}
+                      disabled={busy || references.length >= 4}
+                      beforeUpload={(file) => {
+                        void upload(file);
+                        return false;
+                      }}
+                    >
+                      <Button type="button">选择参考图</Button>
+                    </Upload>
+                  </div>
+                  {references.map((r) => (
+                    <div className="reference-row" key={r.id}>
+                      <img
+                        src={`/api/images/assets/${r.id}/preview`}
+                        alt="参考图"
+                      />
+                      <span>{r.name}</span>
+                      <Button
+                        type="button"
+                        onClick={() =>
+                          setReferences((v) => v.filter((a) => a.id !== r.id))
+                        }
+                      >
+                        移除引用
+                      </Button>
+                    </div>
+                  ))}
+                </fieldset>
+              </ControlScope>
+              {error && <Notice error>{error}</Notice>}
+              <p className="hint">
+                提交后后台排队，关页、刷新和普通退出登录不影响执行。取消可能仍计费；后台中断允许失败，已保存结果保留。整单预留额度，不足时不会自动降低规格。
+              </p>
+              <Button
+                className="primary"
+                disabled={busy || !usage?.models.length}
+              >
+                {busy ? "正在提交…" : pending ? "重试同一提交" : "提交图片任务"}
+              </Button>
+              {pending && (
+                <Button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void recover()}
+                >
+                  查找这次提交
+                </Button>
+              )}
+            </form>
+            {usage && (
+              <details className="quota-details">
+                <summary>
+                  今日可用 {usage.available} 张 · 预留 {usage.held} 张
+                </summary>
+                <UsageSummary usage={usage} />
+              </details>
+            )}
+            <Link to="/usage">查看全部任务与额度</Link>
+          </div>
+          <div className="agent-creation" hidden={mode !== "agent"}>
+            <AgentPanel
+              projectId={projectId}
+              usage={usage}
+              tasks={tasks}
+              references={references}
+              onRemove={(id) =>
+                setReferences((old) => old.filter((r) => r.id !== id))
+              }
+              onUpload={(file) => void upload(file)}
+              uploadBusy={busy}
+            />
+          </div>
         </aside>
       </div>
     </section>
   );
 }
 export function UsagePage({ csrfToken }: { csrfToken: string }) {
-  const [usage, setUsage] = useState<ImageUsage | null>(null),
-    [tasks, setTasks] = useState<ImageTask[]>([]),
-    [error, setError] = useState(""),
-    [more, setMore] = useState(false);
-  const alive = useRef(true);
+  const state = useSessionState();
+  const api = client(csrfToken);
+  const [error, setError] = useState("");
+  const usageQuery = useQuery({
+    queryKey: state.key("usage"),
+    queryFn: ({ signal }) =>
+      api<ImageUsage>("/images/usage", undefined, signal),
+  });
+  const tasksQuery = useInfiniteQuery({
+    queryKey: state.key("all-image-tasks"),
+    initialPageParam: 0,
+    queryFn: ({ signal, pageParam }) =>
+      api<{ tasks: ImageTask[]; hasMore: boolean }>(
+        `/images/tasks?offset=${pageParam}`,
+        undefined,
+        signal,
+      ),
+    getNextPageParam: (p, pages) => (p.hasMore ? pages.length * 50 : undefined),
+  });
+  const usage = usageQuery.data,
+    tasks = [
+      ...new Map(
+        (tasksQuery.data?.pages.flatMap((p) => p.tasks) ?? []).map((t) => [
+          t.id,
+          t,
+        ]),
+      ).values(),
+    ];
   async function refresh() {
+    setError("");
     try {
-      const [u, t] = await Promise.all([
-        client(csrfToken)<ImageUsage>("/images/usage"),
-        client(csrfToken)<{ tasks: ImageTask[]; hasMore: boolean }>(
-          "/images/tasks",
-        ),
+      await Promise.all([
+        usageQuery.refetch({ throwOnError: true }),
+        tasksQuery.refetch({ throwOnError: true }),
       ]);
-      if (alive.current) {
-        setUsage(u);
-        setTasks(t.tasks);
-        setMore(t.hasMore);
-      }
     } catch (e) {
-      if (alive.current) setError((e as Error).message);
+      setError((e as Error).message);
     }
   }
-  useEffect(() => {
-    alive.current = true;
-    void refresh();
-    return () => {
-      alive.current = false;
-    };
-  }, [csrfToken]);
   async function load() {
     try {
-      const v = await client(csrfToken)<{
-        tasks: ImageTask[];
-        hasMore: boolean;
-      }>(`/images/tasks?offset=${tasks.length}`);
-      setTasks((t) => [...t, ...v.tasks]);
-      setMore(v.hasMore);
+      await tasksQuery.fetchNextPage({ throwOnError: true });
     } catch (e) {
       setError((e as Error).message);
     }
@@ -556,7 +598,11 @@ export function UsagePage({ csrfToken }: { csrfToken: string }) {
   return (
     <section>
       <h1>我的额度与任务</h1>
-      {error && <Notice error>{error}</Notice>}
+      {(error || usageQuery.error || tasksQuery.error) && (
+        <Notice error>
+          {error || usageQuery.error?.message || tasksQuery.error?.message}
+        </Notice>
+      )}
       {usage && <UsageSummary usage={usage} />}
       <Button onClick={() => void refresh()}>刷新状态</Button>
       <TaskResults
@@ -564,7 +610,14 @@ export function UsagePage({ csrfToken }: { csrfToken: string }) {
         csrfToken={csrfToken}
         refresh={() => void refresh()}
       />
-      {more && <Button onClick={() => void load()}>加载更多任务</Button>}
+      {tasksQuery.hasNextPage && (
+        <Button
+          disabled={tasksQuery.isFetchingNextPage}
+          onClick={() => void load()}
+        >
+          加载更多任务
+        </Button>
+      )}
       <UploadedReferences csrfToken={csrfToken} />
     </section>
   );
@@ -572,32 +625,40 @@ export function UsagePage({ csrfToken }: { csrfToken: string }) {
 
 export function UploadedReferences({ csrfToken }: { csrfToken: string }) {
   const confirm = useConfirm();
-  const [assets, setAssets] = useState<
-      { id: string; width: number; height: number }[]
-    >([]),
-    [more, setMore] = useState(false),
-    [error, setError] = useState("");
-  async function load(offset = 0) {
-    try {
-      const response = await client(csrfToken)<{
-        assets: typeof assets;
+  const state = useSessionState();
+  const [error, setError] = useState("");
+  const query = useInfiniteQuery({
+    queryKey: state.key("uploads"),
+    initialPageParam: 0,
+    queryFn: ({ signal, pageParam }) =>
+      client(csrfToken)<{
+        assets: { id: string; width: number; height: number }[];
         hasMore: boolean;
-      }>(`/images/uploads?offset=${offset}`);
-      setAssets((v) => (offset ? [...v, ...response.assets] : response.assets));
-      setMore(response.hasMore);
+      }>(`/images/uploads?offset=${pageParam}`, undefined, signal),
+    getNextPageParam: (p, pages) => (p.hasMore ? pages.length * 50 : undefined),
+  });
+  const assets = [
+    ...new Map(
+      (query.data?.pages.flatMap((p) => p.assets) ?? []).map((a) => [a.id, a]),
+    ).values(),
+  ];
+  async function load() {
+    try {
+      await query.fetchNextPage({ throwOnError: true });
     } catch (e) {
       setError((e as Error).message);
     }
   }
-  useEffect(() => {
-    void load();
-  }, [csrfToken]);
   async function remove(id: string) {
     if (!(await confirm("删除这张上传的参考图？正在被任务引用时不会删除。")))
       return;
     try {
       await client(csrfToken)(`/images/assets/${id}/delete`, {});
-      await load();
+      await Promise.all(
+        ["uploads", "gallery", "usage"].map((key) =>
+          state.queries.invalidateQueries({ queryKey: state.key(key) }),
+        ),
+      );
     } catch (e) {
       setError((e as Error).message);
     }
@@ -606,7 +667,9 @@ export function UploadedReferences({ csrfToken }: { csrfToken: string }) {
     <section className="settings-section">
       <h2>上传的参考图</h2>
       <p className="hint">解除引用后可删除不再使用的图片，释放存储空间。</p>
-      {error && <Notice error>{error}</Notice>}
+      {(error || query.error) && (
+        <Notice error>{error || query.error?.message}</Notice>
+      )}
       <div className="output-grid">
         {assets.map((a) => (
           <figure key={a.id}>
@@ -618,8 +681,8 @@ export function UploadedReferences({ csrfToken }: { csrfToken: string }) {
           </figure>
         ))}
       </div>
-      {more && (
-        <Button onClick={() => void load(assets.length)}>加载更多参考图</Button>
+      {query.hasNextPage && (
+        <Button onClick={() => void load()}>加载更多参考图</Button>
       )}
     </section>
   );

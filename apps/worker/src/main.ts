@@ -1,4 +1,8 @@
-import { ImageOperations } from "@tuyile/core";
+import {
+  AgentService,
+  ImageOperations,
+  createToolRegistry,
+} from "@tuyile/core";
 import {
   loadConfig,
   createDatabase,
@@ -8,22 +12,33 @@ import {
   PgCreationStore,
   CompatibleImageProvider,
   ImageWorker,
+  PlanningLane,
+  CompatiblePlanningProvider,
 } from "@tuyile/infrastructure";
 const config = loadConfig(),
   images = creationConfig(),
   { pool } = createDatabase(config.databaseUrl);
 let stopping = false;
+const creationStore = new PgCreationStore(
+  pool,
+  images.masterKey,
+  images.fakeAllowed,
+);
+const files = new PrivateImageFiles(images.root);
 const worker = new ImageWorker(
   pool,
-  new ImageOperations(
-    new PgCreationStore(pool, images.masterKey, images.fakeAllowed),
-  ),
-  new PrivateImageFiles(images.root),
+  new ImageOperations(creationStore),
+  files,
   new CompatibleImageProvider(images.fakeAllowed, images.fakeDelay),
   () => {
     console.error("WORKER_LOCK_OR_DATABASE_LOST");
     process.exit(1);
   },
+  createToolRegistry(),
+  new PlanningLane(
+    new AgentService(creationStore, files),
+    new CompatiblePlanningProvider(images.fakeAllowed),
+  ),
 );
 try {
   await assertSchema(pool);

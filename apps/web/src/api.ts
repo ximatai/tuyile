@@ -1,6 +1,24 @@
 import type { ErrorResponse } from "@tuyile/contracts";
 const messages: Record<string, string> = {
-  CANVAS_CONFLICT: "画布已在其他页面修改。本地内容已保留，请重新加载或另存副本。",
+  PROJECT_BUSY: "项目仍有活动或待核验任务，请等待处理完成后再删除。",
+  EXPORT_LIMIT: "每批最多导出 5 张、合计 50 MiB，请分批导出。",
+  PLANNING_IMAGES_UNSUPPORTED:
+    "当前规划模型未声明支持参考图，请联系管理员配置视觉模型。",
+  PLANNING_REFERENCE_LIMIT:
+    "一次连续规划最多使用 4 张参考图，请新建规划或减少参考图。",
+  PLANNING_QUOTA: "今日规划次数不足，请稍后再试。",
+  PLANNING_QUEUE_FULL: "规划排队已满，请稍后再试。",
+  PLANNING_BUDGET_EXCEEDED: "规划超出本次输入或输出预算，请精简需求。",
+  PLANNING_FORMAT_INVALID: "规划结果格式未能修复，请调整需求后重新规划。",
+  PLANNING_RESULT_UNKNOWN: "规划调用结果不明，本次规划已计用，未启动图片生成。",
+  PLANNING_INTERRUPTED: "规划执行中断，未启动图片生成。",
+  PLANNING_STOPPED: "规划已停止，未启动图片生成。",
+  PLAN_NOT_EXECUTABLE: "这份计划需要继续澄清，暂不能执行。",
+  PLAN_NOT_READY: "规划尚未完成，请等待结果。",
+  PLANNING_PROVIDER_UNAVAILABLE: "绑定的规划服务已撤销，请重新规划。",
+
+  CANVAS_CONFLICT:
+    "画布已在其他页面修改。本地内容已保留，请重新加载或另存副本。",
   MODEL_CAPABILITY_UNSUPPORTED:
     "此模型不支持当前尺寸、格式、质量或参考图，请调整参数。",
   TOOL_UNAVAILABLE: "所需工具已停用或撤销，不能提交新的创作。",
@@ -18,7 +36,7 @@ const messages: Record<string, string> = {
   PROVIDER_NOT_CONFIGURED: "尚未配置可用图片服务。",
   IDEMPOTENCY_CONFLICT: "同一提交标识对应了不同内容，请先核对历史任务。",
   REFERENCE_UNAVAILABLE: "参考图已不可用，请重新选择。",
-  ASSET_REFERENCED: "图片仍被任务引用，暂不能删除。",
+  ASSET_REFERENCED: "图片仍被画布、任务、对话或收藏引用，请先解除引用。",
   INVALID_IMAGE: "图片格式、大小或解码检查未通过。",
   DISK_LOW: "服务器可用磁盘空间不足，暂停新任务。",
   API_KEY_REQUIRED: "请提供 Key，或显式选择沿用当前服务的 Key。",

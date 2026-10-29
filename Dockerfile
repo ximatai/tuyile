@@ -15,6 +15,7 @@ COPY apps ./apps
 COPY packages ./packages
 COPY scripts ./scripts
 COPY migrations ./migrations
+COPY licenses ./licenses
 COPY tsconfig.json LICENSE THIRD_PARTY_NOTICES.md ./
 RUN --mount=type=cache,id=tuyile-corepack,target=/root/.cache/node/corepack pnpm build
 ENV NODE_ENV=production

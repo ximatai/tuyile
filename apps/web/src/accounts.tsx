@@ -1,4 +1,6 @@
-import { useState, useEffect, type FormEvent } from "react";
+import { useInfiniteQuery } from "@tanstack/react-query";
+import { useSessionState } from "./session-state";
+import { useState, type FormEvent } from "react";
 import type { UserView, LinkResult, UsersPage } from "@tuyile/contracts";
 import { Button, Field, Notice, useConfirm, Table } from "@tuyile/ui";
 import { client, notifySessionChange } from "./api";
@@ -10,32 +12,28 @@ export function AdminPage({
   ownId: string;
 }) {
   const [createVersion, setCreateVersion] = useState(0);
-  const [users, setUsers] = useState<UserView[]>([]),
-    [loading, setLoading] = useState(true),
-    [busy, setBusy] = useState(false),
+  const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [link, setLink] = useState<LinkResult | null>(null),
     [copied, setCopied] = useState(false);
-  const [hasMore, setHasMore] = useState(false),
-    [offset, setOffset] = useState(50);
+  const state = useSessionState();
   const confirm = useConfirm();
   const api = client(csrfToken);
-  useEffect(() => {
-    const c = new AbortController();
-    void client(csrfToken)<UsersPage>("/admin/users", undefined, c.signal)
-      .then((v) => {
-        setUsers(v.users);
-        setHasMore(v.hasMore);
-        setOffset(50);
-      })
-      .catch((e) => {
-        if (!c.signal.aborted) setError(e.message);
-      })
-      .finally(() => {
-        if (!c.signal.aborted) setLoading(false);
-      });
-    return () => c.abort();
-  }, [csrfToken]);
+  const query = useInfiniteQuery({
+    queryKey: state.key("admin-users"),
+    initialPageParam: 0,
+    queryFn: ({ signal, pageParam }) =>
+      api<UsersPage>(`/admin/users?offset=${pageParam}`, undefined, signal),
+    getNextPageParam: (p, pages) => (p.hasMore ? pages.length * 50 : undefined),
+    enabled: link?.user.id !== ownId,
+  });
+  const users = [
+      ...new Map(
+        (query.data?.pages.flatMap((p) => p.users) ?? []).map((u) => [u.id, u]),
+      ).values(),
+    ],
+    loading = query.isPending,
+    hasMore = query.hasNextPage;
   async function action(run: () => Promise<LinkResult | unknown>) {
     setBusy(true);
     setError("");
@@ -53,10 +51,9 @@ export function AdminPage({
       )
         notifySessionChange();
       else {
-        const page = await api<UsersPage>("/admin/users");
-        setUsers(page.users);
-        setHasMore(page.hasMore);
-        setOffset(50);
+        await state.queries.invalidateQueries({
+          queryKey: state.key("admin-users"),
+        });
       }
     } catch (e) {
       setError((e as Error).message);
@@ -66,14 +63,8 @@ export function AdminPage({
   }
   async function more() {
     setBusy(true);
-    setError("");
     try {
-      const page = await api<UsersPage>(`/admin/users?offset=${offset}`);
-      setUsers((old) => [
-        ...new Map([...old, ...page.users].map((u) => [u.id, u])).values(),
-      ]);
-      setOffset((v) => v + 50);
-      setHasMore(page.hasMore);
+      await query.fetchNextPage({ throwOnError: true });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -121,7 +112,9 @@ export function AdminPage({
       <p className="hint">
         3–64 位小写字母、数字或 . _ -；新账号通过链接自行设置密码。
       </p>
-      {error && <Notice error>{error}</Notice>}
+      {(error || query.error) && (
+        <Notice error>{error || query.error?.message}</Notice>
+      )}
       {link && (
         <section className="link-result" aria-label="账号链接">
           {link.user.id === ownId && (

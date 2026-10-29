@@ -525,3 +525,343 @@ test("desktop canvas saves geometry, handles conflicts and never replaces remove
   await checkWorkspaceBounds();
   await page.screenshot({ path: ".codex-temp/m3-step3-canvas-1920.png" });
 });
+
+test("Agent plans remain unexecuted until confirmation and edited sequential plans survive refresh", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.goto("/admin/images");
+  await page.getByLabel("规划服务类型", { exact: true }).click();
+  await page
+    .getByText("本地测试规划（不调用真实模型）", { exact: true })
+    .click();
+  await page.getByLabel("规划模型 ID").fill("synthetic-planner-e2e");
+  await page.getByRole("button", { name: "保存规划服务", exact: true }).click();
+  await expect(
+    page.getByText("synthetic-planner-e2e", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "项目", exact: true }).click();
+  await page.getByLabel("项目名称").fill("Agent 顺序创作");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "Agent 顺序创作" })
+    .click();
+  const projectId = page.url().split("/").at(-1)!;
+  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  const referenceBytes = await (
+    await import("sharp")
+  )
+    .default({
+      create: { width: 256, height: 256, channels: 3, background: "#0062b0" },
+    })
+    .png()
+    .toBuffer();
+  await page.locator(".agent-references input[type=file]").setInputFiles({
+    name: "agent-product.png",
+    mimeType: "image/png",
+    buffer: referenceBytes,
+  });
+  await expect(
+    page
+      .locator(".agent-references")
+      .getByRole("img", { name: "agent-product.png" }),
+  ).toBeVisible();
+  await page
+    .getByLabel("告诉 Agent 你的想法", { exact: true })
+    .fill("合成验收：先生成基准图，再参考基准图改图");
+  await page.getByRole("button", { name: "发送规划需求", exact: true }).click();
+  await expect(page.getByLabel("步骤 1 提示词", { exact: true })).toBeVisible({
+    timeout: 15000,
+  });
+  expect(
+    (
+      await (
+        await page.request.get(`/api/images/tasks?projectId=${projectId}`)
+      ).json()
+    ).tasks,
+  ).toEqual([]);
+  const planningBefore = await (
+    await page.request.get("/api/agent/usage")
+  ).json();
+  await page.getByLabel("步骤 1 张数", { exact: true }).fill("2");
+  await page.getByRole("button", { name: "添加步骤", exact: true }).click();
+  await page.getByLabel("步骤 2 张数", { exact: true }).fill("1");
+  await page.getByLabel("使用上一步第一张图片").check();
+  await expect(
+    page.getByText("本计划预留 3 张图片", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "保存计划修改", exact: true }).click();
+  await expect(page.getByText("创作计划 · v2", { exact: true })).toBeVisible();
+  await page.reload();
+  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await expect(page.getByLabel("步骤 1 张数", { exact: true })).toHaveValue(
+    "2",
+  );
+  await expect(page.getByLabel("使用上一步第一张图片")).toBeChecked();
+  expect(
+    (
+      await (
+        await page.request.get(`/api/images/tasks?projectId=${projectId}`)
+      ).json()
+    ).tasks,
+  ).toEqual([]);
+  const confirm = (await page
+    .getByRole("button", { name: "确认执行", exact: true })
+    .boundingBox())!;
+  expect(confirm.y + confirm.height).toBeLessThanOrEqual(900);
+  await page.screenshot({
+    animations: "disabled",
+    path: ".codex-temp/m3-agent-plan-1440.png",
+  });
+  let lostConfirmation = false;
+  await page.route("**/api/agent/plans/*/confirm", async (route) => {
+    const response = await route.fetch();
+    expect(response.status()).toBe(202);
+    lostConfirmation = true;
+    await route.abort("failed");
+  });
+  await page.getByRole("button", { name: "确认执行", exact: true }).click();
+  await expect(
+    page.getByText("计划正在后台执行", { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(3, {
+    timeout: 30000,
+  });
+  await expect
+    .poll(
+      async () => {
+        const data = await (
+          await page.request.get(`/api/images/tasks?projectId=${projectId}`)
+        ).json();
+        return data.tasks.filter(
+          (t: { state: string }) => t.state === "succeeded",
+        ).length;
+      },
+      { timeout: 30000 },
+    )
+    .toBe(2);
+  expect(lostConfirmation).toBe(true);
+  await expect(
+    page.locator(".agent-plan-title").getByText("已确认", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("正在确认这份版本；结果不明时再次点击确认可找回原提交。", {
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  await expect(page.locator(".agent-plan-form").getByRole("alert")).toHaveCount(
+    0,
+  );
+  const planningAfter = await (
+    await page.request.get("/api/agent/usage")
+  ).json();
+  expect(planningAfter.used).toBe(planningBefore.used);
+  await page.reload();
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(3);
+  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await expect(page.getByText("计划已确认", { exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.screenshot({
+    animations: "disabled",
+    path: ".codex-temp/m3-agent-result-1920.png",
+  });
+});
+
+test("Gallery reuse, ZIP export, favorites, prompt application and project cleanup preserve originals and usage", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.getByLabel("项目名称").fill("素材复用目标");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  const targetHref = await page
+    .locator(".project-card")
+    .filter({ hasText: "素材复用目标" })
+    .getAttribute("href");
+  const before = await (await page.request.get("/api/images/usage")).json();
+  await page.getByRole("link", { name: "图库", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "我的图库", exact: true }),
+  ).toBeVisible();
+  const card = page.locator(".gallery-card").first();
+  await expect(card).toBeVisible();
+  await card.getByRole("button", { name: "收藏图片", exact: true }).click();
+  await page.getByLabel("收藏标题", { exact: true }).fill("素材测试收藏");
+  await page.getByLabel("收藏分组名称", { exact: true }).fill("验收分组");
+  await page.getByRole("button", { name: "保存收藏", exact: true }).click();
+  await expect(page.getByText("收藏已保存。", { exact: true })).toBeVisible();
+  await card.getByRole("button", { name: "删除原图", exact: true }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await expect(
+    page.getByText(/图片仍被画布、任务、对话或收藏引用/),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "收藏：素材测试收藏", exact: true }),
+  ).toBeVisible();
+  await card.getByRole("checkbox").check();
+  const downloading = page.waitForEvent("download");
+  await page.getByRole("button", { name: "导出所选 ZIP", exact: true }).click();
+  const download = await downloading;
+  expect(download.suggestedFilename()).toBe("tuyile-images.zip");
+  const { unzipSync } = await import("fflate");
+  expect(
+    Object.keys(
+      unzipSync(new Uint8Array(await readFile((await download.path())!))),
+    ),
+  ).toHaveLength(1);
+  await page.screenshot({
+    path: ".codex-temp/m3-gallery-1440.png",
+    animations: "disabled",
+  });
+  await page.getByRole("button", { name: "加入目标画布", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`${targetHref}$`));
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(1);
+  expect(
+    (await (await page.request.get("/api/images/usage")).json()).used,
+  ).toBe(before.used);
+  await page.getByRole("link", { name: "图库", exact: true }).click();
+  await page.locator(".gallery-card").first().getByRole("checkbox").check();
+  await page.getByRole("button", { name: "设为参考图", exact: true }).click();
+  await expect(page.getByText("图库参考图", { exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "提示池", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "提示池", exact: true }),
+  ).toBeVisible();
+  const template = page.locator(".prompt-card").first();
+  await template
+    .getByRole("button", { name: "收藏提示词", exact: true })
+    .click();
+  await page.getByLabel("收藏标题", { exact: true }).fill("提示收藏验收");
+  await page.getByLabel("收藏分组名称", { exact: true }).fill("写作");
+  await page.getByRole("button", { name: "保存收藏", exact: true }).click();
+  await expect(page.getByText("收藏已保存。", { exact: true })).toBeVisible();
+  const prompt = (await (await page.request.get("/api/library/prompts")).json())
+    .prompts[0].prompt;
+  await template
+    .getByRole("button", { name: "用于目标项目", exact: true })
+    .click();
+  await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
+    prompt,
+  );
+  await page.getByRole("link", { name: "收藏", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "我的收藏", exact: true }),
+  ).toBeVisible();
+  const favorite = page.locator(".favorite-card").filter({
+    has: page.getByRole("heading", { name: "素材测试收藏", exact: true }),
+  });
+  await favorite.getByRole("button", { name: "编辑收藏", exact: true }).click();
+  await page.getByLabel("收藏标题", { exact: true }).fill("更新素材收藏");
+  await page.getByLabel("收藏分组名称", { exact: true }).fill("归档");
+  await page.getByRole("button", { name: "保存收藏", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "更新素材收藏", exact: true }),
+  ).toBeVisible();
+  await page.getByLabel("收藏分组", { exact: true }).click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("归档", { exact: true })
+    .click();
+  await expect(page.locator(".favorite-card")).toHaveCount(1);
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page.screenshot({
+    path: ".codex-temp/m3-favorites-1920.png",
+    animations: "disabled",
+  });
+  await page.getByRole("button", { name: "移除收藏", exact: true }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await expect(page.locator(".favorite-card")).toHaveCount(0);
+  await page.getByRole("link", { name: "项目", exact: true }).click();
+  await page
+    .getByRole("button", { name: "删除项目 素材复用目标", exact: true })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await expect(
+    page.locator(".project-card").filter({ hasText: "素材复用目标" }),
+  ).toHaveCount(0);
+  expect(
+    (await (await page.request.get("/api/images/usage")).json()).used,
+  ).toBe(before.used);
+  await page.getByRole("link", { name: "图库", exact: true }).click();
+  await expect(page.locator(".gallery-card").first()).toBeVisible();
+});
+
+test("administration saves bounded execution policies and clearing ended Agent history preserves images and charges", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.goto("/admin/images");
+  await expect(
+    page.getByRole("heading", { name: "运行概览与规划策略", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("图片统计日、逐单预留和规划计次对账一致。", { exact: true }),
+  ).toBeVisible();
+  await page.getByLabel("全局规划并发", { exact: true }).fill("3");
+  await page.getByLabel("全局规划排队上限", { exact: true }).fill("32");
+  await page.getByRole("button", { name: "保存执行设置", exact: true }).click();
+  await expect(
+    page.getByText("执行设置已保存。", { exact: true }),
+  ).toBeVisible();
+  const settings = await (
+    await page.request.get("/api/image-admin/execution-settings")
+  ).json();
+  expect(settings.planning).toEqual({ concurrency: 3, queueLimit: 32 });
+  await page.getByLabel("规划策略账号", { exact: true }).click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText(auth.username, { exact: true })
+    .click();
+  await expect(page.getByLabel("每日规划次数", { exact: true })).toHaveValue(
+    "50",
+  );
+  await page.getByLabel("每日规划次数", { exact: true }).fill("45");
+  await page.getByLabel("每用户规划排队上限", { exact: true }).fill("8");
+  await page.getByRole("button", { name: "保存规划策略", exact: true }).click();
+  await expect(
+    page.getByText("规划策略已保存。", { exact: true }),
+  ).toBeVisible();
+  expect(
+    (await (await page.request.get("/api/agent/usage")).json()).dailyLimit,
+  ).toBe(45);
+  await page.locator(".operations-admin").screenshot({
+    path: ".codex-temp/m3-administration-1440.png",
+    animations: "disabled",
+  });
+  await page.getByRole("link", { name: "项目", exact: true }).click();
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "Agent 顺序创作" })
+    .click();
+  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await expect(page.getByText("计划已确认", { exact: true })).toBeVisible();
+  const before = await (await page.request.get("/api/agent/usage")).json(),
+    imagesBefore = await (await page.request.get("/api/images/usage")).json();
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(3);
+  await page.getByRole("button", { name: "清空规划对话", exact: true }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "先聊想法，再确认创作", exact: true }),
+  ).toBeVisible();
+  const after = await (await page.request.get("/api/agent/usage")).json();
+  expect(after.used).toBe(before.used);
+  expect(
+    (await (await page.request.get("/api/images/usage")).json()).used,
+  ).toBe(imagesBefore.used);
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(3);
+});

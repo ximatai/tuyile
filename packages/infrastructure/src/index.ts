@@ -8,3 +8,6 @@ export * from "./image-worker.js";
 export * from "./creation-config.js";
 export * from "./planning-provider.js";
 export * from "./canvas.js";
+export * from "./planning-lane.js";
+export * from "./library.js";
+export * from "./administration.js";

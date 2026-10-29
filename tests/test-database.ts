@@ -31,6 +31,9 @@ export async function resetDatabase() {
     await owner.query(
       "UPDATE tuyile.image_settings SET concurrency=2,queue_limit=64 WHERE id=1",
     );
+    await owner.query(
+      "UPDATE tuyile.planning_settings SET concurrency=2,queue_limit=64 WHERE id=1",
+    );
   } finally {
     await owner.end();
   }

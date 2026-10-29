@@ -16,6 +16,7 @@ interface PlanningRow {
   base_url: string;
   model: string;
   secret_cipher: string;
+  supports_images: boolean;
   response_mode: "text" | "json_object";
   max_output_tokens: number;
   max_input_characters: number;
@@ -33,6 +34,7 @@ const planningView = (r: PlanningRow): PlanningProviderView => ({
   mode: r.mode,
   baseUrl: r.base_url,
   model: r.model,
+  supportsImages: r.mode === "fake" || r.supports_images,
   responseMode: r.response_mode,
   maxOutputTokens: r.max_output_tokens,
   maxInputCharacters: r.max_input_characters,
@@ -93,7 +95,7 @@ export class PgExtensionsRepository extends PgCreationContext {
     );
     const r = (
       await this.c.query<PlanningRow>(
-        "INSERT INTO planning_provider_versions(mode,base_url,model,secret_cipher,response_mode,max_output_tokens,max_input_characters) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *",
+        "INSERT INTO planning_provider_versions(mode,base_url,model,secret_cipher,response_mode,max_output_tokens,max_input_characters,supports_images) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",
         [
           input.mode,
           baseUrl,
@@ -102,6 +104,7 @@ export class PgExtensionsRepository extends PgCreationContext {
           input.responseMode,
           input.maxOutputTokens,
           input.maxInputCharacters,
+          input.mode === "fake" || input.supportsImages,
         ],
       )
     ).rows[0];
@@ -141,6 +144,7 @@ export class PgExtensionsRepository extends PgCreationContext {
       baseUrl: r.base_url,
       model: r.model,
       apiKey: this.decrypt(r.secret_cipher),
+      supportsImages: r.mode === "fake" || r.supports_images,
       responseMode: r.response_mode,
       maxOutputTokens: r.max_output_tokens,
       maxInputCharacters: r.max_input_characters,

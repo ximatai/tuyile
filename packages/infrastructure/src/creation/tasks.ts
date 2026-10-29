@@ -13,7 +13,7 @@ export class PgTasksRepository extends PgCreationContext {
     await this.auth(c, p);
     const project = (
       await c.query(
-        "SELECT id FROM projects WHERE workspace_id=$1 AND id=$2 FOR UPDATE",
+        "SELECT id FROM projects WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NULL FOR UPDATE",
         [p.workspaceId, input.projectId],
       )
     ).rows[0];

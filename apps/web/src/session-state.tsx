@@ -16,6 +16,10 @@ export class SessionState {
     },
   });
   readonly editors = new Map<string, EditorStore>();
+  readonly creationDrafts = new Map<
+    string,
+    { prompt?: string; referenceIds?: string[] }
+  >();
   constructor(readonly session: SessionView) {}
   key(...parts: string[]) {
     return [
@@ -36,6 +40,7 @@ export class SessionState {
     this.queries.clear();
     this.editors.forEach((e) => e.dispose());
     this.editors.clear();
+    this.creationDrafts.clear();
   }
 }
 const Context = createContext<SessionState | null>(null);

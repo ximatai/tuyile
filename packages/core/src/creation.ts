@@ -81,6 +81,7 @@ export interface ImageFiles {
   freeSpace(): Promise<boolean>;
 }
 export interface WorkItem {
+  skillId?: string | null;
   id: string;
   userId: string;
   workspaceId: string;

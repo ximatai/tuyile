@@ -24,6 +24,7 @@ const config: PlanningExecutionConfig = {
   baseUrl: "https://synthetic.invalid/v1",
   apiKey: "synthetic",
   model: "test-planner",
+  supportsImages: true,
   responseMode: "json_object",
   maxOutputTokens: 1024,
   maxInputCharacters: 1000,

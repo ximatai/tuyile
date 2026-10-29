@@ -131,7 +131,7 @@ export class ImageOperations {
   }
   async startWorker() {
     return this.store.write(
-      { owners: [], taskState: "running", queue: true },
+      { owners: [], taskState: "unfinished", queue: true },
       (r) => r.execution.startWorker(),
     );
   }
@@ -149,6 +149,11 @@ export class ImageOperations {
     return this.store.write({ owners: [t.userId] }, async (r) => {
       try {
         await r.extensions.requireTool(t.tool, true);
+        if (t.skillId) {
+          const skill = await r.extensions.skill(t.skillId, true);
+          for (const dependency of skill.tools)
+            await r.extensions.requireTool(dependency, true);
+        }
       } catch (e) {
         if (e instanceof AppError && e.code === "TOOL_UNAVAILABLE") return null;
         throw e;

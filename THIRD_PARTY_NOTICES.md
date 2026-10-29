@@ -9,3 +9,5 @@ Third-party libraries retain their package licenses. No generated images, privat
 Standard UI controls use Ant Design 6.6.8 (https://github.com/ant-design/ant-design), MIT licensed. Tuyile supplies engineering-blue theme tokens and domain composition; control accessibility, dropdowns, table rendering, upload selection and confirmation dialogs use the library.
 
 The pinned @rc-component/util 1.14.0 package (MIT) has a small tracked patch forwarding the application CSP nonce to its dynamic styles for scrollbar measurement and modal scroll locking. See patches/README.md; original package license notices remain intact.
+
+Private ZIP exports use fflate 0.8.3 (https://github.com/101arrowz/fflate), MIT licensed. Its copyright and permission notice are retained in licenses/fflate-MIT.txt.

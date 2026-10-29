@@ -15,22 +15,25 @@ import type {
 } from "@tuyile/contracts";
 import { PgCreationContext, policy } from "./context.js";
 export class PgQuotaRepository extends PgCreationContext {
-  async admission(p: Principal, input: ImageInput): Promise<AdmissionSnapshot> {
+  async admission(
+    p: Principal,
+    input: ImageInput,
+    day = shanghaiDay(this.now()),
+  ): Promise<AdmissionSnapshot> {
     const c = this.c;
-    const day = shanghaiDay(this.now()),
-      limits = await this.ensure(c, p.id, day),
+    const limits = await this.ensure(c, p.id, day),
       rules = policy(limits);
     const settings = (await c.query("SELECT * FROM image_settings WHERE id=1"))
       .rows[0];
     const queued = (
       await c.query(
-        "SELECT count(*) AS total,count(*) FILTER(WHERE user_id=$1) AS own FROM image_tasks WHERE state='queued'",
+        "SELECT count(DISTINCT coalesce(agent_plan_id,id)) AS total,count(DISTINCT coalesce(agent_plan_id,id)) FILTER(WHERE user_id=$1) AS own FROM image_tasks WHERE state='queued'",
         [p.id],
       )
     ).rows[0];
     const recent = (
       await c.query(
-        "SELECT count(*) n FROM image_tasks WHERE user_id=$1 AND created_at>now()-interval '1 minute'",
+        "SELECT count(DISTINCT coalesce(agent_plan_id,id)) n FROM image_tasks WHERE user_id=$1 AND created_at>now()-interval '1 minute'",
         [p.id],
       )
     ).rows[0];

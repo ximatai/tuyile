@@ -23,6 +23,9 @@ import { Button, Notice, UiProvider } from "@tuyile/ui";
 import { client, ApiError, notifySessionChange, sessionTabId } from "./api";
 import { SessionProvider, useSessionState } from "./session-state";
 import "./styles.css";
+const LibraryPage = lazy(() =>
+  import("./library").then((m) => ({ default: m.LibraryPage })),
+);
 const AuthPage = lazy(() =>
   import("./auth").then((m) => ({ default: m.AuthPage })),
 );
@@ -201,6 +204,9 @@ function Shell() {
         </Link>
         <nav>
           {nav("/projects", "项目", <Folder size={20} />)}
+          {nav("/gallery", "图库", <Folder size={20} />)}
+          {nav("/prompts", "提示池", <Folder size={20} />)}
+          {nav("/favorites", "收藏", <Folder size={20} />)}
           {nav("/usage", "额度与任务", <Folder size={20} />)}
           {session.user.role === "admin" && (
             <>
@@ -259,6 +265,18 @@ function Shell() {
           {error && <Notice error>{error}</Notice>}
           <Suspense fallback={<p role="status">正在加载页面…</p>}>
             <Routes>
+              <Route
+                path="/gallery"
+                element={<LibraryPage key="gallery" mode="gallery" />}
+              />
+              <Route
+                path="/prompts"
+                element={<LibraryPage key="prompts" mode="prompts" />}
+              />
+              <Route
+                path="/favorites"
+                element={<LibraryPage key="favorites" mode="favorites" />}
+              />
               <Route
                 path="/projects"
                 element={<ProjectsPage csrfToken={session.csrfToken} />}

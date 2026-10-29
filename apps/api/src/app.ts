@@ -1,3 +1,9 @@
+import { administrationRoutes } from "./administration-routes.js";
+import type { AdministrationService } from "@tuyile/core";
+import { libraryRoutes } from "./library-routes.js";
+import type { LibraryService } from "@tuyile/core";
+import { agentRoutes } from "./agent-routes.js";
+import type { AgentService } from "@tuyile/core";
 import { canvasRoutes } from "./canvas-routes.js";
 import type { CanvasService } from "@tuyile/core";
 import { extensionRoutes } from "./extension-routes.js";
@@ -40,6 +46,9 @@ export function createApp(
   creation?: CreationService,
   extensions?: ExtensionService,
   canvas?: CanvasService,
+  agent?: AgentService,
+  library?: LibraryService,
+  administration?: AdministrationService,
 ) {
   const app = new Hono<ApiEnv>();
   app.use("*", async (c, next) => {
@@ -70,14 +79,17 @@ export function createApp(
   });
   app.use("/api/*", async (c, next) =>
     bodyLimit({
-      maxSize: /^\/api\/projects\/[^/]+\/canvas/.test(c.req.path)
-        ? 1024 * 1024
-        : c.req.path === "/api/images/uploads"
-          ? 20 * 1024 * 1024
-          : c.req.path.startsWith("/api/images/") ||
-              c.req.path.startsWith("/api/image-admin/")
-            ? 65536
-            : 16384,
+      maxSize:
+        c.req.path.startsWith("/api/agent/") ||
+        /^\/api\/projects\/[^/]+\/canvas/.test(c.req.path)
+          ? 1024 * 1024
+          : c.req.path === "/api/images/uploads"
+            ? 20 * 1024 * 1024
+            : c.req.path.startsWith("/api/images/") ||
+                c.req.path.startsWith("/api/image-admin/") ||
+                c.req.path.startsWith("/api/library/")
+              ? 65536
+              : 16384,
       onError: (c) =>
         c.json(
           { error: { code: "BODY_TOO_LARGE", requestId: c.get("requestId") } },
@@ -231,6 +243,9 @@ export function createApp(
     return c.json({ ok: true });
   });
   if (creation) creationRoutes(app, creation);
+  if (administration) administrationRoutes(app, administration);
+  if (library && creation) libraryRoutes(app, library, creation);
+  if (agent) agentRoutes(app, agent);
   if (canvas) canvasRoutes(app, canvas);
   if (extensions) extensionRoutes(app, extensions);
   app.notFound((c) =>

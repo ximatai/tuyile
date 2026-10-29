@@ -1,10 +1,19 @@
 import { readFile } from "node:fs/promises";
-import { CanvasService, CreationService, ExtensionService } from "@tuyile/core";
+import {
+  AdministrationService,
+  LibraryService,
+  AgentService,
+  CanvasService,
+  CreationService,
+  ExtensionService,
+} from "@tuyile/core";
 import {
   creationConfig,
   PrivateImageFiles,
   PgCreationStore,
   PgCanvasStore,
+  PgLibraryStore,
+  PgAdministrationStore,
 } from "@tuyile/infrastructure";
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
@@ -46,6 +55,9 @@ const app = createApp(
   creation,
   extensions,
   new CanvasService(new PgCanvasStore(pool)),
+  new AgentService(creationStore, files),
+  new LibraryService(new PgLibraryStore(pool)),
+  new AdministrationService(new PgAdministrationStore(pool)),
 );
 // Public app shell contains no private data. API routes always run first.
 app.get("/assets/*", serveStatic({ root: "./apps/web/dist" }));

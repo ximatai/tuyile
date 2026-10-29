@@ -160,3 +160,4 @@ export {
   Form,
   ConfigProvider as ControlScope,
 } from "antd";
+export { Select } from "antd";

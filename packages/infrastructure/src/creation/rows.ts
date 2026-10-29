@@ -1,6 +1,9 @@
 import type { ImageInput, ImagePolicy, ImageTask } from "@tuyile/contracts";
 /** PostgreSQL values used by the creation adapters; never exposed as API DTOs. */
 export interface TaskRow {
+  agent_plan_id: string | null;
+  step_index: number | null;
+  depends_on: string | null;
   id: string;
   workspace_id: string;
   project_id: string;

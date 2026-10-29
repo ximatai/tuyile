@@ -1,3 +1,4 @@
+import type { AgentRepository } from "./agent.js";
 import type { ExtensionsRepository } from "./extensions.js";
 import type { ImageCapability, ToolBinding } from "@tuyile/contracts";
 import type {
@@ -73,7 +74,11 @@ export interface AssetsRepository {
   staleAssets(): Promise<StoredAsset[]>;
 }
 export interface QuotaRepository {
-  admission(p: Principal, input: ImageInput): Promise<AdmissionSnapshot>;
+  admission(
+    p: Principal,
+    input: ImageInput,
+    day?: string,
+  ): Promise<AdmissionSnapshot>;
   reserve(
     p: Principal,
     taskId: string,
@@ -125,6 +130,7 @@ export interface ExecutionRepository {
   ): Promise<void>;
 }
 export interface CreationUnitOfWork {
+  agent: AgentRepository;
   extensions: ExtensionsRepository;
   outputs: OutputsRepository;
   tasks: TasksRepository;
@@ -136,10 +142,11 @@ export interface CreationUnitOfWork {
 export type CreationLock = {
   owners: string[];
   queue?: boolean;
+  planning?: boolean;
   extensions?: boolean;
   taskId?: string;
   attemptId?: string;
-  taskState?: "queued" | "running";
+  taskState?: "queued" | "running" | "unfinished";
 };
 export interface CreationStore {
   read<T>(run: (repositories: CreationUnitOfWork) => Promise<T>): Promise<T>;

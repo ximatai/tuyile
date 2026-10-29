@@ -1,3 +1,6 @@
+import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
+import { useSessionState } from "./session-state";
+import { OperationsAdmin } from "./operations-admin";
 import {
   imageCapabilityDefaults,
   type ImageCapability,
@@ -7,7 +10,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import type {
   ProviderView,
   ReviewTask,
-  UserView,
+  UsersPage,
   ImagePolicy,
 } from "@tuyile/contracts";
 import {
@@ -53,64 +56,74 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
   }
   const confirm = useConfirm();
   const [allowedText, setAllowedText] = useState("");
-  const [providers, setProviders] = useState<ProviderView[]>([]),
-    [review, setReview] = useState<ReviewTask[]>([]),
-    [users, setUsers] = useState<UserView[]>([]),
-    [user, setUser] = useState(""),
+  const [policyOwner, setPolicyOwner] = useState("");
+  const [user, setUser] = useState(""),
     [policy, setPolicy] = useState<ImagePolicy | null>(null),
     [mode, setMode] = useState("openai"),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [message, setMessage] = useState("");
-  async function refresh() {
-    const [p, r] = await Promise.all([
-      client(csrfToken)<{ providers: ProviderView[] }>(
+  const state = useSessionState();
+  const api = client(csrfToken);
+  const providersQuery = useQuery({
+    queryKey: state.key("image-providers"),
+    queryFn: ({ signal }) =>
+      api<{ providers: ProviderView[] }>(
         "/image-admin/providers",
+        undefined,
+        signal,
       ),
-      client(csrfToken)<{ tasks: ReviewTask[] }>("/image-admin/review"),
+  });
+  const reviewQuery = useQuery({
+    queryKey: state.key("image-review"),
+    queryFn: ({ signal }) =>
+      api<{ tasks: ReviewTask[] }>("/image-admin/review", undefined, signal),
+  });
+  const usersQuery = useInfiniteQuery({
+    queryKey: state.key("admin-users"),
+    initialPageParam: 0,
+    queryFn: ({ signal, pageParam }) =>
+      api<UsersPage>(`/admin/users?offset=${pageParam}`, undefined, signal),
+    getNextPageParam: (p, pages) => (p.hasMore ? pages.length * 50 : undefined),
+  });
+  const providers = providersQuery.data?.providers ?? [],
+    review = reviewQuery.data?.tasks ?? [];
+  const users = [
+    ...new Map(
+      (usersQuery.data?.pages.flatMap((p) => p.users) ?? []).map((u) => [
+        u.id,
+        u,
+      ]),
+    ).values(),
+  ];
+  const selectedUser = user || users[0]?.id || "";
+  const policyQuery = useQuery({
+    queryKey: state.key("image-policy", selectedUser),
+    enabled: !!selectedUser,
+    queryFn: ({ signal }) =>
+      api<ImagePolicy>(
+        `/image-admin/policies/${selectedUser}`,
+        undefined,
+        signal,
+      ),
+    refetchOnWindowFocus: false,
+  });
+  useEffect(() => {
+    setPolicyOwner(selectedUser);
+    setPolicy(policyQuery.data ?? null);
+    setAllowedText(policyQuery.data?.allowedModels.join(",") ?? "");
+  }, [selectedUser, policyQuery.data]);
+  async function refresh() {
+    await Promise.all([
+      providersQuery.refetch({ throwOnError: true }),
+      reviewQuery.refetch({ throwOnError: true }),
+      state.queries.invalidateQueries({ queryKey: state.key("models") }),
+      state.queries.invalidateQueries({ queryKey: state.key("usage") }),
+      state.queries.invalidateQueries({
+        queryKey: state.key("admin-summary"),
+      }),
     ]);
-    setProviders(p.providers);
-    setReview(r.tasks);
   }
-  useEffect(() => {
-    let alive = true;
-    void Promise.all([
-      client(csrfToken)<{ users: UserView[] }>("/admin/users"),
-      refresh(),
-    ])
-      .then(([u]) => {
-        if (alive) {
-          setUsers(u.users);
-          setUser(u.users[0]?.id ?? "");
-        }
-      })
-      .catch((e) => {
-        if (alive) setError(e.message);
-      });
-    return () => {
-      alive = false;
-    };
-  }, [csrfToken]);
-  useEffect(() => {
-    if (!user) return;
-    const c = new AbortController();
-    setPolicy(null);
-    void client(csrfToken)<ImagePolicy>(
-      `/image-admin/policies/${user}`,
-      undefined,
-      c.signal,
-    )
-      .then((p) => {
-        if (!c.signal.aborted) {
-          setPolicy(p);
-          setAllowedText(p.allowedModels.join(","));
-        }
-      })
-      .catch((e) => {
-        if (!c.signal.aborted) setError(e.message);
-      });
-    return () => c.abort();
-  }, [csrfToken, user]);
   async function run(work: () => Promise<unknown>) {
     if (busy) return;
     setBusy(true);
@@ -153,23 +166,23 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
   }
   function savePolicy(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!policy) return;
-    void run(() =>
-      client(csrfToken)(`/image-admin/policies/${user}`, {
+    if (!policy || policyOwner !== selectedUser) return;
+    void run(async () => {
+      await client(csrfToken)(`/image-admin/policies/${selectedUser}`, {
         ...policy,
         allowedModels: allowedText
           .split(",")
           .map((s) => s.trim())
           .filter(Boolean),
-      }),
-    );
+      });
+      await state.queries.invalidateQueries({
+        queryKey: state.key("image-policy", selectedUser),
+      });
+    });
   }
   async function moreUsers() {
     try {
-      const result = await client(csrfToken)<{ users: UserView[] }>(
-        `/admin/users?offset=${users.length}`,
-      );
-      setUsers((v) => [...v, ...result.users]);
+      await usersQuery.fetchNextPage({ throwOnError: true });
     } catch (e) {
       setError((e as Error).message);
     }
@@ -181,7 +194,19 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
       <p className="muted">
         统一维护模型服务、用户限制与未知结果。这里不展示其他用户的提示词、图片或正文。
       </p>
-      {error && <Notice error>{error}</Notice>}
+      {(error ||
+        providersQuery.error ||
+        reviewQuery.error ||
+        usersQuery.error ||
+        policyQuery.error) && (
+        <Notice error>
+          {error ||
+            providersQuery.error?.message ||
+            reviewQuery.error?.message ||
+            usersQuery.error?.message ||
+            policyQuery.error?.message}
+        </Notice>
+      )}
       {message && <Notice>{message}</Notice>}
       <section className="settings-section">
         <h2>模型服务</h2>
@@ -375,14 +400,14 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
         <h2>个人策略</h2>
         <ChoiceField
           label="选择账号"
-          value={user}
+          value={selectedUser}
           onValueChange={setUser}
           options={users.map((u) => ({ value: u.id, label: u.username }))}
         />
-        {users.length >= 50 && (
+        {usersQuery.hasNextPage && (
           <Button onClick={() => void moreUsers()}>加载更多账号</Button>
         )}
-        {policy && (
+        {policy && policyOwner === selectedUser && (
           <form onSubmit={savePolicy} aria-label="保存个人策略">
             <div className="parameter-grid">
               {Object.entries(fields).map(([key, label]) => (
@@ -435,6 +460,7 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
           </form>
         )}
       </section>
+      <OperationsAdmin />
       <ExtensionsAdmin csrfToken={csrfToken} />
       <section className="settings-section">
         <h2>结果待核验</h2>

@@ -17,6 +17,7 @@ export type PlanningExecutionConfig = Readonly<{
   baseUrl: string;
   apiKey: string;
   model: string;
+  supportsImages: boolean;
   responseMode: "text" | "json_object";
   maxOutputTokens: number;
   maxInputCharacters: number;
@@ -26,12 +27,17 @@ export interface PlanningReply {
   inputTokens: number | null;
   outputTokens: number | null;
 }
+export interface PlanningImage {
+  assetId: string;
+  bytes: Uint8Array;
+}
 export interface PlanningProvider {
   complete(
     config: PlanningExecutionConfig,
     messages: { role: "system" | "user" | "assistant"; content: string }[],
     budget: number,
     signal: AbortSignal,
+    images?: readonly PlanningImage[],
   ): Promise<PlanningReply>;
 }
 export interface ExtensionsRepository {

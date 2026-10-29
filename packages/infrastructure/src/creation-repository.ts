@@ -1,3 +1,4 @@
+import { PgAgentRepository } from "./creation/agent.js";
 import { PgExtensionsRepository } from "./creation/extensions.js";
 import { PgOutputsRepository } from "./creation/outputs.js";
 import pg from "pg";
@@ -26,6 +27,12 @@ export class PgCreationStore implements CreationStore {
   }
   private scope(c: pg.PoolClient): CreationUnitOfWork {
     return {
+      agent: new PgAgentRepository(
+        c,
+        this.masterKey,
+        this.fakeAllowed,
+        this.now,
+      ),
       extensions: new PgExtensionsRepository(
         c,
         this.masterKey,
@@ -103,8 +110,16 @@ export class PgCreationStore implements CreationStore {
           owners.push(
             ...(
               await c.query(
-                "SELECT DISTINCT user_id FROM image_tasks WHERE state=$1",
+                "SELECT DISTINCT user_id FROM image_tasks WHERE state=$1 OR ($1='unfinished' AND state IN ('queued','running'))",
                 [lock.taskState],
+              )
+            ).rows.map((r) => r.user_id),
+          );
+        if (lock.planning)
+          owners.push(
+            ...(
+              await c.query(
+                "SELECT DISTINCT user_id FROM planning_jobs WHERE state IN ('queued','running')",
               )
             ).rows.map((r) => r.user_id),
           );

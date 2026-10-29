@@ -5,7 +5,7 @@ import type {
   Project,
   ProjectsPage as ProjectPageResponse,
 } from "@tuyile/contracts";
-import { Button, Field, Notice } from "@tuyile/ui";
+import { Button, Field, Notice, useConfirm } from "@tuyile/ui";
 import { useSessionState } from "./session-state";
 import { client } from "./api";
 import { lazy, Suspense } from "react";
@@ -14,6 +14,7 @@ const CreationPage = lazy(() =>
 );
 export function ProjectsPage({ csrfToken }: { csrfToken: string }) {
   const state = useSessionState();
+  const confirm = useConfirm();
   const [name, setName] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
@@ -52,6 +53,28 @@ export function ProjectsPage({ csrfToken }: { csrfToken: string }) {
       setBusy(false);
     }
   }
+  async function removeProject(project: Project) {
+    if (
+      !(await confirm(
+        `删除项目“${project.name}”？画布与对话会清除，图库原件保留。活动或待核验任务会阻止删除。`,
+      ))
+    )
+      return;
+    setBusy(true);
+    setError("");
+    try {
+      await state.flush();
+      await client(csrfToken)(`/projects/${project.id}/delete`, {});
+      state.editors.get(project.id)?.dispose();
+      state.editors.delete(project.id);
+      state.creationDrafts.delete(project.id);
+      await state.queries.invalidateQueries({ queryKey: state.key() });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <section>
       <div className="page-heading">
@@ -82,12 +105,21 @@ export function ProjectsPage({ csrfToken }: { csrfToken: string }) {
       ) : (
         <div className="project-grid">
           {query.data?.projects.map((p) => (
-            <Link className="project-card" key={p.id} to={`/projects/${p.id}`}>
-              <h2>{p.name}</h2>
-              <span className="hint">
-                {new Date(p.createdAt).toLocaleDateString("zh-CN")} 创建
-              </span>
-            </Link>
+            <div className="project-card-shell" key={p.id}>
+              <Link className="project-card" to={`/projects/${p.id}`}>
+                <h2>{p.name}</h2>
+                <span className="hint">
+                  {new Date(p.createdAt).toLocaleDateString("zh-CN")} 创建
+                </span>
+              </Link>
+              <Button
+                disabled={busy}
+                aria-label={`删除项目 ${p.name}`}
+                onClick={() => void removeProject(p)}
+              >
+                删除项目
+              </Button>
+            </div>
           ))}
         </div>
       )}

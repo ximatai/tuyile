@@ -18,11 +18,60 @@ import {
 import { PgTransactions } from "./transactions.js";
 import { PgCreationContext } from "./creation/context.js";
 class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
+  async removeProject(p: Principal, id: string) {
+    await this.auth(this.c, p, false, false);
+    const project = (
+      await this.c.query(
+        "SELECT * FROM projects WHERE workspace_id=$1 AND id=$2 FOR UPDATE",
+        [p.workspaceId, id],
+      )
+    ).rows[0];
+    if (!project) throw new AppError("NOT_FOUND", 404);
+    if (project.deleted_at) return;
+    if (
+      (
+        await this.c.query(
+          "SELECT 1 FROM image_tasks WHERE workspace_id=$1 AND project_id=$2 AND (state IN ('queued','running') OR pending_review) UNION ALL SELECT 1 FROM planning_jobs WHERE workspace_id=$1 AND project_id=$2 AND state IN ('queued','running') LIMIT 1",
+          [p.workspaceId, id],
+        )
+      ).rowCount
+    )
+      throw new AppError("PROJECT_BUSY", 409);
+    await this.c.query("DELETE FROM canvas_references WHERE project_id=$1", [
+      id,
+    ]);
+    await this.c.query("DELETE FROM project_documents WHERE project_id=$1", [
+      id,
+    ]);
+    await this.c.query("DELETE FROM output_placements WHERE project_id=$1", [
+      id,
+    ]);
+    await this.c.query(
+      "DELETE FROM agent_references WHERE job_id IN (SELECT id FROM planning_jobs WHERE project_id=$1)",
+      [id],
+    );
+    await this.c.query(
+      "UPDATE agent_plans SET document='{}'::jsonb WHERE job_id IN (SELECT id FROM planning_jobs WHERE project_id=$1)",
+      [id],
+    );
+    await this.c.query(
+      "UPDATE planning_jobs SET input='{}'::jsonb,messages='[]'::jsonb WHERE project_id=$1",
+      [id],
+    );
+    await this.c.query(
+      "UPDATE image_tasks SET input=jsonb_set(jsonb_set(input,'{prompt}',to_jsonb(''::text)),'{referenceIds}','[]'::jsonb) WHERE project_id=$1",
+      [id],
+    );
+    await this.c.query(
+      "UPDATE projects SET deleted_at=now(),name='已删除项目' WHERE id=$1",
+      [id],
+    );
+  }
   private async project(p: Principal, id: string) {
     await this.auth(this.c, p, false, false);
     const r = (
       await this.c.query(
-        "SELECT * FROM projects WHERE workspace_id=$1 AND id=$2",
+        "SELECT * FROM projects WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NULL",
         [p.workspaceId, id],
       )
     ).rows[0];
@@ -118,7 +167,10 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
         input.requestKey,
       ])
     ).rows[0];
-    if (existing && existing.workspace_id !== p.workspaceId)
+    if (
+      existing &&
+      (existing.workspace_id !== p.workspaceId || existing.deleted_at)
+    )
       throw new AppError("NOT_FOUND", 404);
     if (existing) {
       const saved = (

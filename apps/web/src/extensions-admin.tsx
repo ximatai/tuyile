@@ -1,4 +1,6 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useSessionState } from "./session-state";
+import { useState, type FormEvent } from "react";
 import type {
   PlanningProviderView,
   SkillView,
@@ -17,9 +19,6 @@ import {
 } from "@tuyile/ui";
 import { client } from "./api";
 export function ExtensionsAdmin({ csrfToken }: { csrfToken: string }) {
-  const [providers, setProviders] = useState<PlanningProviderView[]>([]),
-    [skills, setSkills] = useState<SkillView[]>([]),
-    [tools, setTools] = useState<ToolView[]>([]);
   const [mode, setMode] = useState("openai"),
     [error, setError] = useState(""),
     [message, setMessage] = useState(""),
@@ -29,32 +28,41 @@ export function ExtensionsAdmin({ csrfToken }: { csrfToken: string }) {
     [selected, setSelected] = useState<string[]>(["image.generate@1"]);
   const confirm = useConfirm();
   const request = client(csrfToken);
-  async function refresh(signal?: AbortSignal) {
-    const [p, s, t] = await Promise.all([
+  const state = useSessionState();
+  const providerQuery = useQuery({
+    queryKey: state.key("planning-providers"),
+    queryFn: ({ signal }) =>
       request<{ providers: PlanningProviderView[] }>(
         "/image-admin/planning-providers",
         undefined,
         signal,
       ),
+  });
+  const skillQuery = useQuery({
+    queryKey: state.key("admin-skills"),
+    queryFn: ({ signal }) =>
       request<{ skills: SkillView[] }>(
         "/image-admin/skills",
         undefined,
         signal,
       ),
+  });
+  const toolQuery = useQuery({
+    queryKey: state.key("admin-tools"),
+    queryFn: ({ signal }) =>
       request<{ tools: ToolView[] }>("/image-admin/tools", undefined, signal),
+  });
+  const providers = providerQuery.data?.providers ?? [],
+    skills = skillQuery.data?.skills ?? [],
+    tools = toolQuery.data?.tools ?? [];
+  async function refresh() {
+    await Promise.all([
+      providerQuery.refetch({ throwOnError: true }),
+      skillQuery.refetch({ throwOnError: true }),
+      toolQuery.refetch({ throwOnError: true }),
+      state.queries.invalidateQueries({ queryKey: state.key("skills") }),
     ]);
-    if (signal?.aborted) return;
-    setProviders(p.providers);
-    setSkills(s.skills);
-    setTools(t.tools);
   }
-  useEffect(() => {
-    const c = new AbortController();
-    void refresh(c.signal).catch((e) => {
-      if (!c.signal.aborted) setError(e.message);
-    });
-    return () => c.abort();
-  }, [csrfToken]);
   async function run(action: () => Promise<unknown>) {
     if (busy) return;
     setBusy(true);
@@ -80,6 +88,7 @@ export function ExtensionsAdmin({ csrfToken }: { csrfToken: string }) {
         model: f.get("model"),
         apiKey: f.get("apiKey") || undefined,
         preserveKey: f.get("preserveKey") === "on",
+        supportsImages: mode === "fake" || f.get("supportsImages") === "on",
         responseMode: f.get("responseMode"),
         maxOutputTokens: Number(f.get("maxOutputTokens")),
         maxInputCharacters: Number(f.get("maxInputCharacters")),
@@ -118,7 +127,17 @@ export function ExtensionsAdmin({ csrfToken }: { csrfToken: string }) {
   }
   return (
     <>
-      {error && <Notice error>{error}</Notice>}
+      {(error ||
+        providerQuery.error ||
+        skillQuery.error ||
+        toolQuery.error) && (
+        <Notice error>
+          {error ||
+            providerQuery.error?.message ||
+            skillQuery.error?.message ||
+            toolQuery.error?.message}
+        </Notice>
+      )}
       {message && <Notice>{message}</Notice>}
       <section className="settings-section">
         <h2>规划服务</h2>
@@ -154,6 +173,9 @@ export function ExtensionsAdmin({ csrfToken }: { csrfToken: string }) {
                 type="password"
                 autoComplete="new-password"
               />
+              <Checkbox name="supportsImages">
+                规划模型支持参考图视觉输入
+              </Checkbox>
               <Checkbox name="preserveKey">
                 显式沿用当前规划 Key（仅同地址）
               </Checkbox>
@@ -205,7 +227,8 @@ export function ExtensionsAdmin({ csrfToken }: { csrfToken: string }) {
                 </Tag>
                 <p className="hint">
                   {p.mode === "fake" ? "本地测试" : p.baseUrl} · 输出预算{" "}
-                  {p.maxOutputTokens}
+                  {p.maxOutputTokens} ·{" "}
+                  {p.supportsImages ? "支持参考图" : "仅文本"}
                 </p>
               </div>
               <Button

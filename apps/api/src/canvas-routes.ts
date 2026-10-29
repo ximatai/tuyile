@@ -1,8 +1,18 @@
 import type { Hono } from "hono";
-import { id, canvasSave } from "@tuyile/contracts";
+import { id, z, canvasSave } from "@tuyile/contracts";
 import type { CanvasService } from "@tuyile/core";
 import type { ApiEnv } from "./app.js";
 export function canvasRoutes(app: Hono<ApiEnv>, service: CanvasService) {
+  app.post("/api/projects/:id/delete", async (c) => {
+    z.object({})
+      .strict()
+      .parse(await c.req.json());
+    await service.removeProject(
+      c.get("session").user,
+      id.parse(c.req.param("id")),
+    );
+    return c.json({ ok: true });
+  });
   app.get("/api/projects/:id/canvas", async (c) =>
     c.json(
       await service.load(c.get("session").user, id.parse(c.req.param("id"))),

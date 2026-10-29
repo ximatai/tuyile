@@ -178,14 +178,14 @@ class PgRepository implements Repository {
   async listProjects(ws: string, offset = 0) {
     return (
       await this.c.query(
-        "SELECT * FROM projects WHERE workspace_id=$1 ORDER BY created_at DESC,id LIMIT 51 OFFSET $2",
+        "SELECT * FROM projects WHERE workspace_id=$1 AND deleted_at IS NULL ORDER BY created_at DESC,id LIMIT 51 OFFSET $2",
         [ws, offset],
       )
     ).rows.map(project);
   }
   async projectById(ws: string, id: string) {
     const { rows } = await this.c.query(
-      "SELECT * FROM projects WHERE workspace_id=$1 AND id=$2",
+      "SELECT * FROM projects WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NULL",
       [ws, id],
     );
     return rows[0] ? project(rows[0]) : null;
@@ -225,13 +225,19 @@ export async function assertSchema(pool: pg.Pool) {
     "SELECT version FROM schema_migrations ORDER BY version",
   );
   if (
-    result.rows.length !== 6 ||
+    result.rows.length !== 12 ||
     result.rows[0].version !== 1 ||
     result.rows[1].version !== 2 ||
     result.rows[2].version !== 3 ||
     result.rows[3].version !== 4 ||
     result.rows[4].version !== 5 ||
-    result.rows[5].version !== 6
+    result.rows[5].version !== 6 ||
+    result.rows[6].version !== 7 ||
+    result.rows[7].version !== 8 ||
+    result.rows[8].version !== 9 ||
+    result.rows[9].version !== 10 ||
+    result.rows[10].version !== 11 ||
+    result.rows[11].version !== 12
   )
     throw new Error("SCHEMA_VERSION_MISMATCH_RUN_MIGRATIONS");
   const r = await pool.query(

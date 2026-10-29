@@ -44,7 +44,10 @@ try {
     .boundingBox();
   const quota = await page.locator(".quota-details summary").boundingBox();
   assert(submit && quota && submit.y + submit.height <= quota.y);
-  await page.getByLabel("图片模型").click();
+  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await page.getByLabel("告诉 Agent 你的想法", { exact: true }).waitFor();
+  await page.getByRole("tab", { name: "直接创作", exact: true }).click();
+  await page.getByLabel("图片模型", { exact: true }).click();
   await page.locator(".ant-select-dropdown:visible").waitFor();
   await page.keyboard.press("Escape");
   await page.screenshot({
@@ -67,6 +70,38 @@ try {
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   );
+  await page.getByRole("link", { name: "图库", exact: true }).click();
+  await page.getByRole("heading", { name: "我的图库", exact: true }).waitFor();
+  await page.locator(".gallery-card").first().getByRole("checkbox").check();
+  const downloadReady = page.waitForEvent("download");
+  await page.getByRole("button", { name: "导出所选 ZIP", exact: true }).click();
+  assert.equal((await downloadReady).suggestedFilename(), "tuyile-images.zip");
+  await page.screenshot({
+    path: ".codex-temp/docker-gallery-1920.png",
+    animations: "disabled",
+  });
+  await page.getByRole("link", { name: "提示池", exact: true }).click();
+  await page.getByRole("heading", { name: "提示池", exact: true }).waitFor();
+  await page
+    .locator(".prompt-card")
+    .first()
+    .getByRole("button", { name: "收藏提示词", exact: true })
+    .click();
+  await page.getByLabel("收藏标题", { exact: true }).waitFor();
+  await page.getByRole("link", { name: "图片服务", exact: true }).click();
+  await page
+    .getByRole("heading", { name: "运行概览与规划策略", exact: true })
+    .waitFor();
+  await page
+    .getByText("图片统计日、逐单预留和规划计次对账一致。", { exact: true })
+    .waitFor();
+  await page.getByLabel("每日规划次数", { exact: true }).waitFor();
+  await page
+    .locator(".operations-admin")
+    .screenshot({
+      path: ".codex-temp/docker-administration.png",
+      animations: "disabled",
+    });
   assert.deepEqual(errors, []);
   console.log(
     "Built Docker Chromium: nonce styles, themed button, Select popup, confirmation dialog and medium/large desktop layout passed",

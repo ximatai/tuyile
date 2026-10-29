@@ -38,8 +38,8 @@ export class PgOutputsRepository extends PgCreationContext {
       [t.id],
     );
     await c.query(
-      "INSERT INTO image_output_sources(workspace_id,output_id,asset_id) SELECT $1,$2,unnest($3::uuid[]) ON CONFLICT DO NOTHING",
-      [a.workspaceId, output.id, t.input.referenceIds],
+      "INSERT INTO image_output_sources(workspace_id,output_id,asset_id) SELECT $1,$2,asset_id FROM image_references WHERE task_id=$3 ON CONFLICT DO NOTHING",
+      [a.workspaceId, output.id, t.id],
     );
     return {
       outputId: output.id,

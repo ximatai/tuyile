@@ -8,6 +8,7 @@ import {
   type Project,
 } from "@tuyile/contracts";
 export interface CanvasRepository {
+  removeProject(p: Principal, id: string): Promise<void>;
   load(p: Principal, projectId: string): Promise<CanvasSnapshot>;
   save(
     p: Principal,
@@ -27,6 +28,9 @@ export interface CanvasStore {
 }
 export class CanvasService {
   constructor(private readonly store: CanvasStore) {}
+  removeProject(p: Principal, id: string) {
+    return this.store.write(p.id, (r) => r.removeProject(p, id));
+  }
   load(p: Principal, project: string) {
     return this.store.read((r) => r.load(p, project));
   }
