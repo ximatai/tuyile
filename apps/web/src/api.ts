@@ -1,5 +1,23 @@
 import type { ErrorResponse } from "@tuyile/contracts";
 const messages: Record<string, string> = {
+  SPEC_LIMIT: "图片规格超出当前限制，请调整尺寸、张数或质量。",
+  MODEL_NOT_ALLOWED: "当前账号不能使用这个模型。",
+  QUEUE_FULL: "排队已满，请稍后重试。",
+  SUBMISSION_RATE: "提交过于频繁，请稍后重试。",
+  IMAGE_QUOTA: "图片额度不足，整单未提交。",
+  STORAGE_QUOTA: "存储空间不足，请先清理不再引用的图片。",
+  PROVIDER_NOT_CONFIGURED: "尚未配置可用图片服务。",
+  IDEMPOTENCY_CONFLICT: "同一提交标识对应了不同内容，请先核对历史任务。",
+  REFERENCE_UNAVAILABLE: "参考图已不可用，请重新选择。",
+  ASSET_REFERENCED: "图片仍被任务引用，暂不能删除。",
+  INVALID_IMAGE: "图片格式、大小或解码检查未通过。",
+  DISK_LOW: "服务器可用磁盘空间不足，暂停新任务。",
+  API_KEY_REQUIRED: "请提供 Key，或显式选择沿用当前服务的 Key。",
+  INVALID_PROVIDER_URL: "服务地址必须是 HTTPS 地址，且不含凭据、查询和片段。",
+  FAKE_PROVIDER_DISABLED: "正式环境不允许测试模型。",
+  RESOLUTION_CONFLICT: "此任务已按其他结果核验，请刷新后检查。",
+  INVALID_RESOLUTION: "核验数量或任务状态不正确。",
+
   INVALID_CREDENTIALS: "账号或密码不正确，或账号暂不可用。",
   UNAUTHENTICATED: "登录已失效，请重新登录。",
   FORBIDDEN: "你没有执行此操作的权限。",

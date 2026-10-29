@@ -224,7 +224,11 @@ export async function assertSchema(pool: pg.Pool) {
   const result = await pool.query(
     "SELECT version FROM schema_migrations ORDER BY version",
   );
-  if (result.rows.length !== 1 || result.rows[0].version !== 1)
+  if (
+    result.rows.length !== 2 ||
+    result.rows[0].version !== 1 ||
+    result.rows[1].version !== 2
+  )
     throw new Error("SCHEMA_VERSION_MISMATCH_RUN_MIGRATIONS");
   const r = await pool.query(
     "SELECT rolsuper,rolcreatedb,rolcreaterole,has_schema_privilege(current_user,'tuyile','CREATE') AS can_create FROM pg_roles WHERE rolname=current_user",

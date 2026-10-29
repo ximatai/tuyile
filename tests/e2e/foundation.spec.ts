@@ -23,6 +23,7 @@ test("desktop and mobile: persistent projects, activation, account boundaries an
   await login(page);
   await page.getByLabel("项目名称").fill("品牌视觉方案");
   await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await expect(page.getByLabel("项目名称")).toHaveValue("");
   await page.getByRole("link", { name: /品牌视觉方案/ }).click();
   await expect(
     page.getByRole("heading", { name: "品牌视觉方案" }),
@@ -35,6 +36,7 @@ test("desktop and mobile: persistent projects, activation, account boundaries an
   await page.getByRole("link", { name: "账号管理", exact: true }).click();
   await page.getByLabel("新账号").fill("designer01");
   await page.getByRole("button", { name: "创建账号", exact: true }).click();
+  await expect(page.getByLabel("新账号")).toHaveValue("");
   const activation = await page.getByLabel("复制交付链接").inputValue();
   await expect(
     page.getByRole("row").filter({ hasText: "designer01" }),
@@ -149,11 +151,14 @@ test("same login tab consumes a new activation and then a reset link", async ({
   await member.getByLabel("确认新密码").fill(first);
   await member.getByRole("button", { name: "保存密码" }).click();
   await expect(member.getByText("密码已设置，请登录。")).toBeVisible();
-  page.once("dialog", (d) => d.accept());
   await page
     .getByRole("row")
     .filter({ hasText: "hashuser02" })
     .getByRole("button", { name: "重新生成链接" })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "确认", exact: true })
     .click();
   const reset = await page.getByLabel("复制交付链接").inputValue();
   await member.goto(reset);
@@ -167,4 +172,114 @@ test("same login tab consumes a new activation and then a reset link", async ({
   await expect(member.getByText("密码已设置，请登录。")).toBeVisible();
   await login(member, "hashuser02", second);
   await context.close();
+});
+
+test("background creation survives refresh, page closure and ordinary logout, with private results on mobile", async ({
+  page,
+  browser,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await login(page);
+  await page.getByLabel("项目名称").fill("后台创作验证");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await page.getByRole("link", { name: /后台创作验证/ }).click();
+  await expect(page.getByText("本地测试模型：生成测试色块")).toBeVisible();
+  const projectUrl = page.url();
+  await page.getByLabel("创作需求").fill("合成测试：关闭页面后继续执行");
+  await page.getByLabel("图片张数").fill("2");
+  await page.getByRole("button", { name: "提交图片任务", exact: true }).click();
+  await expect(page.getByText("合成测试：关闭页面后继续执行")).toBeVisible();
+  const context = page.context();
+  await page.close();
+  const reopened = await context.newPage();
+  await reopened.goto(projectUrl);
+  await expect(
+    reopened.getByRole("heading", { name: "已完成", exact: true }),
+  ).toBeVisible({ timeout: 15000 });
+  await expect(reopened.getByRole("link", { name: "下载原图" })).toHaveCount(2);
+  await reopened.getByLabel("创作需求").fill("合成测试：注销后继续");
+  await reopened.getByLabel("图片张数").fill("2");
+  await reopened
+    .getByRole("button", { name: "提交图片任务", exact: true })
+    .click();
+  await expect(reopened.getByText("合成测试：注销后继续")).toBeVisible();
+  await reopened.reload();
+  await reopened.getByRole("button", { name: "退出登录", exact: true }).click();
+  await expect(
+    reopened.getByRole("heading", { name: "登录图一乐" }),
+  ).toBeVisible();
+  await login(reopened);
+  await reopened.goto(projectUrl);
+  await expect(
+    reopened.getByRole("heading", { name: "已完成", exact: true }),
+  ).toHaveCount(2, { timeout: 15000 });
+  const png = (await import("sharp")).default;
+  const bytes = await png({
+    create: { width: 256, height: 256, channels: 3, background: "#0062b0" },
+  })
+    .png()
+    .toBuffer();
+  await reopened
+    .getByTestId("reference-upload")
+    .locator('input[type="file"]')
+    .setInputFiles({
+      name: "synthetic.png",
+      mimeType: "image/png",
+      buffer: bytes,
+    });
+  await expect(reopened.getByText("synthetic.png")).toBeVisible();
+  await reopened.getByLabel("创作需求").fill("合成测试：参考图");
+  await reopened
+    .getByRole("button", { name: "提交图片任务", exact: true })
+    .click();
+  await expect(
+    reopened.getByRole("heading", { name: "已完成", exact: true }),
+  ).toHaveCount(3, { timeout: 15000 });
+  await reopened.screenshot({
+    path: ".codex-temp/stage2-desktop-workbench.png",
+    fullPage: true,
+  });
+  const submitBox = await reopened
+    .getByRole("button", { name: "提交图片任务", exact: true })
+    .boundingBox();
+  const quotaBox = await reopened
+    .locator(".quota-details summary")
+    .boundingBox();
+  expect(submitBox).not.toBeNull();
+  expect(quotaBox).not.toBeNull();
+  expect(submitBox!.y + submitBox!.height).toBeLessThanOrEqual(quotaBox!.y);
+  await reopened.setViewportSize({ width: 390, height: 844 });
+  await reopened
+    .getByRole("button", { name: "任务与结果", exact: true })
+    .click();
+  await expect(reopened.getByRole("link", { name: "下载原图" })).toHaveCount(5);
+  expect(
+    await reopened.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await reopened.screenshot({
+    path: ".codex-temp/stage2-mobile-results.png",
+    fullPage: true,
+  });
+  await reopened.getByRole("link", { name: "额度与任务", exact: true }).click();
+  await expect(
+    reopened.getByRole("heading", { name: "我的额度与任务" }),
+  ).toBeVisible();
+  await expect(
+    reopened.getByRole("heading", { name: "上传的参考图" }),
+  ).toBeVisible();
+  await reopened.getByRole("link", { name: "图片服务", exact: true }).click();
+  await expect(
+    reopened.getByRole("heading", { name: "图片服务与额度" }),
+  ).toBeVisible();
+  expect(
+    await reopened.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await reopened.screenshot({
+    path: ".codex-temp/stage2-mobile-admin.png",
+    fullPage: true,
+  });
 });

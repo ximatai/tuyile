@@ -1,0 +1,410 @@
+import { beforeEach, afterEach, it, expect } from "vitest";
+import { randomUUID } from "node:crypto";
+import { readFile, writeFile, stat } from "node:fs/promises";
+import { join } from "node:path";
+import {
+  CreationService,
+  ImageCallError,
+  ImageExecutor,
+  ASSET_RESERVE,
+  shanghaiDay,
+} from "@tuyile/core";
+import {
+  PgCreationRepository,
+  PrivateImageFiles,
+  ImageWorker,
+  CompatibleImageProvider,
+} from "@tuyile/infrastructure";
+import { createApp } from "../../apps/api/src/app.js";
+import { imageFixture } from "../creation-fixture.js";
+import { testPassword } from "../test-database.js";
+let f: Awaited<ReturnType<typeof imageFixture>>;
+beforeEach(async () => {
+  f = await imageFixture();
+});
+afterEach(async () => {
+  await f?.cleanup();
+});
+it("serializes full-order admission and idempotent retries across concurrent submissions", async () => {
+  const p = await f.repo.getPolicy(f.principal, f.principal.id);
+  await f.repo.setPolicy(f.principal, f.principal.id, { ...p, imageLimit: 2 });
+  const input = f.input();
+  const same = await Promise.all([
+    f.creation.submit(f.principal, input),
+    f.creation.submit(f.principal, input),
+  ]);
+  expect(same[0].id).toBe(same[1].id);
+  expect((await f.repo.usage(f.principal)).held).toBe(1);
+  await expect(
+    f.creation.submit(f.principal, { ...input, prompt: "different" }),
+  ).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+  const results = await Promise.allSettled([
+    f.creation.submit(f.principal, f.input()),
+    f.creation.submit(f.principal, f.input()),
+  ]);
+  expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+  expect((await f.repo.usage(f.principal)).held).toBe(2);
+  await f.repo.setPolicy(f.principal, f.principal.id, { ...p, imageLimit: 0 });
+  expect((await f.repo.usage(f.principal)).held).toBe(2);
+  await expect(f.creation.submit(f.principal, f.input())).rejects.toMatchObject(
+    { code: "IMAGE_QUOTA" },
+  );
+});
+it("separates queued capacity from execution concurrency, and enforces bounded admission/spec/model", async () => {
+  await f.pool.query("UPDATE image_settings SET queue_limit=1 WHERE id=1");
+  const t = await f.creation.submit(f.principal, f.input());
+  await expect(f.creation.submit(f.principal, f.input())).rejects.toMatchObject(
+    { code: "QUEUE_FULL" },
+  );
+  const work = await f.repo.claim([], 0);
+  expect(work?.id).toBe(t.id);
+  const second = await f.creation.submit(f.principal, f.input());
+  expect(second.state).toBe("queued");
+  expect(await f.repo.claim([f.principal.id], 1)).toBeNull();
+  await f.repo.cancel(f.principal, second.id);
+  await f.repo.finish(work!, "TEST_STOP", true);
+  await expect(
+    f.creation.submit(f.principal, f.input({ model: "forbidden" })),
+  ).rejects.toMatchObject({ code: "MODEL_NOT_ALLOWED" });
+  await expect(
+    f.creation.submit(f.principal, f.input({ width: 4096 })),
+  ).rejects.toMatchObject({ code: "SPEC_LIMIT" });
+});
+it("persists referenced generation after ordinary logout; keeps content private and storage reclaim idempotent", async () => {
+  const upload = await f.creation.upload(f.principal, f.png);
+  const t = await f.creation.submit(
+    f.principal,
+    f.input({ referenceIds: [upload.id], count: 2 }),
+  );
+  await expect(f.creation.delete(f.principal, upload.id)).rejects.toMatchObject(
+    { code: "ASSET_REFERENCED" },
+  );
+  await f.service.logout(f.login.token);
+  await f.worker();
+  const completed = await f.done(t.id);
+  expect(completed.state).toBe("succeeded");
+  expect(completed.outputs).toHaveLength(2);
+  expect((await f.repo.usage(f.principal)).used).toBe(2);
+  expect(
+    (await f.creation.bytes(f.principal, completed.outputs[0].id)).bytes.length,
+  ).toBeGreaterThan(0);
+  const member = await f.service.createUser(f.principal, "other");
+  await f.service.redeem(member.token, testPassword, "activate");
+  const session = await f.service.login("other", testPassword),
+    p = (await f.service.authenticate(session.token)).user;
+  await expect(f.repo.task(p, t.id)).rejects.toMatchObject({ status: 404 });
+  await expect(f.creation.bytes(p, upload.id)).rejects.toMatchObject({
+    status: 404,
+  });
+  const owned = await f.creation.upload(p, f.png);
+  await expect(f.creation.bytes(f.principal, owned.id)).rejects.toMatchObject({
+    status: 404,
+  });
+  const usage = await f.repo.usage(f.principal);
+  const a = await f.repo.asset(f.principal, completed.outputs[0].id);
+  await f.creation.delete(f.principal, a.id);
+  await f.repo.finalizeDelete(a);
+  expect((await f.repo.usage(f.principal)).storageUsed).toBe(
+    usage.storageUsed - a.bytes - a.previewBytes,
+  );
+  expect((await f.repo.task(f.principal, t.id)).outputs[0].deleted).toBe(true);
+});
+it("keeps partial success and unknown holds; metadata-only manual resolution is idempotent and does not send models", async () => {
+  let calls = 0;
+  const reference = await f.creation.upload(f.principal, f.png);
+  const t = await f.creation.submit(
+    f.principal,
+    f.input({ count: 3, referenceIds: [reference.id] }),
+  );
+  await f.worker({
+    generate: async () => {
+      calls++;
+      if (calls === 2) throw new ImageCallError("unknown", "RESULT_UNKNOWN");
+      return f.png;
+    },
+  });
+  const result = await f.done(t.id);
+  expect(result.state).toBe("partial");
+  expect(result.used).toBe(1);
+  expect(result.held).toBe(1);
+  expect(result.pendingReview).toBe(true);
+  expect(calls).toBe(2);
+  const review = await f.repo.review(f.principal);
+  expect(JSON.stringify(review)).not.toContain("Synthetic private prompt");
+  expect(JSON.stringify(review)).not.toContain("secret");
+  await expect(
+    f.creation.delete(f.principal, reference.id),
+  ).rejects.toMatchObject({ code: "ASSET_REFERENCED" });
+  await f.repo.resolve(f.principal, t.id, 0, "Verified upstream no image");
+  await f.repo.resolve(f.principal, t.id, 0, "Verified upstream no image");
+  await expect(
+    f.repo.resolve(f.principal, t.id, 1, "other reason"),
+  ).rejects.toMatchObject({ code: "RESOLUTION_CONFLICT" });
+  expect((await f.repo.usage(f.principal)).held).toBe(0);
+  expect(calls).toBe(2);
+  await f.creation.delete(f.principal, reference.id);
+});
+it("retries only one definitive 429 and enforces actual-dispatch attempt budgets", async () => {
+  let calls = 0;
+  const t = await f.creation.submit(f.principal, f.input());
+  await f.worker({
+    generate: async () => {
+      calls++;
+      if (calls === 1)
+        throw new ImageCallError("rejected", "UPSTREAM_RATE_LIMIT", 429);
+      return f.png;
+    },
+  });
+  expect((await f.done(t.id)).state).toBe("succeeded");
+  expect(calls).toBe(2);
+  expect((await f.repo.usage(f.principal)).attempts).toBe(2);
+  const policy = await f.repo.getPolicy(f.principal, f.principal.id);
+  await f.repo.setPolicy(f.principal, f.principal.id, {
+    ...policy,
+    attemptsLimit: 2,
+  });
+  const exhausted = await f.creation.submit(f.principal, f.input());
+  expect((await f.done(exhausted.id)).state).toBe("failed");
+  expect(calls).toBe(2);
+});
+it("stops dispatch on cancel, disable/re-enable or credential reset; in-flight outcomes may remain unknown", async () => {
+  const pending = await f.creation.submit(f.principal, f.input());
+  await f.repo.cancel(f.principal, pending.id);
+  expect((await f.repo.task(f.principal, pending.id)).state).toBe("cancelled");
+  expect((await f.repo.usage(f.principal)).held).toBe(0);
+  const member = await f.service.createUser(f.principal, "revoked");
+  await f.service.redeem(member.token, testPassword, "activate");
+  const session = await f.service.login("revoked", testPassword),
+    p = (await f.service.authenticate(session.token)).user;
+  const project = await f.service.createProject(p, "revoked project");
+  const queued = await f.creation.submit(p, f.input({ projectId: project.id }));
+  await f.service.enable(f.principal, p.id, false);
+  await f.service.enable(f.principal, p.id, true);
+  await f.worker();
+  const fresh = await f.service.login("revoked", testPassword),
+    principal = (await f.service.authenticate(fresh.token)).user;
+  for (let n = 0; n < 100; n++) {
+    const r = await f.repo.task(principal, queued.id);
+    if (r.state === "cancelled") break;
+    await new Promise((r) => setTimeout(r, 25));
+  }
+  expect((await f.repo.task(principal, queued.id)).state).toBe("cancelled");
+});
+it("refuses a second Worker and classifies old running work without replaying unknown calls", async () => {
+  const t = await f.creation.submit(f.principal, f.input({ count: 2 })),
+    work = await f.repo.claim([], 0);
+  await f.repo.dispatch(work!, 0, 0);
+  let calls = 0;
+  const first = await f.worker({
+    generate: async () => {
+      calls++;
+      return f.png;
+    },
+  });
+  const other = new ImageWorker(
+    f.pool,
+    f.repo,
+    f.files,
+    new CompatibleImageProvider(true),
+    () => {},
+  );
+  await expect(other.start()).rejects.toThrow("WORKER_ALREADY_RUNNING");
+  const r = await f.repo.task(f.principal, t.id);
+  expect(r.state).toBe("failed");
+  expect(r.held).toBe(1);
+  expect(r.pendingReview).toBe(true);
+  expect(calls).toBe(0);
+  expect(first.fatal()).toBe(false);
+});
+it("settles creation-day holds while limiting cross-day attempts on the actual dispatch date", async () => {
+  let now = new Date("2026-10-29T15:59:00Z");
+  const repo = new PgCreationRepository(
+      f.pool,
+      process.env.APP_MASTER_KEY!,
+      true,
+      () => now,
+    ),
+    service = new CreationService(repo, f.files);
+  const t = await service.submit(f.principal, f.input());
+  now = new Date("2026-10-29T16:01:00Z");
+  const work = await repo.claim([], 0);
+  await new ImageExecutor(repo, f.files, {
+    generate: async () => f.png,
+  }).execute(work!, new AbortController().signal);
+  const rows = (
+    await f.pool.query(
+      "SELECT day::text,used,held,attempts FROM image_days ORDER BY day",
+    )
+  ).rows;
+  expect(rows.find((r) => r.day === "2026-10-29")).toMatchObject({
+    used: 1,
+    held: 0,
+    attempts: 0,
+  });
+  expect(rows.find((r) => r.day === "2026-10-30")).toMatchObject({
+    used: 0,
+    held: 0,
+    attempts: 1,
+  });
+  expect((await repo.task(f.principal, t.id)).state).toBe("succeeded");
+});
+it("keeps confirmed ready files after acknowledgement loss, and cleans failed writes without counting success", async () => {
+  const original = f.repo.commitAsset.bind(f.repo);
+  f.repo.commitAsset = async (a, image, attempt) => {
+    await original(a, image, attempt);
+    throw new Error("ACK_LOST");
+  };
+  let assetId = "";
+  await expect(f.creation.upload(f.principal, f.png)).rejects.toThrow(
+    "ACK_LOST",
+  );
+  const r = (
+    await f.pool.query("SELECT * FROM image_assets WHERE state='ready'")
+  ).rows[0];
+  assetId = r.id;
+  expect((await f.creation.bytes(f.principal, assetId)).bytes.length).toBe(
+    f.png.length,
+  );
+  f.repo.commitAsset = original;
+  const failed = await f.creation.submit(f.principal, f.input());
+  await f.worker(
+    { generate: async () => f.png },
+    {
+      ...f.files,
+      inspect: f.files.inspect.bind(f.files),
+      freeSpace: f.files.freeSpace.bind(f.files),
+      read: f.files.read.bind(f.files),
+      remove: f.files.remove.bind(f.files),
+      write: async () => {
+        throw new Error("DISK_WRITE_FAILED");
+      },
+    },
+  );
+  const t = await f.done(failed.id);
+  expect(t.used).toBe(0);
+  expect(t.pendingReview).toBe(true);
+  expect((await f.repo.usage(f.principal)).storageReserved).toBe(0);
+});
+it("rejects invalid/bomb uploads, verifies hashes and HTTP scope/CSRF, and never exposes provider credentials", async () => {
+  await expect(
+    f.creation.upload(f.principal, new Uint8Array([1, 2, 3])),
+  ).rejects.toMatchObject({ code: "INVALID_IMAGE" });
+  expect((await f.repo.usage(f.principal)).storageReserved).toBe(0);
+  const a = await f.creation.upload(f.principal, f.png);
+  const app = createApp(
+    f.service,
+    f.store,
+    { origin: "http://127.0.0.1:5180", production: false },
+    async () => {},
+    undefined,
+    f.creation,
+  );
+  expect(
+    (await app.request(`/api/images/assets/${a.id}/original`)).status,
+  ).toBe(401);
+  const headers = { Cookie: `tuyile_session=${f.login.token}` };
+  const original = await app.request(`/api/images/assets/${a.id}/original`, {
+    headers,
+  });
+  expect(original.status).toBe(200);
+  expect(original.headers.get("cache-control")).toBe("no-store");
+  expect(
+    (
+      await app.request("/api/images/tasks", {
+        method: "POST",
+        headers: {
+          ...headers,
+          Origin: "http://127.0.0.1:5180",
+          "Content-Type": "application/json",
+        },
+        body: "{}",
+      })
+    ).status,
+  ).toBe(403);
+  await f.repo.saveProvider(f.principal, {
+    mode: "openai",
+    baseUrl: "https://provider.example/v1",
+    models: ["private-model"],
+    apiKey: "synthetic-key-do-not-expose",
+    preserveKey: false,
+  });
+  expect(JSON.stringify(await f.repo.providers(f.principal))).not.toContain(
+    "synthetic-key",
+  );
+  expect(JSON.stringify(await f.repo.usage(f.principal))).not.toContain(
+    "provider.example",
+  );
+  const stored = (
+    await f.pool.query(
+      "SELECT secret_cipher FROM image_provider_versions WHERE active",
+    )
+  ).rows[0];
+  expect(stored.secret_cipher).not.toContain("synthetic-key");
+  const row = await f.repo.asset(f.principal, a.id);
+  await writeFile(join(f.root, `${row.fileKey}.original`), "corrupt");
+  await expect(f.creation.bytes(f.principal, a.id)).rejects.toMatchObject({
+    code: "ASSET_UNAVAILABLE",
+  });
+});
+it("cancels an in-flight call without dispatching later outputs", async () => {
+  let entered: () => void = () => {},
+    calls = 0;
+  const started = new Promise<void>((r) => (entered = r));
+  const t = await f.creation.submit(f.principal, f.input({ count: 2 }));
+  await f.worker({
+    generate: async (_c, _i, _r, signal) => {
+      calls++;
+      entered();
+      return new Promise((_resolve, reject) => {
+        signal.addEventListener(
+          "abort",
+          () => reject(new ImageCallError("unknown", "CALL_INTERRUPTED")),
+          { once: true },
+        );
+      });
+    },
+  });
+  await started;
+  await f.repo.cancel(f.principal, t.id);
+  const result = await f.done(t.id);
+  expect(calls).toBe(1);
+  expect(result.held).toBe(1);
+  expect(result.pendingReview).toBe(true);
+});
+it("preserves earlier ready outputs on Worker restart and releases steps never dispatched", async () => {
+  const t = await f.creation.submit(f.principal, f.input({ count: 3 })),
+    work = (await f.repo.claim([], 0))!;
+  const d = (await f.repo.dispatch(work, 0, 0))!;
+  await f.repo.attemptResult(d.attemptId, "received");
+  const a = await f.repo.outputIntent(work, 0),
+    image = await f.files.inspect(f.png);
+  await f.files.write(a.fileKey, image);
+  await f.repo.commitAsset(a, image, d.attemptId);
+  await f.repo.dispatch(work, 1, 0);
+  await f.worker();
+  const result = await f.repo.task(f.principal, t.id);
+  expect(result.state).toBe("partial");
+  expect(result.used).toBe(1);
+  expect(result.held).toBe(1);
+  expect(result.outputs).toHaveLength(1);
+  expect((await f.creation.bytes(f.principal, a.id)).bytes.length).toBe(
+    f.png.length,
+  );
+});
+it("retains a ready task output after DB acknowledgement loss without duplicate settlement", async () => {
+  const commit = f.repo.commitAsset.bind(f.repo);
+  f.repo.commitAsset = async (a, b, id) => {
+    await commit(a, b, id);
+    throw new Error("ACK_LOST");
+  };
+  const t = await f.creation.submit(f.principal, f.input());
+  await f.worker({ generate: async () => f.png });
+  const result = await f.done(t.id);
+  expect(result.state).toBe("succeeded");
+  expect(result.used).toBe(1);
+  expect(result.held).toBe(0);
+  expect(result.outputs).toHaveLength(1);
+  expect(
+    (await f.creation.bytes(f.principal, result.outputs[0].id)).bytes.length,
+  ).toBe(f.png.length);
+});

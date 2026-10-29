@@ -1,5 +1,5 @@
 import pg from "pg";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { createHash } from "node:crypto";
 export async function migrate(url: string) {
   const c = new pg.Client({
@@ -22,22 +22,31 @@ export async function migrate(url: string) {
     await c.query(
       "CREATE TABLE IF NOT EXISTS schema_migrations(version integer PRIMARY KEY,checksum text NOT NULL,applied_at timestamptz NOT NULL DEFAULT now())",
     );
-    const sql = await readFile(
-      new URL("../migrations/0001_identity.sql", import.meta.url),
-      "utf8",
-    );
-    const checksum = createHash("sha256").update(sql).digest("hex");
-    const old = (
-      await c.query("SELECT checksum FROM schema_migrations WHERE version=1")
-    ).rows[0];
-    if (old && old.checksum !== checksum)
-      throw new Error("MIGRATION_CHECKSUM_MISMATCH");
-    if (!old) {
-      await c.query(sql);
-      await c.query(
-        "INSERT INTO schema_migrations(version,checksum) VALUES(1,$1)",
-        [checksum],
+    const files = (await readdir(new URL("../migrations/", import.meta.url)))
+      .filter((n) => /^\d{4}_.*\.sql$/.test(n))
+      .sort();
+    for (const file of files) {
+      const version = Number(file.slice(0, 4));
+      const sql = await readFile(
+        new URL(`../migrations/${file}`, import.meta.url),
+        "utf8",
       );
+      const checksum = createHash("sha256").update(sql).digest("hex");
+      const old = (
+        await c.query(
+          "SELECT checksum FROM schema_migrations WHERE version=$1",
+          [version],
+        )
+      ).rows[0];
+      if (old && old.checksum !== checksum)
+        throw new Error("MIGRATION_CHECKSUM_MISMATCH");
+      if (!old) {
+        await c.query(sql);
+        await c.query(
+          "INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)",
+          [version, checksum],
+        );
+      }
     }
     await c.query(
       "REVOKE INSERT,UPDATE,DELETE ON schema_migrations FROM tuyile_runtime",

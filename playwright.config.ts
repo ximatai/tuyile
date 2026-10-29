@@ -3,7 +3,7 @@ export default defineConfig({
   testDir: "./tests/e2e",
   workers: 1,
   fullyParallel: false,
-  timeout: 30000,
+  timeout: 90000,
   reporter: "list",
   use: {
     channel: "chromium",
@@ -11,6 +11,13 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   webServer: [
+    {
+      command: "node --import tsx apps/worker/src/main.ts",
+      wait: { stdout: /WORKER_READY/ },
+      reuseExistingServer: false,
+      timeout: 30000,
+      env: { FAKE_IMAGE_DELAY_MS: "1800" },
+    },
     {
       command: "node --import tsx apps/api/src/main.ts",
       url: "http://127.0.0.1:8793/api/ready",

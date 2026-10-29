@@ -1,3 +1,5 @@
+import { UsagePage } from "./creation";
+import { ImageAdminPage } from "./image-admin";
 import React, { useState, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -9,7 +11,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import type { SessionView } from "@tuyile/contracts";
-import { Button, Notice } from "@tuyile/ui";
+import { Button, Notice, UiProvider } from "@tuyile/ui";
 import { client, ApiError, notifySessionChange, sessionTabId } from "./api";
 import { AuthPage } from "./auth";
 import { ProjectsPage } from "./projects";
@@ -70,11 +72,15 @@ function App() {
     );
   const path = location.pathname;
   const page =
-    path === "/admin/users"
-      ? "admin"
-      : path === "/account"
-        ? "account"
-        : "projects";
+    path === "/usage"
+      ? "usage"
+      : path === "/admin/images"
+        ? "image-admin"
+        : path === "/admin/users"
+          ? "admin"
+          : path === "/account"
+            ? "account"
+            : "projects";
   async function logout() {
     setBusy(true);
     setError("");
@@ -121,6 +127,19 @@ function App() {
               <span>账号管理</span>
             </a>
           )}
+          <a href="/usage" aria-current={page === "usage" ? "page" : undefined}>
+            <Folder size={20} />
+            <span>额度与任务</span>
+          </a>
+          {session.user.role === "admin" && (
+            <a
+              href="/admin/images"
+              aria-current={page === "image-admin" ? "page" : undefined}
+            >
+              <Users size={20} />
+              <span>图片服务</span>
+            </a>
+          )}
           <a
             aria-current={page === "account" ? "page" : undefined}
             href="/account"
@@ -163,7 +182,11 @@ function App() {
         </header>
         <main className="content">
           {error && <Notice error>{error}</Notice>}
-          {page === "admin" ? (
+          {page === "usage" ? (
+            <UsagePage csrfToken={session.csrfToken} />
+          ) : page === "image-admin" ? (
+            <ImageAdminPage csrfToken={session.csrfToken} />
+          ) : page === "admin" ? (
             <AdminPage csrfToken={session.csrfToken} ownId={session.user.id} />
           ) : page === "account" ? (
             <AccountPage csrfToken={session.csrfToken} />
@@ -177,6 +200,8 @@ function App() {
 }
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <App />
+    <UiProvider>
+      <App />
+    </UiProvider>
   </React.StrictMode>,
 );

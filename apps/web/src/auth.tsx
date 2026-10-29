@@ -70,7 +70,11 @@ export function AuthPage() {
             : "使用管理员为你创建的账号继续。"}
         </p>
         {done && <Notice>密码已设置，请登录。</Notice>}
-        <form onSubmit={submit} aria-label={redeem ? "设置密码" : "登录"}>
+        <form
+          key={redeem ? "redeem" : "login"}
+          onSubmit={submit}
+          aria-label={redeem ? "设置密码" : "登录"}
+        >
           {!redeem && (
             <Field
               label="账号"

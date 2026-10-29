@@ -1,27 +1,78 @@
-import type {
-  ButtonHTMLAttributes,
-  InputHTMLAttributes,
-  ReactNode,
+import {
+  useId,
+  useState,
+  type ButtonHTMLAttributes,
+  type InputHTMLAttributes,
+  type ReactNode,
 } from "react";
+import {
+  Button as AntButton,
+  Input,
+  Alert,
+  ConfigProvider,
+  App,
+  Select,
+} from "antd";
+import zhCN from "antd/locale/zh_CN";
+export function UiProvider({ children }: { children: ReactNode }) {
+  const nonce = document.querySelector<HTMLMetaElement>(
+    'meta[name="csp-nonce"]',
+  )?.content;
+  return (
+    <ConfigProvider
+      locale={zhCN}
+      button={{ autoInsertSpace: false }}
+      csp={nonce ? { nonce } : undefined}
+      theme={{
+        token: {
+          colorPrimary: "#0062b0",
+          colorInfo: "#0062b0",
+          colorText: "#171f2a",
+          colorBgLayout: "#f5f7fb",
+          colorBorder: "#e6ecf4",
+          borderRadius: 6,
+          controlHeight: 44,
+          fontFamily:
+            'ui-sans-serif, system-ui, -apple-system, "PingFang SC", sans-serif',
+          motion: !window.matchMedia("(prefers-reduced-motion: reduce)")
+            .matches,
+        },
+      }}
+    >
+      <App>{children}</App>
+    </ConfigProvider>
+  );
+}
 export function Button({
   children,
   className = "",
+  type,
+  color: _,
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
-    <button className={`button ${className}`} {...props}>
+    <AntButton
+      className={`button ${className}`}
+      type={className.split(" ").includes("primary") ? "primary" : "default"}
+      htmlType={type ?? "submit"}
+      {...props}
+    >
       {children}
-    </button>
+    </AntButton>
   );
 }
 export function Field({
   label,
+  id: provided,
+  size: _,
   ...props
 }: InputHTMLAttributes<HTMLInputElement> & { label: string }) {
+  const generated = useId(),
+    id = provided ?? generated;
   return (
-    <label className="field">
+    <label className="field" htmlFor={id}>
       <span>{label}</span>
-      <input {...props} />
+      <Input id={id} {...props} />
     </label>
   );
 }
@@ -33,11 +84,78 @@ export function Notice({
   error?: boolean;
 }) {
   return (
-    <p
-      className={error ? "notice error" : "notice"}
-      role={error ? "alert" : "status"}
-    >
-      {children}
-    </p>
+    <div className="product-notice">
+      <Alert
+        role={error ? "alert" : "status"}
+        type={error ? "error" : "info"}
+        showIcon
+        description={children}
+      />
+    </div>
   );
 }
+export function useConfirm() {
+  const { modal } = App.useApp();
+  return (content: string) =>
+    new Promise<boolean>((resolve) => {
+      modal.confirm({
+        title: "请确认",
+        content,
+        okText: "确认",
+        cancelText: "取消",
+        onOk: () => {
+          resolve(true);
+        },
+        onCancel: () => resolve(false),
+      });
+    });
+}
+export function ChoiceField({
+  label,
+  name,
+  value,
+  defaultValue,
+  options,
+  onValueChange,
+  disabled,
+}: {
+  label: string;
+  name?: string;
+  value?: string;
+  defaultValue?: string;
+  options: { value: string; label: string }[];
+  onValueChange?: (value: string) => void;
+  disabled?: boolean;
+}) {
+  const id = useId(),
+    [local, setLocal] = useState(defaultValue ?? options[0]?.value ?? "");
+  const current = value ?? local;
+  return (
+    <div className="field">
+      <label htmlFor={id}>{label}</label>
+      <Select
+        id={id}
+        value={current}
+        options={options}
+        disabled={disabled}
+        onChange={(value) => {
+          setLocal(value);
+          onValueChange?.(value);
+        }}
+      />
+      {name && <input type="hidden" name={name} value={current} />}
+    </div>
+  );
+}
+export {
+  Upload,
+  Checkbox,
+  Table,
+  Input,
+  Tag,
+  Statistic,
+  Empty,
+  Tabs,
+  Form,
+  ConfigProvider as ControlScope,
+} from "antd";

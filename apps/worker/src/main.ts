@@ -2,31 +2,44 @@ import {
   loadConfig,
   createDatabase,
   assertSchema,
+  creationConfig,
+  PrivateImageFiles,
+  PgCreationRepository,
+  CompatibleImageProvider,
+  ImageWorker,
 } from "@tuyile/infrastructure";
-const config = loadConfig();
-const { pool } = createDatabase(config.databaseUrl);
+const config = loadConfig(),
+  images = creationConfig(),
+  { pool } = createDatabase(config.databaseUrl);
 let stopping = false;
+const worker = new ImageWorker(
+  pool,
+  new PgCreationRepository(pool, images.masterKey, images.fakeAllowed),
+  new PrivateImageFiles(images.root),
+  new CompatibleImageProvider(images.fakeAllowed, images.fakeDelay),
+  () => {
+    console.error("WORKER_LOCK_OR_DATABASE_LOST");
+    process.exit(1);
+  },
+);
 try {
   await assertSchema(pool);
-  // Stage 1 validates the independent process lifecycle; task consumption is stage 2.
-  console.log("WORKER_READY identity-foundation");
-  const timer = setInterval(() => {
-    void pool.query("SELECT 1").catch(() => {
-      console.error("WORKER_DATABASE_UNAVAILABLE");
-      void stop(1);
-    });
-  }, 5000);
-  async function stop(code = 0) {
+  await worker.start();
+  console.log("WORKER_READY image-queue");
+  const stop = async () => {
     if (stopping) return;
     stopping = true;
-    clearInterval(timer);
+    const timeout = setTimeout(() => process.exit(1), 15000);
+    timeout.unref();
+    await worker.stop();
     await pool.end();
-    process.exit(code);
-  }
+    clearTimeout(timeout);
+    process.exit(0);
+  };
   process.on("SIGINT", () => void stop());
   process.on("SIGTERM", () => void stop());
 } catch {
-  console.error("WORKER_STARTUP_FAILED_CHECK_SCHEMA_AND_RUNTIME_ROLE");
+  console.error("WORKER_STARTUP_FAILED_CHECK_SCHEMA_ROLE_OR_SINGLE_INSTANCE");
   await pool.end();
   process.exitCode = 1;
 }

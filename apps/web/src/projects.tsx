@@ -1,3 +1,4 @@
+import { CreationPage } from "./creation";
 import { useEffect, useState, type FormEvent } from "react";
 import { Folder, Plus, ArrowLeft } from "lucide-react";
 import type {
@@ -7,6 +8,7 @@ import type {
 import { Button, Field, Notice } from "@tuyile/ui";
 import { client } from "./api";
 export function ProjectsPage({ csrfToken }: { csrfToken: string }) {
+  const [createVersion, setCreateVersion] = useState(0);
   const [projects, setProjects] = useState<Project[]>([]),
     [selected, setSelected] = useState<Project | null>(null),
     [loading, setLoading] = useState(true),
@@ -59,7 +61,7 @@ export function ProjectsPage({ csrfToken }: { csrfToken: string }) {
       });
       setProjects((old) => [p, ...old]);
       setOffset((v) => v + 1);
-      form.reset();
+      setCreateVersion((v) => v + 1);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -87,7 +89,7 @@ export function ProjectsPage({ csrfToken }: { csrfToken: string }) {
 
   if (selectedId)
     return (
-      <section>
+      <section className="project-workspace">
         <a className="back" href="/projects">
           <ArrowLeft size={16} />
           返回项目
@@ -101,12 +103,11 @@ export function ProjectsPage({ csrfToken }: { csrfToken: string }) {
             <p className="muted">
               创建于 {new Date(selected.createdAt).toLocaleString("zh-CN")}
             </p>
-            <dl className="detail">
-              <dt>归属</dt>
-              <dd>你的个人工作区</dd>
-              <dt>项目标识</dt>
-              <dd>{selected.id}</dd>
-            </dl>
+            <CreationPage
+              key={selected.id}
+              csrfToken={csrfToken}
+              projectId={selected.id}
+            />
           </>
         ) : null}
         {error && <Notice error>{error}</Notice>}
@@ -122,7 +123,12 @@ export function ProjectsPage({ csrfToken }: { csrfToken: string }) {
         </div>
         <span className="count">已显示 {projects.length} 个项目</span>
       </div>
-      <form className="create-project" onSubmit={create} aria-label="创建项目">
+      <form
+        key={createVersion}
+        className="create-project"
+        onSubmit={create}
+        aria-label="创建项目"
+      >
         <Field
           label="项目名称"
           name="name"

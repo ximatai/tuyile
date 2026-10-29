@@ -1,0 +1,601 @@
+import { useState, useEffect, useRef, type FormEvent } from "react";
+import type { ImageInput, ImageTask, ImageUsage } from "@tuyile/contracts";
+import {
+  Button,
+  Field,
+  Notice,
+  useConfirm,
+  ChoiceField,
+  Upload,
+  Input,
+  ControlScope,
+} from "@tuyile/ui";
+import { client, ApiError } from "./api";
+const states: Record<string, string> = {
+  queued: "排队中",
+  running: "执行中",
+  succeeded: "已完成",
+  partial: "部分完成",
+  failed: "未完成",
+  cancelled: "已取消",
+};
+export function TaskResults({
+  tasks,
+  csrfToken,
+  refresh,
+}: {
+  tasks: ImageTask[];
+  csrfToken: string;
+  refresh: () => void;
+}) {
+  const confirm = useConfirm();
+  const [error, setError] = useState(""),
+    [busy, setBusy] = useState(false);
+  async function cancel(id: string) {
+    setBusy(true);
+    setError("");
+    try {
+      await client(csrfToken)(`/images/tasks/${id}/cancel`, {});
+      refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function remove(id: string) {
+    if (
+      !(await confirm(
+        "删除原图和预览？此操作不返还图片次数，仍被任务引用时不能删除。",
+      ))
+    )
+      return;
+    setBusy(true);
+    setError("");
+    try {
+      await client(csrfToken)(`/images/assets/${id}/delete`, {});
+      refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="task-list">
+      {error && <Notice error>{error}</Notice>}
+      {!tasks.length && (
+        <div className="empty">
+          <h2>创作从一个想法开始</h2>
+          <p>输入需求并提交，完成的图片会出现在这里。</p>
+        </div>
+      )}
+      {tasks.map((t) => (
+        <article className="task-result" key={t.id}>
+          <div className="page-heading">
+            <h2>
+              {states[t.state]}
+              {t.pendingReview ? " · 结果待核验" : ""}
+            </h2>
+            <span className="hint">
+              {t.used} / {t.count} 张{t.held ? ` · ${t.held} 张预留` : ""}
+            </span>
+          </div>
+          <p className="task-prompt">{t.prompt}</p>
+          <div className="hint">
+            {t.model} · {new Date(t.createdAt).toLocaleString("zh-CN")}
+          </div>
+          {t.pendingReview && (
+            <Notice>
+              上游结果暂不确定，相关额度仍预留。请联系管理员核验，不要重复生成。
+            </Notice>
+          )}
+          {t.errorCode && !t.pendingReview && (
+            <Notice error>
+              {t.errorCode === "WORKER_INTERRUPTED"
+                ? "后台执行中断，已保存图片仍可查看。"
+                : `任务未全部完成（${t.errorCode}）。已保存的图片会保留。`}
+            </Notice>
+          )}
+          <div className="output-grid">
+            {t.outputs.map((a) => (
+              <figure key={a.id}>
+                {a.deleted ? (
+                  <p>原图已删除</p>
+                ) : (
+                  <>
+                    <a
+                      href={`/api/images/assets/${a.id}/original`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <img
+                        src={`/api/images/assets/${a.id}/preview`}
+                        alt={`已保存图片，${a.width} × ${a.height}`}
+                        loading="lazy"
+                      />
+                    </a>
+                    <figcaption>
+                      {a.width} × {a.height}
+                      <a href={`/api/images/assets/${a.id}/download`}>
+                        下载原图
+                      </a>
+                    </figcaption>
+                    <Button disabled={busy} onClick={() => void remove(a.id)}>
+                      删除原图
+                    </Button>
+                  </>
+                )}
+              </figure>
+            ))}
+          </div>
+          {["queued", "running"].includes(t.state) && (
+            <Button
+              disabled={busy || t.cancelRequested}
+              onClick={() => void cancel(t.id)}
+            >
+              {t.cancelRequested ? "正在取消…" : "取消任务"}
+            </Button>
+          )}
+        </article>
+      ))}
+    </div>
+  );
+}
+export function UsageSummary({ usage }: { usage: ImageUsage }) {
+  return (
+    <div className="usage-summary">
+      <h2>今日图片额度</h2>
+      <div className="usage-numbers">
+        <span>
+          已用 <strong>{usage.used}</strong>
+        </span>
+        <span>
+          预留 <strong>{usage.held}</strong>
+        </span>
+        <span>
+          可用 <strong>{usage.available}</strong>
+        </span>
+      </div>
+      {usage.earlierHeld > 0 && (
+        <p className="hint">历史日期另有 {usage.earlierHeld} 张待结算预留。</p>
+      )}
+      <p className="hint">
+        上游尝试 {usage.attempts} / {usage.policy.attemptsLimit} · 每日上海时间
+        00:00 切换
+      </p>
+      <p className="hint">
+        存储{" "}
+        {((usage.storageUsed + usage.storageReserved) / 1048576).toFixed(1)} /{" "}
+        {(usage.policy.storageLimit / 1048576).toFixed(0)} MiB（包含预留）
+      </p>
+      <p className="hint">次数额度不等于费用上限；费用未知时不显示估算账单。</p>
+    </div>
+  );
+}
+export function CreationPage({
+  csrfToken,
+  projectId,
+}: {
+  csrfToken: string;
+  projectId: string;
+}) {
+  const [usage, setUsage] = useState<ImageUsage | null>(null),
+    [tasks, setTasks] = useState<ImageTask[]>([]),
+    [error, setError] = useState(""),
+    [busy, setBusy] = useState(false),
+    [model, setModel] = useState(""),
+    [prompt, setPrompt] = useState(""),
+    [references, setReferences] = useState<{ id: string; name: string }[]>([]),
+    [pending, setPending] = useState<ImageInput | null>(null),
+    [mobile, setMobile] = useState("create");
+  const active = useRef(false),
+    mounted = useRef(true),
+    version = useRef(0);
+  async function refresh() {
+    const run = ++version.current;
+    try {
+      const [u, t] = await Promise.all([
+        client(csrfToken)<ImageUsage>("/images/usage"),
+        client(csrfToken)<{ tasks: ImageTask[] }>(
+          `/images/tasks?projectId=${projectId}`,
+        ),
+      ]);
+      if (mounted.current && run === version.current) {
+        setUsage(u);
+        setTasks(t.tasks);
+        setModel((m) => (u.models.includes(m) ? m : (u.models[0] ?? "")));
+      }
+    } catch (e) {
+      if (mounted.current) setError((e as Error).message);
+    }
+  }
+  useEffect(() => {
+    mounted.current = true;
+    void refresh();
+    const timer = setInterval(() => void refresh(), 1500);
+    return () => {
+      mounted.current = false;
+      version.current++;
+      clearInterval(timer);
+    };
+  }, [csrfToken, projectId]);
+  async function upload(file: File | undefined) {
+    if (!file) return;
+    if (file.size > 20 * 1024 * 1024) {
+      setError("参考图不能超过 20 MiB。");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      const response = await fetch("/api/images/uploads", {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": file.type, "X-CSRF-Token": csrfToken },
+        body: file,
+      });
+      if (!response.ok) {
+        const body = await response.json();
+        throw new ApiError(body.error.code);
+      }
+      const asset = await response.json();
+      setReferences((v) => [...v, { id: asset.id, name: file.name }]);
+      await refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  const formRef = useRef<HTMLFormElement>(null);
+  async function send(input: ImageInput) {
+    if (active.current) return;
+    active.current = true;
+    setBusy(true);
+    setError("");
+    setPending(input);
+    try {
+      await client(csrfToken)("/images/tasks", input);
+      setPending(null);
+      setPrompt("");
+      setMobile("results");
+      await refresh();
+    } catch (e) {
+      if (e instanceof ApiError && e.code !== "INTERNAL_ERROR")
+        setPending(null);
+      setError(
+        `${(e as Error).message} 若提交结果未确认，请查找这次提交，或用同一请求重试。`,
+      );
+    } finally {
+      active.current = false;
+      setBusy(false);
+    }
+  }
+  function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (pending) {
+      void send(pending);
+      return;
+    }
+    const f = new FormData(e.currentTarget);
+    void send({
+      projectId,
+      requestKey: crypto.randomUUID(),
+      prompt: String(f.get("prompt")),
+      model,
+      width: Number(f.get("width")),
+      height: Number(f.get("height")),
+      quality: f.get("quality") as ImageInput["quality"],
+      format: f.get("format") as ImageInput["format"],
+      count: Number(f.get("count")),
+      referenceIds: references.map((r) => r.id),
+    });
+  }
+  async function recover() {
+    if (!pending) return;
+    setBusy(true);
+    try {
+      await client(csrfToken)(
+        `/images/recover?projectId=${projectId}&requestKey=${pending.requestKey}`,
+      );
+      setPending(null);
+      setError("");
+      await refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <section className="creation-workbench">
+      <div className="mobile-creation-switch">
+        <Button
+          aria-pressed={mobile === "create"}
+          onClick={() => setMobile("create")}
+        >
+          创作
+        </Button>
+        <Button
+          aria-pressed={mobile === "results"}
+          onClick={() => setMobile("results")}
+        >
+          任务与结果
+        </Button>
+      </div>
+      <div className={`creation-layout show-${mobile}`}>
+        <div className="creation-results">
+          <TaskResults
+            tasks={tasks}
+            csrfToken={csrfToken}
+            refresh={() => void refresh()}
+          />
+        </div>
+        <aside className="creation-panel" aria-label="图片创作">
+          <h2>图片创作</h2>
+          {usage?.providerMode === "fake" && (
+            <Notice>
+              本地测试模型：生成测试色块，不调用真实服务，不产生模型费用。
+            </Notice>
+          )}
+          {usage && !usage.models.length && (
+            <Notice>尚未配置可用的图片服务，请联系管理员。</Notice>
+          )}
+          <form ref={formRef} onSubmit={submit} aria-label="提交图片任务">
+            <ControlScope
+              componentDisabled={busy || !!pending || !usage?.models.length}
+            >
+              <fieldset disabled={busy || !!pending || !usage?.models.length}>
+                <label className="field">
+                  <span>创作需求</span>
+                  <Input.TextArea
+                    name="prompt"
+                    value={prompt}
+                    onChange={(event) => setPrompt(event.target.value)}
+                    required
+                    maxLength={12000}
+                    rows={5}
+                    placeholder="描述画面、主体、风格和文字要求"
+                  />
+                </label>
+                <ChoiceField
+                  label="图片模型"
+                  value={model}
+                  onValueChange={setModel}
+                  options={(usage?.models ?? []).map((m) => ({
+                    value: m,
+                    label: m,
+                  }))}
+                />
+                <div className="parameter-grid">
+                  <Field
+                    label="宽度"
+                    name="width"
+                    type="number"
+                    defaultValue={1024}
+                    min={256}
+                    max={usage?.policy.maxEdge ?? 2048}
+                    step={16}
+                    required
+                  />
+                  <Field
+                    label="高度"
+                    name="height"
+                    type="number"
+                    defaultValue={1024}
+                    min={256}
+                    max={usage?.policy.maxEdge ?? 2048}
+                    step={16}
+                    required
+                  />
+                  <ChoiceField
+                    label="质量"
+                    name="quality"
+                    defaultValue="medium"
+                    options={[
+                      { value: "low", label: "低" },
+                      { value: "medium", label: "中" },
+                      { value: "high", label: "高" },
+                    ]}
+                  />
+                  <ChoiceField
+                    label="格式"
+                    name="format"
+                    defaultValue="png"
+                    options={[
+                      { value: "png", label: "PNG" },
+                      { value: "jpeg", label: "JPEG" },
+                      { value: "webp", label: "WebP" },
+                    ]}
+                  />
+                  <Field
+                    label="图片张数"
+                    name="count"
+                    type="number"
+                    min={1}
+                    max={usage?.policy.maxCount ?? 4}
+                    defaultValue={1}
+                    required
+                  />
+                </div>
+                <div className="field" data-testid="reference-upload">
+                  <span>上传参考图（可选）</span>
+                  <Upload
+                    accept="image/png,image/jpeg,image/webp"
+                    showUploadList={false}
+                    disabled={busy || references.length >= 4}
+                    beforeUpload={(file) => {
+                      void upload(file);
+                      return false;
+                    }}
+                  >
+                    <Button type="button">选择参考图</Button>
+                  </Upload>
+                </div>
+                {references.map((r) => (
+                  <div className="reference-row" key={r.id}>
+                    <img
+                      src={`/api/images/assets/${r.id}/preview`}
+                      alt="参考图"
+                    />
+                    <span>{r.name}</span>
+                    <Button
+                      type="button"
+                      onClick={() =>
+                        setReferences((v) => v.filter((a) => a.id !== r.id))
+                      }
+                    >
+                      移除引用
+                    </Button>
+                  </div>
+                ))}
+              </fieldset>
+            </ControlScope>
+            {error && <Notice error>{error}</Notice>}
+            <p className="hint">
+              提交后后台排队，关页、刷新和普通退出登录不影响执行。取消可能仍计费；后台中断允许失败，已保存结果保留。整单预留额度，不足时不会自动降低规格。
+            </p>
+            <Button
+              className="primary"
+              disabled={busy || !usage?.models.length}
+            >
+              {busy ? "正在提交…" : pending ? "重试同一提交" : "提交图片任务"}
+            </Button>
+            {pending && (
+              <Button
+                type="button"
+                disabled={busy}
+                onClick={() => void recover()}
+              >
+                查找这次提交
+              </Button>
+            )}
+          </form>
+          {usage && (
+            <details className="quota-details">
+              <summary>
+                今日可用 {usage.available} 张 · 预留 {usage.held} 张
+              </summary>
+              <UsageSummary usage={usage} />
+            </details>
+          )}
+          <a href="/usage">查看全部任务与额度</a>
+        </aside>
+      </div>
+    </section>
+  );
+}
+export function UsagePage({ csrfToken }: { csrfToken: string }) {
+  const [usage, setUsage] = useState<ImageUsage | null>(null),
+    [tasks, setTasks] = useState<ImageTask[]>([]),
+    [error, setError] = useState(""),
+    [more, setMore] = useState(false);
+  const alive = useRef(true);
+  async function refresh() {
+    try {
+      const [u, t] = await Promise.all([
+        client(csrfToken)<ImageUsage>("/images/usage"),
+        client(csrfToken)<{ tasks: ImageTask[]; hasMore: boolean }>(
+          "/images/tasks",
+        ),
+      ]);
+      if (alive.current) {
+        setUsage(u);
+        setTasks(t.tasks);
+        setMore(t.hasMore);
+      }
+    } catch (e) {
+      if (alive.current) setError((e as Error).message);
+    }
+  }
+  useEffect(() => {
+    alive.current = true;
+    void refresh();
+    return () => {
+      alive.current = false;
+    };
+  }, [csrfToken]);
+  async function load() {
+    try {
+      const v = await client(csrfToken)<{
+        tasks: ImageTask[];
+        hasMore: boolean;
+      }>(`/images/tasks?offset=${tasks.length}`);
+      setTasks((t) => [...t, ...v.tasks]);
+      setMore(v.hasMore);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+  return (
+    <section>
+      <h1>我的额度与任务</h1>
+      {error && <Notice error>{error}</Notice>}
+      {usage && <UsageSummary usage={usage} />}
+      <Button onClick={() => void refresh()}>刷新状态</Button>
+      <TaskResults
+        tasks={tasks}
+        csrfToken={csrfToken}
+        refresh={() => void refresh()}
+      />
+      {more && <Button onClick={() => void load()}>加载更多任务</Button>}
+      <UploadedReferences csrfToken={csrfToken} />
+    </section>
+  );
+}
+
+export function UploadedReferences({ csrfToken }: { csrfToken: string }) {
+  const confirm = useConfirm();
+  const [assets, setAssets] = useState<
+      { id: string; width: number; height: number }[]
+    >([]),
+    [more, setMore] = useState(false),
+    [error, setError] = useState("");
+  async function load(offset = 0) {
+    try {
+      const response = await client(csrfToken)<{
+        assets: typeof assets;
+        hasMore: boolean;
+      }>(`/images/uploads?offset=${offset}`);
+      setAssets((v) => (offset ? [...v, ...response.assets] : response.assets));
+      setMore(response.hasMore);
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+  useEffect(() => {
+    void load();
+  }, [csrfToken]);
+  async function remove(id: string) {
+    if (!(await confirm("删除这张上传的参考图？正在被任务引用时不会删除。")))
+      return;
+    try {
+      await client(csrfToken)(`/images/assets/${id}/delete`, {});
+      await load();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+  return (
+    <section className="settings-section">
+      <h2>上传的参考图</h2>
+      <p className="hint">解除引用后可删除不再使用的图片，释放存储空间。</p>
+      {error && <Notice error>{error}</Notice>}
+      <div className="output-grid">
+        {assets.map((a) => (
+          <figure key={a.id}>
+            <img
+              src={`/api/images/assets/${a.id}/preview`}
+              alt={`参考图 ${a.width} × ${a.height}`}
+            />
+            <Button onClick={() => void remove(a.id)}>删除参考图</Button>
+          </figure>
+        ))}
+      </div>
+      {more && (
+        <Button onClick={() => void load(assets.length)}>加载更多参考图</Button>
+      )}
+    </section>
+  );
+}

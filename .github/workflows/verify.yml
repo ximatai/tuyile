@@ -24,9 +24,10 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test:e2e
       - run: docker compose config --quiet --no-env-resolution
-      - run: docker compose --profile app up -d --build --wait
+      - run: docker compose --env-file .env.docker -p tuyile-docker --profile app up -d --build --wait
       - run: curl --fail http://127.0.0.1:8792/api/ready
+      - run: pnpm test:docker
       - if: always()
         run: |
-          docker compose --profile app down
+          docker compose --env-file .env.docker -p tuyile-docker --profile app down
           docker compose --env-file .env.test -p tuyile-test down

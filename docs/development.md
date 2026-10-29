@@ -1,6 +1,6 @@
-# 本地开发与阶段 1 验收
+# 本地开发与阶段验收
 
-本工程与原项目运行目录、依赖、构建产物、数据库和配置完全分开。无需停止原服务。阶段 1 只实现账号/工作区/项目；独立 Worker 可启动和关闭，任务消费属于阶段 2。
+本工程与原项目运行目录、依赖、构建产物、数据库和配置完全分开。无需停止原服务。账号/工作区/项目基础已交付；阶段 2 已完成后台创作、私有文件和额度链路，并通过自查与独立 review。
 
 ## 环境与启动
 
@@ -22,7 +22,7 @@ corepack pnpm dev
 | 本地 Web | `http://127.0.0.1:5178` | Vite 代理到独立 API |
 | 本地 API | `http://127.0.0.1:8791` | 开发库 `tuyile_dev`，PG `127.0.0.1:55439` |
 | 浏览器测试 | Web 5180 / API 8793 | 测试库 `tuyile_test`，PG `127.0.0.1:55440` |
-| Docker 本地整体验收 | `http://127.0.0.1:8792` | 使用本工程开发卷，Compose 项目 `tuyile-dev` |
+| Docker 本地整体验收 | `http://127.0.0.1:8792` | 独立 PG 55441 / tuyile_docker，Compose 项目 `tuyile-docker` 与独立图片卷 |
 
 统一使用配置中的 `APP_ORIGIN` 地址访问；`localhost` 与 `127.0.0.1` 是不同 Origin，不混用。默认只绑定 loopback。Web/API/Worker 可通过 `web:dev` / `api:dev` / `worker:dev` 单独启动；Ctrl-C 关闭当前开发进程，不操作旧 LaunchAgent。
 
@@ -42,7 +42,7 @@ corepack pnpm dev
 
 PostgreSQL 初始化创建 `tuyile_migrator` 和 `tuyile_runtime`。前者拥有 `tuyile` schema，后者只有 schema usage 与业务表 DML，不能 CREATE/ALTER 业务 schema，也不能修改迁移记录。API/Worker 启动只检查 schema 版本和运行角色，不自动迁移；schema 缺失/不兼容或身份过度授权时拒绝启动。
 
-版本化 SQL 在 `migrations/`，显式迁移按事务锁和 checksum 执行，重复执行不重复建表，已应用 SQL 被修改则拒绝。当前只有账号/会话/一次性链接/工作区/成员/项目/登录限流数据；没有预建任务、额度或事件平台。内容归属通过 workspace 外键与服务端上下文共同约束，管理员没有跨工作区查看项目的特权。
+版本化 SQL 在 `migrations/`，显式迁移按事务锁和 checksum 执行，重复执行不重复建表，已应用 SQL 被修改则拒绝。迁移 1 保存账号/工作区/项目；迁移 2 增加图片任务、调用记录、额度、配置版本、文件元数据和引用，不建立租约或事件平台。内容归属通过 workspace 外键与服务端上下文共同约束，管理员没有跨工作区查看项目的特权。
 
 ## API 与前端边界
 
@@ -75,14 +75,40 @@ corepack pnpm test:e2e
 
 集成与浏览器测试会清空合成测试库，必须串行；共同启动脚本以本地排他锁拒绝两组同时运行。若强制中断留下锁文件，先核对没有存活测试进程，再移除 `.codex-temp/database-tests.lock`。脚本核对目标为 loopback 55440 的 `tuyile_test`，否则拒绝重置。浏览器测试自行启动/关闭测试 API/Web，并使用运行时随机凭据，截图/trace/合成凭据均被忽略。开发库不被测试重置。首次安装 Linux 浏览器可用 `playwright install --with-deps chromium`。
 
-浏览器覆盖桌面 1440px 和手机 390px：登录、项目创建/刷新、管理员建成员/激活、双账号隔离、改密和注销、折叠导航与页面溢出。构建产物额外在测试端口 8794 验证 API/Worker 就绪、静态页面/JS 访问和 SIGTERM 正常关闭，避免只验证 tsx 开发入口。真实 PG 覆盖迁移重放、运行权限、并发链接兑付、过期/替换令牌、多会话撤销、workspace 外键、HTTP/CSRF 和并发限流。当前没有模型任务，不宣称后台生图或画布验收通过。
+浏览器覆盖桌面 1440px 和手机 390px：登录、项目创建/刷新、管理员建成员/激活、双账号隔离、改密和注销、折叠导航与页面溢出。构建产物额外在测试端口 8794 验证 API/Worker 就绪、静态页面/JS 访问和 SIGTERM 正常关闭，避免只验证 tsx 开发入口。真实 PG 覆盖迁移重放、运行权限、并发链接兑付、过期/替换令牌、多会话撤销、workspace 外键、HTTP/CSRF 和并发限流。阶段 2 补充后台生图、额度、文件和进程故障检查；完整画布和 Agent 属于阶段 3。
 
 ```sh
-docker compose --profile app up -d --build --wait
+docker compose --env-file .env.docker -p tuyile-docker config --quiet --no-env-resolution
+docker compose --env-file .env.docker -p tuyile-docker --profile app up -d --build --wait
+corepack pnpm test:docker
 curl --fail http://127.0.0.1:8792/api/ready
-docker compose --profile app down
+docker compose --env-file .env.docker -p tuyile-docker --profile app down
 ```
 
 本地 Compose 明确采用 development HTTP；Docker 镜像默认 production，正式运行必须 HTTPS Origin，并另行确认主机/域名/密钥与迁移窗口。运行容器用非 root 用户，API/Worker 不接收迁移密码。`down` 保留数据卷，不加 `-v`。迁移命令先完成，API 和 Worker 才启动；不要同时启动两份开发服务占用相同端口。
 
 CI 工作流复用上述脚本，仅建立合成数据和独立卷，不发布镜像或部署。远程 CI 是否通过须看实际运行记录，本地通过不等于远程已运行。
+
+## 后台图片创作与私有文件
+
+API 负责准入，单 Worker 读取 PostgreSQL 队列并执行。每用户等待队列默认 10、全局 64；执行并发默认每用户 1、全局 2。等待与执行容量独立，整单预留图片与存储后才接受任务。同一 requestKey 和相同输入返回原任务，不同输入返回冲突。前端每 1.5 秒读取任务快照，丢失提交响应时使用原键找回。
+
+普通注销不取消任务。停用、改密、重置和显式取消阻止后续 dispatch，并尽力取消在途请求；在途仍可能计费。Worker 使用 PostgreSQL 会话 advisory lock，失去连接立即停止执行，第二份 Worker 拒绝启动。重启时原 running 任务失败或部分完成，dispatched/received 未确认调用保留 unknown，不重发；API 重启不执行这项清理。
+
+`APP_MASTER_KEY` 为 32 字节十六进制密钥，用于 AES-256-GCM 加密 Provider Key；与数据库和图片卷分开保管并备份，丢失后无法解密旧配置。`env:init` 仅补齐缺失配置，不覆盖现有值。Provider 保存为不可变版本；保留 Key 必须显式选择且模式与地址一致。普通用户只收到允许模型，不收到地址或 Key。适配 JSON 生图和 multipart 参考图，仅接受内嵌 base64 图片，不下载上游 URL。未知网络/5xx 不重试，仅明确 429 最多一次重试；真实模型兼容性仍需授权烟测。
+
+开发/测试支持明确标注的 fake Provider，输出真实编码的合成蓝色图片，经过完整 Worker、解码、落盘和额度流程。production 禁止 fake。假服务不调用模型，不能证明真实模型兼容性。
+
+`STORAGE_DIR` 是 API/Worker 共用的私有目录，production 必须使用绝对路径。Docker 使用独立 `images` 卷 `/app/storage`，禁止不同数据库共用图片目录。原件/预览通过鉴权 API 提供，不作静态资源开放。文件经过 staging、同步、rename、数据库 ready 后可见；提交回执丢失不能删除已 ready 文件。孤立 staging 和 deleting 由 Worker 清理，物理删除后释放容量。上传校验真实格式/尺寸并受限解码；读取核验哈希。磁盘低于 512 MiB 暂停新准入。
+
+管理员待核验入口只展示元数据和额度，不展示私人正文、图片或 Key。人工确认成功张数只结算额度，不生成或恢复本地文件；同样处置幂等，不同重复处置拒绝。未解决 unknown 保留相关额度和引用保护。
+
+标准按钮、输入、选择器、表格、上传、提示和确认弹窗采用 Ant Design 6.6.8；共享 UI 包提供工程蓝主题与薄封装。构建 HTML 每次响应生成样式 nonce，经 ConfigProvider 传入动态样式，保持 CSP 的 script-src self，不使用 unsafe-inline。
+
+新增 API 为 `/api/images/usage`、`/api/images/tasks`（提交/列表/详情/取消）、`/api/images/recover`、`/api/images/uploads`、`/api/images/assets/:id/{original,preview,download}`；管理配置为 `/api/image-admin/providers`、`policies/:userId` 和 `review`。全部按服务端工作区鉴权，管理员没有内容越权特例。
+
+构建工具链和 pnpm store 使用 BuildKit 缓存，依赖仍以锁文件安装。若公共注册表下载中断，可在可信环境用 `corepack pack pnpm@9.14.2` 准备相同公共工具链缓存；本轮本地 Docker 验收预热了该工具链及已按文件完整性核验的公开 `antd@6.6.8` 包缓存，随后运行仓库原始 Dockerfile/Compose 构建。没有复制宿主应用构建产物、私人配置或数据进入镜像。网络异常和缓存预热属于本机验证条件，不代表远程 CI 或无缓存下载已通过。
+
+Ant Design 底层 `@rc-component/util@1.14.0` 的滚动条测量及弹窗滚动锁没有传递 nonce，生产浏览器会阻止其临时样式。`patches/` 保留 ESM/CJS 的最小补丁与说明，让该库的动态样式工具在调用方未传 nonce 时读取页面 nonce，显式 nonce 仍优先；不修改全局 DOM、不放开任意内联样式。锁文件固定补丁，Docker 安装前复制补丁，构建浏览器验收覆盖真实 CSP。
+
+Docker 验收每轮在严格守卫的 55441 / `tuyile_docker` 中建立新的随机合成管理员，测试凭据仅写入权限 0600 的忽略文件。它不清空已有数据、不修改应用登录限流，也不访问开发库。API 与构建版浏览器用本轮账号完成检查，避免多轮验收共用账号触发 15 分钟登录预算。

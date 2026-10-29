@@ -9,6 +9,6 @@ await build({
   platform: "node",
   target: "node24",
   format: "esm",
-  external: ["pg"],
+  external: ["pg", "sharp"],
 });
 // Bundle workspace and ESM dependencies together; keep pg as an explicit root runtime dependency.

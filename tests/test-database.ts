@@ -23,7 +23,10 @@ export async function resetDatabase() {
   const { pool: owner } = createDatabase(urls.owner);
   try {
     await owner.query(
-      "TRUNCATE tuyile.sessions,tuyile.password_tokens,tuyile.workspace_members,tuyile.projects,tuyile.workspaces,tuyile.users,tuyile.login_limits CASCADE",
+      "TRUNCATE tuyile.sessions,tuyile.password_tokens,tuyile.workspace_members,tuyile.projects,tuyile.workspaces,tuyile.users,tuyile.login_limits,tuyile.image_provider_versions CASCADE",
+    );
+    await owner.query(
+      "UPDATE tuyile.image_settings SET concurrency=2,queue_limit=64 WHERE id=1",
     );
   } finally {
     await owner.end();

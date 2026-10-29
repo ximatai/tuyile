@@ -10,3 +10,7 @@ Read docs/product-baseline.md, docs/architecture.md, docs/delivery-roadmap.md an
 - Reuse approved engineering-blue tokens and page behavior, preserving license notices; replace global fetch interception, implicit project state and browser-owned execution.
 - Private data, credentials, logs, generated files and screenshots stay outside Git, normally in ignored .codex-temp/ or runtime volumes. Never print environment files or expanded Compose config. Use docker compose config --quiet --no-env-resolution.
 - Public deployment, real private-data migration and paid model calls require their corresponding explicit authorization. Local synthetic development/testing is authorized.
+
+- Use mature mainstream UI components for standard controls and interactions. Ant Design owns inputs, selects, tables, upload triggers, alerts and confirmation dialogs; shared wrappers provide product tokens and layout, not replacement widget implementations. Custom components are for domain behavior and the canvas.
+
+- UI targets medium and large desktop screens. Follow the approved A mockup and B collapsed rail described in docs/ui-direction.md. Do not add small-screen-specific work or substitute a new layout direction.

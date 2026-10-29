@@ -42,11 +42,15 @@ try {
       "tests/integration",
       "--maxWorkers=1",
     ]);
-  else if (process.argv[2] === "e2e") {
+  else if (["e2e", "runtime"].includes(process.argv[2])) {
     const prepared = await run(["--import", "tsx", "scripts/test-prepare.ts"]);
     process.exitCode =
       prepared === 0
-        ? await run(["node_modules/@playwright/test/cli.js", "test"])
+        ? await run(
+            process.argv[2] === "runtime"
+              ? ["scripts/runtime-smoke.mjs"]
+              : ["node_modules/@playwright/test/cli.js", "test"],
+          )
         : prepared;
   } else throw new Error("UNKNOWN_DATABASE_TEST_SUITE");
 } finally {

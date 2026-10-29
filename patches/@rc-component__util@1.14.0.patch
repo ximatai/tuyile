@@ -1,0 +1,32 @@
+diff --git a/es/Dom/dynamicCSS.js b/es/Dom/dynamicCSS.js
+index ad1ea3439f501c96543e3f5b0c89687502a4d87a..d38553ec80ddd68bcc7ad5f4d26102a6c0207f35 100644
+--- a/es/Dom/dynamicCSS.js
++++ b/es/Dom/dynamicCSS.js
+@@ -51,8 +51,9 @@ export function injectCSS(css, option = {}) {
+   if (isPrependQueue && priority) {
+     styleNode.setAttribute(APPEND_PRIORITY, `${priority}`);
+   }
+-  if (csp?.nonce) {
+-    styleNode.nonce = csp?.nonce;
++  const nonce = csp?.nonce ?? document.querySelector('meta[name="csp-nonce"]')?.getAttribute('content');
++  if (nonce) {
++    styleNode.nonce = nonce;
+   }
+   styleNode.innerHTML = css;
+   const container = getContainer(option);
+diff --git a/lib/Dom/dynamicCSS.js b/lib/Dom/dynamicCSS.js
+index 3bb3e957ae4a6721301cdae42125150eaa172ccf..1f8ed52ab06c89ae74382f16a77b51bbaae97a09 100644
+--- a/lib/Dom/dynamicCSS.js
++++ b/lib/Dom/dynamicCSS.js
+@@ -61,8 +61,9 @@ function injectCSS(css, option = {}) {
+   if (isPrependQueue && priority) {
+     styleNode.setAttribute(APPEND_PRIORITY, `${priority}`);
+   }
+-  if (csp?.nonce) {
+-    styleNode.nonce = csp?.nonce;
++  const nonce = csp?.nonce ?? document.querySelector('meta[name="csp-nonce"]')?.getAttribute('content');
++  if (nonce) {
++    styleNode.nonce = nonce;
+   }
+   styleNode.innerHTML = css;
+   const container = getContainer(option);

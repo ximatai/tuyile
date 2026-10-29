@@ -19,13 +19,15 @@
     "start": "node --env-file=.env dist/api/main.js",
     "worker:start": "node --env-file=.env dist/worker/main.js",
     "admin:recover": "node --env-file=.env --import tsx scripts/admin-recover.ts",
-    "test:runtime": "node --env-file=.env.test scripts/runtime-smoke.mjs"
+    "test:runtime": "node --env-file=.env.test scripts/run-db-tests.mjs runtime",
+    "test:docker": "node --env-file=.env.docker --import tsx scripts/docker-smoke.ts && node --import tsx scripts/docker-browser-smoke.ts"
   },
   "dependencies": {
     "@tuyile/contracts": "workspace:*",
     "@tuyile/core": "workspace:*",
     "@tuyile/infrastructure": "workspace:*",
-    "pg": "8.23.1"
+    "pg": "8.23.1",
+    "sharp": "0.35.5"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",
@@ -41,5 +43,10 @@
   "packageManager": "pnpm@9.14.2",
   "engines": {
     "node": "24.15.0"
+  },
+  "pnpm": {
+    "patchedDependencies": {
+      "@rc-component/util@1.14.0": "patches/@rc-component__util@1.14.0.patch"
+    }
   }
 }

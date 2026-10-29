@@ -1,3 +1,5 @@
+import { creationRoutes } from "./creation-routes.js";
+import type { CreationService } from "@tuyile/core";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { Hono } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
@@ -18,7 +20,9 @@ import { AppError, type Workbench, type Store } from "@tuyile/core";
 import { security } from "@tuyile/infrastructure";
 import type { Context } from "hono";
 // DTO validation and HTTP concerns stay here; the core never reads cookies or requests.
-type Env = { Variables: { session: SessionView; requestId: string } };
+export type ApiEnv = {
+  Variables: { session: SessionView; requestId: string; styleNonce: string };
+};
 const cookieName = "tuyile_session";
 const equal = (a: string, b: string) =>
   Buffer.byteLength(a) === Buffer.byteLength(b) &&
@@ -29,15 +33,20 @@ export function createApp(
   config: { origin: string; production: boolean },
   ready: () => Promise<void>,
   clientAddress: (c: Context) => string = () => "direct",
+  creation?: CreationService,
 ) {
-  const app = new Hono<Env>();
+  const app = new Hono<ApiEnv>();
+  app.use("*", async (c, next) => {
+    c.set("styleNonce", randomUUID());
+    await next();
+  });
   app.use(
     "*",
     secureHeaders({
       contentSecurityPolicy: {
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'"],
-        styleSrc: ["'self'"],
+        styleSrc: ["'self'", (c) => `'nonce-${c.get("styleNonce")}'`],
         imgSrc: ["'self'", "data:"],
         connectSrc: ["'self'"],
         frameAncestors: ["'none'"],
@@ -53,16 +62,21 @@ export function createApp(
     c.header("X-Request-Id", c.get("requestId"));
     await next();
   });
-  app.use(
-    "/api/*",
+  app.use("/api/*", async (c, next) =>
     bodyLimit({
-      maxSize: 16384,
+      maxSize:
+        c.req.path === "/api/images/uploads"
+          ? 20 * 1024 * 1024
+          : c.req.path.startsWith("/api/images/") ||
+              c.req.path.startsWith("/api/image-admin/")
+            ? 65536
+            : 16384,
       onError: (c) =>
         c.json(
           { error: { code: "BODY_TOO_LARGE", requestId: c.get("requestId") } },
           413,
         ),
-    }),
+    })(c, next),
   );
   app.use("/api/*", async (c, next) => {
     if (!["GET", "HEAD", "OPTIONS"].includes(c.req.method)) {
@@ -73,7 +87,14 @@ export function createApp(
         ?.toLowerCase()
         .split(";")[0]
         .trim();
-      if (mime !== "application/json") throw new AppError("JSON_REQUIRED", 415);
+      if (
+        mime !== "application/json" &&
+        !(
+          c.req.path === "/api/images/uploads" &&
+          ["image/png", "image/jpeg", "image/webp"].includes(mime ?? "")
+        )
+      )
+        throw new AppError("JSON_REQUIRED", 415);
     }
     await next();
   });
@@ -202,6 +223,7 @@ export function createApp(
     );
     return c.json({ ok: true });
   });
+  if (creation) creationRoutes(app, creation);
   app.notFound((c) =>
     c.json(
       { error: { code: "NOT_FOUND", requestId: c.get("requestId") } },

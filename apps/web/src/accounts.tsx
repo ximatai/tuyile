@@ -1,6 +1,6 @@
 import { useState, useEffect, type FormEvent } from "react";
 import type { UserView, LinkResult, UsersPage } from "@tuyile/contracts";
-import { Button, Field, Notice } from "@tuyile/ui";
+import { Button, Field, Notice, useConfirm, Table } from "@tuyile/ui";
 import { client, notifySessionChange } from "./api";
 export function AdminPage({
   csrfToken,
@@ -9,6 +9,7 @@ export function AdminPage({
   csrfToken: string;
   ownId: string;
 }) {
+  const [createVersion, setCreateVersion] = useState(0);
   const [users, setUsers] = useState<UserView[]>([]),
     [loading, setLoading] = useState(true),
     [busy, setBusy] = useState(false),
@@ -17,6 +18,7 @@ export function AdminPage({
     [copied, setCopied] = useState(false);
   const [hasMore, setHasMore] = useState(false),
     [offset, setOffset] = useState(50);
+  const confirm = useConfirm();
   const api = client(csrfToken);
   useEffect(() => {
     const c = new AbortController();
@@ -85,7 +87,7 @@ export function AdminPage({
       const v = await api<LinkResult>("/admin/users", {
         username: new FormData(f).get("username"),
       });
-      f.reset();
+      setCreateVersion((v) => v + 1);
       return v;
     });
   }
@@ -97,7 +99,12 @@ export function AdminPage({
       <p className="muted">
         维护账号与访问状态。管理员不能查看其他用户的项目、图片和对话。
       </p>
-      <form onSubmit={create} className="create-project" aria-label="创建账号">
+      <form
+        key={createVersion}
+        onSubmit={create}
+        className="create-project"
+        aria-label="创建账号"
+      >
         <Field
           label="新账号"
           name="username"
@@ -154,76 +161,74 @@ export function AdminPage({
       {loading ? (
         <p role="status">正在加载账号…</p>
       ) : (
-        <div
-          className="table-scroll"
-          tabIndex={0}
-          role="region"
-          aria-label="账号列表，可横向滚动"
-        >
-          <table>
-            <thead>
-              <tr>
-                <th>账号</th>
-                <th>角色</th>
-                <th>状态</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => (
-                <tr key={u.id}>
-                  <td>{u.username}</td>
-                  <td>{u.role === "admin" ? "管理员" : "成员"}</td>
-                  <td>
-                    {!u.enabled
-                      ? "已停用"
-                      : u.activated
-                        ? "已激活"
-                        : "待激活/设置密码"}
-                  </td>
-                  <td>
-                    <div className="actions">
-                      <Button
-                        disabled={busy || !u.enabled}
-                        onClick={() => {
-                          if (
-                            confirm(
-                              `重新生成 ${u.username} 的链接？旧链接和旧密码将失效，所有设备退出登录；请保存新链接。`,
-                            )
-                          )
-                            void action(() =>
-                              api(`/admin/users/${u.id}/reset`, {}),
-                            );
-                        }}
-                      >
-                        重新生成链接
-                      </Button>
-                      <Button
-                        disabled={busy || u.id === ownId}
-                        onClick={() => {
-                          if (
-                            u.enabled &&
-                            !confirm(
-                              `停用 ${u.username}？所有设备会退出登录，已确认任务的执行授权也将撤销。`,
-                            )
-                          )
-                            return;
-                          void action(() =>
-                            api(`/admin/users/${u.id}/enabled`, {
-                              enabled: !u.enabled,
-                            }),
-                          );
-                        }}
-                      >
-                        {u.enabled ? "停用" : "启用"}
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <Table<UserView>
+          rowKey="id"
+          dataSource={users}
+          pagination={false}
+          scroll={{ x: 620 }}
+          columns={[
+            { title: "账号", dataIndex: "username", key: "username" },
+            {
+              title: "角色",
+              key: "role",
+              render: (_, u) => (u.role === "admin" ? "管理员" : "成员"),
+            },
+            {
+              title: "状态",
+              key: "state",
+              render: (_, u) =>
+                !u.enabled
+                  ? "已停用"
+                  : u.activated
+                    ? "已激活"
+                    : "待激活/设置密码",
+            },
+            {
+              title: "操作",
+              key: "actions",
+              render: (_, u) => (
+                <div className="actions">
+                  <Button
+                    type="button"
+                    disabled={busy || !u.enabled}
+                    onClick={async () => {
+                      if (
+                        await confirm(
+                          `重新生成 ${u.username} 的链接？旧链接和旧密码将失效，所有设备退出登录；请保存新链接。`,
+                        )
+                      )
+                        void action(() =>
+                          api(`/admin/users/${u.id}/reset`, {}),
+                        );
+                    }}
+                  >
+                    重新生成链接
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={busy || u.id === ownId}
+                    onClick={async () => {
+                      if (
+                        u.enabled &&
+                        !(await confirm(
+                          `停用 ${u.username}？所有设备会退出登录，已确认任务的执行授权也将撤销。`,
+                        ))
+                      )
+                        return;
+                      void action(() =>
+                        api(`/admin/users/${u.id}/enabled`, {
+                          enabled: !u.enabled,
+                        }),
+                      );
+                    }}
+                  >
+                    {u.enabled ? "停用" : "启用"}
+                  </Button>
+                </div>
+              ),
+            },
+          ]}
+        />
       )}
       {hasMore && (
         <Button disabled={busy} onClick={() => void more()}>
