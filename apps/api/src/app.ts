@@ -1,3 +1,5 @@
+import { extensionRoutes } from "./extension-routes.js";
+import type { ExtensionService } from "@tuyile/core";
 import { creationRoutes } from "./creation-routes.js";
 import type { CreationService } from "@tuyile/core";
 import { randomUUID, timingSafeEqual } from "node:crypto";
@@ -34,6 +36,7 @@ export function createApp(
   ready: () => Promise<void>,
   clientAddress: (c: Context) => string = () => "direct",
   creation?: CreationService,
+  extensions?: ExtensionService,
 ) {
   const app = new Hono<ApiEnv>();
   app.use("*", async (c, next) => {
@@ -224,6 +227,7 @@ export function createApp(
     return c.json({ ok: true });
   });
   if (creation) creationRoutes(app, creation);
+  if (extensions) extensionRoutes(app, extensions);
   app.notFound((c) =>
     c.json(
       { error: { code: "NOT_FOUND", requestId: c.get("requestId") } },

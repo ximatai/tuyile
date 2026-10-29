@@ -282,3 +282,6 @@ export * from "./creation.js";
 export type { ImageExecutionConfig } from "./provider-config.js";
 
 export { checkAdmissionBudget, completedTaskState } from "./creation-policy.js";
+export * from "./tools.js";
+export * from "./capabilities.js";
+export * from "./extensions.js";

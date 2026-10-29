@@ -1,3 +1,4 @@
+import { checkImageCapability } from "@tuyile/core";
 import type { TaskRow, AssetRow } from "./rows.js";
 import {
   AppError,
@@ -31,6 +32,7 @@ export class PgExecutionRepository extends PgCreationContext {
           enabled: boolean;
           current_version: number;
           revoked: boolean;
+          tool_revoked: boolean;
         }
       >(
         "SELECT t.*,u.enabled,u.execution_version AS current_version FROM image_tasks t JOIN users u ON u.id=t.user_id WHERE state='queued' ORDER BY t.created_at,t.id LIMIT 100",
@@ -69,6 +71,7 @@ export class PgExecutionRepository extends PgCreationContext {
           input: t.input,
           deadline: t.deadline,
           providerId: t.provider_id,
+          tool: { id: t.tool_id, version: t.tool_version },
         };
     }
     return null;
@@ -82,9 +85,10 @@ export class PgExecutionRepository extends PgCreationContext {
           enabled: boolean;
           current_version: number;
           revoked: boolean;
+          tool_revoked: boolean;
         }
       >(
-        "SELECT t.*,u.enabled,u.execution_version AS current_version,p.revoked FROM image_tasks t JOIN users u ON u.id=t.user_id JOIN image_provider_versions p ON p.id=t.provider_id WHERE t.id=$1",
+        "SELECT t.*,u.enabled,u.execution_version AS current_version,p.revoked,tc.revoked AS tool_revoked FROM image_tasks t JOIN users u ON u.id=t.user_id JOIN image_provider_versions p ON p.id=t.provider_id JOIN tool_controls tc ON tc.tool_id=t.tool_id AND tc.version=t.tool_version WHERE t.id=$1",
         [t.id],
       )
     ).rows[0];
@@ -95,6 +99,7 @@ export class PgExecutionRepository extends PgCreationContext {
       !r.enabled ||
       r.current_version !== r.execution_version ||
       r.revoked ||
+      r.tool_revoked ||
       r.deadline <= this.now()
     );
   }
@@ -125,6 +130,7 @@ export class PgExecutionRepository extends PgCreationContext {
       provider.revoked
     )
       return null;
+    checkImageCapability(task.input, provider.capabilities);
     const day = shanghaiDay(this.now()),
       limits = await this.ensure(c, t.userId, day),
       daily = (

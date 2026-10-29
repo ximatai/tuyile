@@ -148,6 +148,7 @@ export function ChoiceField({
   );
 }
 export {
+  Collapse,
   Upload,
   Checkbox,
   Table,

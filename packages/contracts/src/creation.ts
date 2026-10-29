@@ -1,3 +1,4 @@
+import { imageCapability, type ImageCapability } from "./extensions.js";
 import { z } from "zod";
 export const imageInput = z.object({
   projectId: z.uuid(),
@@ -41,6 +42,7 @@ export const providerInput = z.object({
     .regex(/^[^\r\n]+$/)
     .optional(),
   preserveKey: z.boolean().default(false),
+  capabilities: z.array(imageCapability).min(1).max(30).optional(),
 });
 export type ProviderInput = z.infer<typeof providerInput>;
 export interface ImageAsset {
@@ -82,6 +84,7 @@ export interface ImageUsage {
   policy: ImagePolicy;
   models: string[];
   providerMode: string | null;
+  capabilities: ImageCapability[];
 }
 export interface ProviderView {
   id: string;
@@ -91,6 +94,7 @@ export interface ProviderView {
   active: boolean;
   revoked: boolean;
   configured: boolean;
+  capabilities: ImageCapability[];
 }
 export interface ReviewTask {
   id: string;

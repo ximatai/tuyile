@@ -10,6 +10,8 @@ export interface TaskRow {
   input: ImageInput;
   policy: ImagePolicy;
   provider_id: string;
+  tool_id: string;
+  tool_version: number;
   execution_version: number;
   day: string;
   state: ImageTask["state"];

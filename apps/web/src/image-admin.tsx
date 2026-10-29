@@ -1,3 +1,8 @@
+import {
+  imageCapabilityDefaults,
+  type ImageCapability,
+} from "@tuyile/contracts";
+import { ExtensionsAdmin } from "./extensions-admin";
 import { useEffect, useState, type FormEvent } from "react";
 import type {
   ProviderView,
@@ -6,6 +11,7 @@ import type {
   ImagePolicy,
 } from "@tuyile/contracts";
 import {
+  Collapse,
   Button,
   Field,
   Notice,
@@ -26,6 +32,25 @@ const fields: Record<string, string> = {
 };
 export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
   const [providerVersion, setProviderVersion] = useState(0);
+  const [modelsText, setModelsText] = useState("");
+  const [capabilities, setCapabilities] = useState<
+    Record<string, ImageCapability>
+  >({});
+  const [sizeDrafts, setSizeDrafts] = useState<Record<string, string>>({});
+  const models = [
+    ...new Set(
+      modelsText
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    ),
+  ];
+  function capability(model: string, patch: Partial<ImageCapability>) {
+    setCapabilities((v) => ({
+      ...v,
+      [model]: { ...(v[model] ?? imageCapabilityDefaults(model)), ...patch },
+    }));
+  }
   const confirm = useConfirm();
   const [allowedText, setAllowedText] = useState("");
   const [providers, setProviders] = useState<ProviderView[]>([]),
@@ -109,14 +134,21 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
       await client(csrfToken)("/image-admin/providers", {
         mode,
         baseUrl: mode === "fake" ? "" : f.get("baseUrl"),
-        models: String(f.get("models"))
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean),
+        models,
+        capabilities: models.map((m) => ({
+          ...(capabilities[m] ?? imageCapabilityDefaults(m)),
+          sizes: (sizeDrafts[m] ?? capabilities[m]?.sizes.join(",") ?? "")
+            .split(",")
+            .map((s) => s.trim())
+            .filter(Boolean),
+        })),
         apiKey: f.get("apiKey") || undefined,
         preserveKey: f.get("preserveKey") === "on",
       });
       setProviderVersion((v) => v + 1);
+      setModelsText("");
+      setCapabilities({});
+      setSizeDrafts({});
     });
   }
   function savePolicy(e: FormEvent<HTMLFormElement>) {
@@ -145,7 +177,7 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
   return (
     <section className="image-admin">
       <p className="eyebrow">管理</p>
-      <h1>图片服务与额度</h1>
+      <h1>创作服务与额度</h1>
       <p className="muted">
         统一维护模型服务、用户限制与未知结果。这里不展示其他用户的提示词、图片或正文。
       </p>
@@ -190,8 +222,112 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
           <Field
             label="允许的模型（英文逗号分隔）"
             name="models"
+            value={modelsText}
+            onChange={(e) => setModelsText(e.target.value)}
             placeholder={mode === "fake" ? "test-image" : "模型 ID"}
             required
+          />
+          <p className="hint">
+            按服务商文档声明各模型支持的规格；这里的声明不代表已完成真实模型测试。
+          </p>
+          <Collapse
+            items={models.map((model) => {
+              const cap = capabilities[model] ?? imageCapabilityDefaults(model);
+              return {
+                key: model,
+                label: `${model} 的能力声明`,
+                children: (
+                  <div className="settings-fields">
+                    <Checkbox
+                      checked={cap.generation}
+                      onChange={(e) =>
+                        capability(model, { generation: e.target.checked })
+                      }
+                    >
+                      允许无参考图生成
+                    </Checkbox>
+                    <Checkbox
+                      checked={cap.editing}
+                      onChange={(e) =>
+                        capability(model, { editing: e.target.checked })
+                      }
+                    >
+                      允许参考图创作
+                    </Checkbox>
+                    <Field
+                      label="模型最大边长"
+                      type="number"
+                      min={256}
+                      max={8192}
+                      value={cap.maxEdge}
+                      onChange={(e) =>
+                        capability(model, { maxEdge: Number(e.target.value) })
+                      }
+                    />
+                    <Field
+                      label="模型最大像素数"
+                      type="number"
+                      min={65536}
+                      max={32000000}
+                      value={cap.maxPixels}
+                      onChange={(e) =>
+                        capability(model, { maxPixels: Number(e.target.value) })
+                      }
+                    />
+                    <Field
+                      label="最多参考图"
+                      type="number"
+                      min={0}
+                      max={4}
+                      value={cap.maxReferences}
+                      onChange={(e) =>
+                        capability(model, {
+                          maxReferences: Number(e.target.value),
+                        })
+                      }
+                    />
+                    <Field
+                      label="限定尺寸（如 1024x1024，英文逗号分隔；留空仅按上限校验）"
+                      value={sizeDrafts[model] ?? cap.sizes.join(",")}
+                      onChange={(e) =>
+                        setSizeDrafts((drafts) => ({
+                          ...drafts,
+                          [model]: e.target.value,
+                        }))
+                      }
+                    />
+                    <div className="field">
+                      <span>支持质量</span>
+                      <Checkbox.Group
+                        value={cap.qualities}
+                        options={[
+                          { label: "低", value: "low" },
+                          { label: "中", value: "medium" },
+                          { label: "高", value: "high" },
+                        ]}
+                        onChange={(v) =>
+                          capability(model, {
+                            qualities: v as ImageCapability["qualities"],
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="field">
+                      <span>支持格式</span>
+                      <Checkbox.Group
+                        value={cap.formats}
+                        options={["png", "jpeg", "webp"]}
+                        onChange={(v) =>
+                          capability(model, {
+                            formats: v as ImageCapability["formats"],
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                ),
+              };
+            })}
           />
           <p className="hint">
             保存仅新增配置版本，不进行模型调用。已接受任务保持原版本；需要停止旧版本时使用“紧急停用”。本地测试服务在正式生产模式不可用。
@@ -299,6 +435,7 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
           </form>
         )}
       </section>
+      <ExtensionsAdmin csrfToken={csrfToken} />
       <section className="settings-section">
         <h2>结果待核验</h2>
         <p className="hint">

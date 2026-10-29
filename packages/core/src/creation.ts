@@ -1,3 +1,5 @@
+import { createToolRegistry, type ToolRegistry } from "./tools.js";
+import type { ToolBinding } from "@tuyile/contracts";
 import { ImageOperations } from "./image-operations.js";
 import type {
   CreationStore,
@@ -85,6 +87,7 @@ export interface WorkItem {
   input: ImageInput;
   deadline: Date;
   providerId: string;
+  tool: ToolBinding;
 }
 export interface Dispatch {
   attemptId: string;
@@ -94,8 +97,9 @@ export class CreationService extends ImageOperations {
   constructor(
     store: CreationStore,
     private readonly files: ImageFiles,
+    registry: ToolRegistry = createToolRegistry(),
   ) {
-    super(store);
+    super(store, registry);
   }
   async submit(p: Principal, input: ImageInput) {
     if (!(await this.files.freeSpace())) throw new AppError("DISK_LOW", 507);
@@ -155,6 +159,7 @@ export class ImageExecutor {
     private repo: ImageExecutionOperations,
     private files: ImageFiles,
     private provider: ImageProvider,
+    private registry: ToolRegistry = createToolRegistry(),
   ) {}
   async execute(task: WorkItem, signal: AbortSignal) {
     let code: string | undefined;
@@ -176,11 +181,19 @@ export class ImageExecutor {
             break;
           }
           try {
-            const response = await this.provider.generate(
-              dispatched.provider,
+            const response = await this.registry.execute(
+              task.tool,
               task.input,
-              bytes,
-              signal,
+              {
+                signal,
+                generate: () =>
+                  this.provider.generate(
+                    dispatched.provider,
+                    task.input,
+                    bytes,
+                    signal,
+                  ),
+              },
             );
             await this.repo.attemptResult(dispatched.attemptId, "received");
             const image = await this.files.inspect(response);

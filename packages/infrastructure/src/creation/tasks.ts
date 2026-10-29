@@ -1,3 +1,4 @@
+import type { ToolBinding } from "@tuyile/contracts";
 import type { TaskRow, OutputRow } from "./rows.js";
 import type { AdmissionSnapshot } from "@tuyile/core";
 
@@ -6,7 +7,7 @@ import { AppError, ASSET_RESERVE } from "@tuyile/core";
 import type { Principal, ImageInput } from "@tuyile/contracts";
 import { PgCreationContext } from "./context.js";
 export class PgTasksRepository extends PgCreationContext {
-  async existingAdmission(p: Principal, input: ImageInput) {
+  async existingAdmission(p: Principal, input: ImageInput, tool: ToolBinding) {
     const c = this.c;
 
     await this.auth(c, p);
@@ -27,7 +28,11 @@ export class PgTasksRepository extends PgCreationContext {
       )
     ).rows[0];
     if (old) {
-      if (old.input_hash !== hash)
+      if (
+        old.input_hash !== hash ||
+        old.tool_id !== tool.id ||
+        old.tool_version !== tool.version
+      )
         throw new AppError("IDEMPOTENCY_CONFLICT", 409);
       return this.dto(c, old);
     }
@@ -38,11 +43,12 @@ export class PgTasksRepository extends PgCreationContext {
     input: ImageInput,
     snapshot: AdmissionSnapshot,
     providerId: string,
+    tool: ToolBinding,
   ) {
     const c = this.c;
     const task = (
       await c.query<TaskRow>(
-        "INSERT INTO image_tasks(workspace_id,project_id,user_id,execution_version,request_key,input_hash,input,policy,provider_id,day,held,storage_remaining,deadline) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *",
+        "INSERT INTO image_tasks(workspace_id,project_id,user_id,execution_version,request_key,input_hash,input,policy,provider_id,day,held,storage_remaining,deadline,tool_id,tool_version) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *",
         [
           p.workspaceId,
           input.projectId,
@@ -57,6 +63,8 @@ export class PgTasksRepository extends PgCreationContext {
           input.count,
           ASSET_RESERVE * input.count,
           new Date(this.now().getTime() + 30 * 60000),
+          tool.id,
+          tool.version,
         ],
       )
     ).rows[0];

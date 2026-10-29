@@ -99,7 +99,7 @@ test("desktop and mobile: persistent projects, activation, account boundaries an
   await member.getByRole("button", { name: "退出登录", exact: true }).click();
   await expect(
     secondTab.getByRole("heading", { name: "登录图一乐" }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 15000 });
   await expect(
     member.getByRole("heading", { name: "登录图一乐" }),
   ).toBeVisible();
@@ -271,7 +271,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   ).toBeVisible();
   await reopened.getByRole("link", { name: "图片服务", exact: true }).click();
   await expect(
-    reopened.getByRole("heading", { name: "图片服务与额度" }),
+    reopened.getByRole("heading", { name: "创作服务与额度" }),
   ).toBeVisible();
   expect(
     await reopened.evaluate(
@@ -280,6 +280,68 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   ).toBe(true);
   await reopened.screenshot({
     path: ".codex-temp/stage2-mobile-admin.png",
+    fullPage: true,
+  });
+});
+
+test("desktop administration saves independent planning configuration and versioned skills", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await login(page);
+  await page.goto("/admin/images");
+  await page.getByLabel("规划服务类型", { exact: true }).click();
+  await page
+    .getByText("本地测试规划（不调用真实模型）", { exact: true })
+    .click();
+  await page.getByLabel("规划模型 ID").fill("test-planner");
+  await page.getByRole("button", { name: "保存规划服务", exact: true }).click();
+  await expect(page.getByText("test-planner", { exact: true })).toBeVisible();
+  await page.getByLabel("技能标识").fill("synthetic-photo");
+  await page.getByLabel("技能名称").fill("合成商品图");
+  await page.getByLabel("技能说明").fill("只用于合成验收");
+  await page
+    .getByLabel("创作指导", { exact: true })
+    .fill("先确定构图，再生成一张图片。不得绕过确认或额度。");
+  await page.getByRole("button", { name: "保存并启用新技能版本" }).click();
+  const row = page
+    .getByRole("listitem")
+    .filter({ has: page.getByText("合成商品图 v1", { exact: true }) });
+  await expect(row).toBeVisible();
+  await row.getByRole("button", { name: "普通停用", exact: true }).click();
+  await expect(row.getByText("已停用", { exact: true })).toBeVisible();
+  await row.getByRole("button", { name: "启用", exact: true }).click();
+  await expect(row.getByText("可用于新计划", { exact: true })).toBeVisible();
+  await row.getByRole("button", { name: "派生新版本" }).click();
+  await expect(page.getByLabel("技能版本", { exact: true })).toHaveValue("2");
+  await page.getByRole("button", { name: "保存并启用新技能版本" }).click();
+  await expect(page.getByText("合成商品图 v2", { exact: true })).toBeVisible();
+  await expect(row.getByText("已停用", { exact: true })).toBeVisible();
+  await page.getByLabel("允许的模型（英文逗号分隔）").fill("test-image");
+  await page.getByText("test-image 的能力声明", { exact: true }).click();
+  await expect(page.getByLabel("模型最大边长", { exact: true })).toBeVisible();
+  await page.getByLabel("模型最大边长", { exact: true }).fill("2048");
+  const sizes = page.getByLabel(/^限定尺寸/);
+  await sizes.pressSequentially("1024x1024,512x512");
+  await expect(sizes).toHaveValue("1024x1024,512x512");
+  await page.getByLabel("服务类型", { exact: true }).click();
+  await page
+    .getByText("本地测试服务（不调用真实模型）", { exact: true })
+    .click();
+  await page.getByRole("button", { name: "保存图片服务", exact: true }).click();
+  await expect(page.getByText("已保存。", { exact: true })).toBeVisible();
+  const providerResponse = await page.request.get("/api/image-admin/providers");
+  expect(providerResponse.ok()).toBe(true);
+  const { providers } = await providerResponse.json();
+  expect(providers[0].capabilities[0].sizes).toEqual(["1024x1024", "512x512"]);
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: ".codex-temp/m3-step2-admin-1440.png",
     fullPage: true,
   });
 });

@@ -1,3 +1,6 @@
+import { createToolRegistry, defaultTool, type ToolRegistry } from "./tools.js";
+import { checkImageCapability } from "./capabilities.js";
+import type { ToolBinding } from "@tuyile/contracts";
 import { AppError } from "./index.js";
 import {
   checkImageSpec,
@@ -15,16 +18,27 @@ import type {
   ReviewTask,
 } from "@tuyile/contracts";
 export class ImageOperations {
-  constructor(protected readonly store: CreationStore) {}
-  async admit(p: Principal, input: ImageInput) {
+  constructor(
+    protected readonly store: CreationStore,
+    protected readonly registry: ToolRegistry = createToolRegistry(),
+  ) {}
+  async admit(
+    p: Principal,
+    input: ImageInput,
+    tool: ToolBinding = defaultTool(input),
+  ) {
+    this.registry.validate(tool, input);
     return this.store.write({ owners: [p.id], queue: true }, async (r) => {
-      const existing = await r.tasks.existingAdmission(p, input);
+      const existing = await r.tasks.existingAdmission(p, input, tool);
       if (existing) return existing;
+      await r.extensions.registerTools(this.registry.list());
+      await r.extensions.requireTool(tool);
       const provider = await r.providers.current();
       const snapshot = await r.quota.admission(p, input);
       checkImageSpec(input, snapshot.budget.policy, provider.models);
+      checkImageCapability(input, provider.capabilities);
       checkAdmissionBudget(snapshot.budget);
-      const task = await r.tasks.insert(p, input, snapshot, provider.id);
+      const task = await r.tasks.insert(p, input, snapshot, provider.id, tool);
       await r.quota.reserve(p, task.id, snapshot);
       await r.assets.pin(p, task.id, input.referenceIds);
       return task;
@@ -131,9 +145,16 @@ export class ImageOperations {
     return this.store.read((r) => r.execution.stopRequested(t));
   }
   async dispatch(t: WorkItem, ordinal: number, retry: number) {
-    return this.store.write({ owners: [t.userId] }, (r) =>
-      r.execution.dispatch(t, ordinal, retry),
-    );
+    this.registry.validate(t.tool, t.input);
+    return this.store.write({ owners: [t.userId] }, async (r) => {
+      try {
+        await r.extensions.requireTool(t.tool, true);
+      } catch (e) {
+        if (e instanceof AppError && e.code === "TOOL_UNAVAILABLE") return null;
+        throw e;
+      }
+      return r.execution.dispatch(t, ordinal, retry);
+    });
   }
   async attemptResult(
     id: string,

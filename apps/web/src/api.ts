@@ -1,5 +1,13 @@
 import type { ErrorResponse } from "@tuyile/contracts";
 const messages: Record<string, string> = {
+  MODEL_CAPABILITY_UNSUPPORTED:
+    "此模型不支持当前尺寸、格式、质量或参考图，请调整参数。",
+  TOOL_UNAVAILABLE: "所需工具已停用或撤销，不能提交新的创作。",
+  TOOL_VERSION_UNAVAILABLE: "部署中没有所需工具版本，请联系管理员。",
+  SKILL_VERSION_CONFLICT: "这个技能版本已存在，请使用新版本号。",
+  SKILL_UNAVAILABLE: "这个技能版本不可用，请重新选择。",
+  INVALID_MODEL_CAPABILITIES: "每个模型需有且仅有一份能力声明。",
+  PLANNING_PROVIDER_NOT_CONFIGURED: "尚未配置可用规划服务。",
   SPEC_LIMIT: "图片规格超出当前限制，请调整尺寸、张数或质量。",
   MODEL_NOT_ALLOWED: "当前账号不能使用这个模型。",
   QUEUE_FULL: "排队已满，请稍后重试。",

@@ -117,7 +117,7 @@ export class PgQuotaRepository extends PgCreationContext {
       ).rows[0] ?? { used: 0, held: 0, attempts: 0 },
       prov = (
         await c.query(
-          "SELECT mode,models FROM image_provider_versions WHERE active AND NOT revoked",
+          "SELECT mode,models,capabilities FROM image_provider_versions WHERE active AND NOT revoked",
         )
       ).rows[0];
     return {
@@ -142,6 +142,10 @@ export class PgQuotaRepository extends PgCreationContext {
           !rules.allowedModels.length || rules.allowedModels.includes(m),
       ),
       providerMode: prov?.mode ?? null,
+      capabilities: (prov?.capabilities ?? []).filter(
+        (c: { model: string }) =>
+          !rules.allowedModels.length || rules.allowedModels.includes(c.model),
+      ),
     };
   }
   async getPolicy(p: Principal, id: string) {

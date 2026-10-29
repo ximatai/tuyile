@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { CreationService } from "@tuyile/core";
+import { CreationService, ExtensionService } from "@tuyile/core";
 import {
   creationConfig,
   PrivateImageFiles,
@@ -29,10 +29,13 @@ try {
 const imageConfig = creationConfig();
 const files = new PrivateImageFiles(imageConfig.root);
 await files.init();
-const creation = new CreationService(
-  new PgCreationStore(pool, imageConfig.masterKey, imageConfig.fakeAllowed),
-  files,
+const creationStore = new PgCreationStore(
+  pool,
+  imageConfig.masterKey,
+  imageConfig.fakeAllowed,
 );
+const creation = new CreationService(creationStore, files);
+const extensions = new ExtensionService(creationStore);
 const app = createApp(
   new Workbench(new PgStore(pool), security),
   new PgStore(pool),
@@ -40,6 +43,7 @@ const app = createApp(
   () => assertSchema(pool),
   (c) => getConnInfo(c).remote.address ?? "unknown",
   creation,
+  extensions,
 );
 // Public app shell contains no private data. API routes always run first.
 app.get("/assets/*", serveStatic({ root: "./apps/web/dist" }));

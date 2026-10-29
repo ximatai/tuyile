@@ -1,3 +1,4 @@
+import { PgExtensionsRepository } from "./creation/extensions.js";
 import { PgOutputsRepository } from "./creation/outputs.js";
 import pg from "pg";
 import type {
@@ -25,6 +26,12 @@ export class PgCreationStore implements CreationStore {
   }
   private scope(c: pg.PoolClient): CreationUnitOfWork {
     return {
+      extensions: new PgExtensionsRepository(
+        c,
+        this.masterKey,
+        this.fakeAllowed,
+        this.now,
+      ),
       outputs: new PgOutputsRepository(
         c,
         this.masterKey,
@@ -68,7 +75,11 @@ export class PgCreationStore implements CreationStore {
   }
   write<T>(lock: CreationLock, run: (r: CreationUnitOfWork) => Promise<T>) {
     return this.transactions.write(
-      (c) => run(this.scope(c)),
+      async (c) => {
+        if (lock.extensions)
+          await c.query("SELECT pg_advisory_xact_lock(72110406)");
+        return run(this.scope(c));
+      },
       async (c) => {
         const owners = [...lock.owners];
         if (lock.taskId)

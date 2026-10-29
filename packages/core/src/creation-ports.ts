@@ -1,3 +1,5 @@
+import type { ExtensionsRepository } from "./extensions.js";
+import type { ImageCapability, ToolBinding } from "@tuyile/contracts";
 import type {
   ImageInput,
   ImagePolicy,
@@ -34,12 +36,17 @@ export interface OutputsRepository {
   record(asset: PreparedAsset, attemptId: string): Promise<OutputSettlement>;
 }
 export interface TasksRepository {
-  existingAdmission(p: Principal, input: ImageInput): Promise<ImageTask | null>;
+  existingAdmission(
+    p: Principal,
+    input: ImageInput,
+    tool: ToolBinding,
+  ): Promise<ImageTask | null>;
   insert(
     p: Principal,
     input: ImageInput,
     snapshot: AdmissionSnapshot,
     providerId: string,
+    tool: ToolBinding,
   ): Promise<ImageTask>;
   tasks(
     p: Principal,
@@ -85,7 +92,11 @@ export interface QuotaRepository {
   ): Promise<void>;
 }
 export interface ProvidersRepository {
-  current(): Promise<{ id: string; models: string[] }>;
+  current(): Promise<{
+    id: string;
+    models: string[];
+    capabilities: ImageCapability[];
+  }>;
   saveProvider(p: Principal, input: ProviderInput): Promise<ProviderView>;
   providers(p: Principal): Promise<ProviderView[]>;
   revokeProvider(p: Principal, id: string): Promise<void>;
@@ -114,6 +125,7 @@ export interface ExecutionRepository {
   ): Promise<void>;
 }
 export interface CreationUnitOfWork {
+  extensions: ExtensionsRepository;
   outputs: OutputsRepository;
   tasks: TasksRepository;
   assets: AssetsRepository;
@@ -124,6 +136,7 @@ export interface CreationUnitOfWork {
 export type CreationLock = {
   owners: string[];
   queue?: boolean;
+  extensions?: boolean;
   taskId?: string;
   attemptId?: string;
   taskState?: "queued" | "running";

@@ -1,15 +1,20 @@
-import { AppError } from "@tuyile/core";
+import type { ImageCapability } from "@tuyile/contracts";
+import { AppError, normalizeCapabilities } from "@tuyile/core";
 import type { Principal, ProviderInput, ProviderView } from "@tuyile/contracts";
 import { PgCreationContext } from "./context.js";
 export class PgProvidersRepository extends PgCreationContext {
-  async current(): Promise<{ id: string; models: string[] }> {
+  async current(): Promise<{
+    id: string;
+    models: string[];
+    capabilities: ImageCapability[];
+  }> {
     const row = (
       await this.c.query(
-        "SELECT id,models FROM image_provider_versions WHERE active AND NOT revoked",
+        "SELECT id,models,capabilities FROM image_provider_versions WHERE active AND NOT revoked",
       )
     ).rows[0];
     if (!row) throw new AppError("PROVIDER_NOT_CONFIGURED", 409);
-    return { id: row.id, models: row.models };
+    return { id: row.id, models: row.models, capabilities: row.capabilities };
   }
 
   private providerView(r: {
@@ -17,6 +22,7 @@ export class PgProvidersRepository extends PgCreationContext {
     mode: "fake" | "openai";
     base_url: string;
     models: string[];
+    capabilities: ImageCapability[];
     active: boolean;
     revoked: boolean;
   }): ProviderView {
@@ -28,6 +34,7 @@ export class PgProvidersRepository extends PgCreationContext {
       active: r.active,
       revoked: r.revoked,
       configured: true,
+      capabilities: r.capabilities,
     };
   }
   async saveProvider(p: Principal, input: ProviderInput) {
@@ -53,6 +60,10 @@ export class PgProvidersRepository extends PgCreationContext {
       )
         throw new AppError("INVALID_PROVIDER_URL", 400);
     }
+    const capabilities = normalizeCapabilities(
+      input.models,
+      input.capabilities,
+    );
     const current = (
       await c.query("SELECT * FROM image_provider_versions WHERE active")
     ).rows[0];
@@ -75,12 +86,13 @@ export class PgProvidersRepository extends PgCreationContext {
       );
     const r = (
       await c.query(
-        "INSERT INTO image_provider_versions(mode,base_url,models,secret_cipher) VALUES($1,$2,$3,$4) RETURNING *",
+        "INSERT INTO image_provider_versions(mode,base_url,models,secret_cipher,capabilities) VALUES($1,$2,$3,$4,$5) RETURNING *",
         [
           input.mode,
           input.mode === "fake" ? "" : input.baseUrl.replace(/\/$/, ""),
           JSON.stringify([...new Set(input.models)]),
           this.encrypt(secret),
+          JSON.stringify(capabilities),
         ],
       )
     ).rows[0];
@@ -92,7 +104,7 @@ export class PgProvidersRepository extends PgCreationContext {
     await this.auth(c, p, true, false);
     return (
       await c.query(
-        "SELECT id,mode,base_url,models,active,revoked FROM image_provider_versions ORDER BY created_at DESC LIMIT 50",
+        "SELECT id,mode,base_url,models,active,revoked,capabilities FROM image_provider_versions ORDER BY created_at DESC LIMIT 50",
       )
     ).rows.map((r) => this.providerView(r));
   }

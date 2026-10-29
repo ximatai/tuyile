@@ -1,6 +1,8 @@
 import type pg from "pg";
 import {
   ImageExecutor,
+  createToolRegistry,
+  type ToolRegistry,
   type WorkItem,
   type ImageExecutionOperations,
   type ImageFiles,
@@ -22,6 +24,7 @@ export class ImageWorker {
     private files: ImageFiles,
     private provider: ImageProvider,
     private fatal: () => void,
+    private readonly registry: ToolRegistry = createToolRegistry(),
   ) {}
   async start() {
     this.lock = await this.pool.connect();
@@ -88,13 +91,18 @@ export class ImageWorker {
               Math.max(1, task.deadline.getTime() - Date.now()),
             ),
           ]);
-        const promise = new ImageExecutor(this.repo, this.files, {
-          generate: (...args) => {
-            if (!this.healthy || (this.stopping && controller.signal.aborted))
-              throw new Error("WORKER_STOPPED");
-            return this.provider.generate(...args);
+        const promise = new ImageExecutor(
+          this.repo,
+          this.files,
+          {
+            generate: (...args) => {
+              if (!this.healthy || (this.stopping && controller.signal.aborted))
+                throw new Error("WORKER_STOPPED");
+              return this.provider.generate(...args);
+            },
           },
-        })
+          this.registry,
+        )
           .execute(task, signal)
           .catch(() => this.fail())
           .finally(() => this.active.delete(task.id));
