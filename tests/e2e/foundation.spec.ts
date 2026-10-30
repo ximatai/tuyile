@@ -272,7 +272,8 @@ test("administrator resets a password and user must replace the temporary passwo
     .filter({ hasText: "hashuser02" })
     .getByRole("button", { name: "管理", exact: true })
     .click();
-  await page.getByRole("button", { name: "重置密码", exact: true }).click();
+  await page.getByRole("button", { name: "更多账号操作", exact: true }).click();
+  await page.getByRole("menuitem", { name: "重置密码", exact: true }).click();
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "确认", exact: true })
@@ -2235,8 +2236,12 @@ test("user quota inputs align in finite and unlimited modes on desktop", async (
 }) => {
   await login(page);
   await page.getByRole("link", { name: "用户管理", exact: true }).click();
-  await page.getByRole("button", { name: "管理", exact: true }).click();
-  const drawer = page.getByRole("dialog", { name: "admin", exact: true });
+  await page
+    .getByRole("row")
+    .filter({ has: page.getByRole("cell", { name: "admin", exact: true }) })
+    .getByRole("button", { name: "管理", exact: true })
+    .click();
+  const drawer = page.getByRole("dialog", { name: /^admin/, exact: false });
   const quota = drawer.getByLabel("每日图片额度", { exact: true });
   const storage = drawer.getByLabel("存储上限（GB）", { exact: true });
   const unlimited = drawer.getByRole("checkbox", {
@@ -2244,6 +2249,12 @@ test("user quota inputs align in finite and unlimited modes on desktop", async (
     exact: true,
   });
   await expect(unlimited).toBeChecked();
+  await expect(
+    drawer.getByText("管理员 · 当前账号", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    drawer.getByRole("button", { name: "更多账号操作", exact: true }),
+  ).toHaveCount(0);
   for (const width of [1280, 1920]) {
     await page.setViewportSize({ width, height: 900 });
     for (const checked of [false, true]) {

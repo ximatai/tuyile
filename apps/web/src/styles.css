@@ -3211,3 +3211,26 @@ h3 {
   font-size: inherit;
   line-height: inherit;
 }
+
+.user-drawer-title {
+  display: grid;
+  gap: 4px;
+}
+.user-drawer-meta {
+  color: var(--muted);
+  font-size: var(--text-body);
+  font-weight: 400;
+}
+.user-account-more.ant-btn {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-color: transparent;
+  box-shadow: none;
+}
+.user-settings-drawer .user-policy-editor {
+  margin-top: 0;
+}
+.user-settings-drawer .user-policy-editor > h3 {
+  margin-top: 0;
+}

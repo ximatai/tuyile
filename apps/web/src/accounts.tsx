@@ -15,8 +15,10 @@ import {
   Table,
   Modal,
   Drawer,
+  Dropdown,
 } from "@tuyile/ui";
 import { client, notifySessionChange } from "./api";
+import { Ellipsis } from "lucide-react";
 import { UserPolicyEditor } from "./user-policy-editor";
 export function AdminPage({
   csrfToken,
@@ -57,7 +59,7 @@ export function AdminPage({
     hasMore = query.hasNextPage;
   const selectedUser = users.find((u) => u.id === selectedId);
   async function selectUser(id: string) {
-    if (id === selectedId || policyBusy) return;
+    if (id === selectedId || policyBusy || busy) return;
     if (dirty && !(await confirm("有未保存的用户配置，放弃修改？"))) return;
     setDirty(false);
     setError("");
@@ -230,7 +232,86 @@ export function AdminPage({
         />
       )}
       <Drawer
-        title={selectedUser?.username ?? "用户配置"}
+        className="user-settings-drawer"
+        title={
+          selectedUser ? (
+            <div className="user-drawer-title">
+              <span>{selectedUser.username}</span>
+              <span className="user-drawer-meta">
+                {selectedUser.role === "admin" ? "管理员" : "用户"} ·{" "}
+                {selectedUser.id === ownId
+                  ? "当前账号"
+                  : !selectedUser.enabled
+                    ? "已停用"
+                    : selectedUser.mustChangePassword
+                      ? "待修改密码"
+                      : selectedUser.activated
+                        ? "使用中"
+                        : "待激活"}
+              </span>
+            </div>
+          ) : (
+            "用户配置"
+          )
+        }
+        extra={
+          selectedUser && selectedUser.id !== ownId ? (
+            <Dropdown
+              trigger={["click"]}
+              menu={{
+                items: [
+                  {
+                    key: "reset",
+                    label: "重置密码",
+                    disabled: busy || policyBusy || !selectedUser.enabled,
+                  },
+                  {
+                    key: "enabled",
+                    label: selectedUser.enabled ? "停用账号" : "启用账号",
+                    danger: selectedUser.enabled,
+                    disabled: busy || policyBusy,
+                  },
+                ],
+                onClick: ({ key }) => {
+                  if (key === "reset")
+                    void (async () => {
+                      if (
+                        await confirm(
+                          `重置 ${selectedUser.username} 的密码？旧密码和旧链接将失效，所有设备退出登录。请将新生成的临时密码交给对方。`,
+                        )
+                      )
+                        await action(() =>
+                          api(`/admin/users/${selectedUser.id}/reset`, {}),
+                        );
+                    })();
+                  if (key === "enabled")
+                    void (async () => {
+                      if (
+                        selectedUser.enabled &&
+                        !(await confirm(
+                          `停用 ${selectedUser.username}？所有设备会退出登录，已确认任务的执行授权也将撤销。`,
+                        ))
+                      )
+                        return;
+                      await action(() =>
+                        api(`/admin/users/${selectedUser.id}/enabled`, {
+                          enabled: !selectedUser.enabled,
+                        }),
+                      );
+                    })();
+                },
+              }}
+            >
+              <Button
+                type="button"
+                className="user-account-more"
+                aria-label="更多账号操作"
+              >
+                <Ellipsis size={18} />
+              </Button>
+            </Dropdown>
+          ) : undefined
+        }
         open={!!selectedUser}
         size={560}
         onClose={() => void selectUser("")}
@@ -270,64 +351,6 @@ export function AdminPage({
               </section>
             )}
             {link?.user.id === selectedId && linkResult}
-            <section aria-label="账号信息">
-              <h3>账号</h3>
-              <p>
-                {selectedUser.role === "admin" ? "管理员" : "用户"} ·{" "}
-                {!selectedUser.enabled
-                  ? "已停用"
-                  : selectedUser.mustChangePassword
-                    ? "待修改密码"
-                    : selectedUser.activated
-                      ? "已激活"
-                      : "待激活"}
-              </p>
-              <div className="actions">
-                <Button
-                  type="button"
-                  disabled={
-                    busy || !selectedUser.enabled || selectedUser.id === ownId
-                  }
-                  title={
-                    selectedUser.id === ownId
-                      ? "请在账户菜单中修改自己的密码"
-                      : undefined
-                  }
-                  onClick={async () => {
-                    if (
-                      await confirm(
-                        `重置 ${selectedUser.username} 的密码？旧密码和旧链接将失效，所有设备退出登录。请将新生成的临时密码交给对方。`,
-                      )
-                    )
-                      void action(() =>
-                        api(`/admin/users/${selectedUser.id}/reset`, {}),
-                      );
-                  }}
-                >
-                  重置密码
-                </Button>
-                <Button
-                  type="button"
-                  disabled={busy || selectedUser.id === ownId}
-                  onClick={async () => {
-                    if (
-                      selectedUser.enabled &&
-                      !(await confirm(
-                        `停用 ${selectedUser.username}？所有设备会退出登录，已确认任务的执行授权也将撤销。`,
-                      ))
-                    )
-                      return;
-                    void action(() =>
-                      api(`/admin/users/${selectedUser.id}/enabled`, {
-                        enabled: !selectedUser.enabled,
-                      }),
-                    );
-                  }}
-                >
-                  {selectedUser.enabled ? "停用" : "启用"}
-                </Button>
-              </div>
-            </section>
             <UserPolicyEditor
               key={selectedUser.id}
               userId={selectedUser.id}
