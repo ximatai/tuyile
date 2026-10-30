@@ -1,3 +1,4 @@
+import { useAdaptivePromptHeight } from "./use-adaptive-prompt-height";
 import { UsageSummary } from "./usage-summary";
 import { Download, ImagePlus, MoreHorizontal, Info } from "lucide-react";
 import { Excerpt } from "./interface-help";
@@ -649,6 +650,10 @@ export function CreationPage({
     }
   }
   const formRef = useRef<HTMLFormElement>(null);
+  const promptHeight = useAdaptivePromptHeight(
+    formRef,
+    mode === "direct" && usageQuery.isSuccess,
+  );
   async function send(input: ImageInput) {
     if (active.current) return;
     active.current = true;
@@ -819,6 +824,7 @@ export function CreationPage({
               >
                 <fieldset disabled={busy || !!pending || !usage?.models.length}>
                   <PromptComposer
+                    height={promptHeight}
                     value={prompt}
                     onChange={setPrompt}
                     style={style}
@@ -846,6 +852,7 @@ export function CreationPage({
                     />
                   )}
                   <ImageControls
+                    compact
                     usage={usage}
                     value={settings}
                     onChange={setSettings}

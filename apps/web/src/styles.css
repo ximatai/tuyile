@@ -3012,3 +3012,24 @@ h3 {
 .generation-submit-row .help-trigger {
   flex-shrink: 0;
 }
+
+/* Direct creation keeps natural spacing; only its editing fields scroll. */
+.direct-creation form > fieldset {
+  flex: 0 1 auto;
+}
+.direct-creation form > :not(fieldset) {
+  flex-shrink: 0;
+}
+.compact-image-controls .image-output-options {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.model-control-row {
+  display: contents;
+}
+.attachment-heading .reference-upload-icon {
+  width: 28px;
+  padding: 0;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+}

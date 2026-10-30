@@ -622,6 +622,9 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   })
     .png()
     .toBuffer();
+  const promptBeforeReferences = (await reopened
+    .getByLabel("创作需求", { exact: true })
+    .boundingBox())!.height;
   await reopened
     .getByTestId("reference-upload")
     .locator('input[type="file"]')
@@ -656,6 +659,10 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   expect(referenceBoxes[0]!.y).toBeCloseTo(referenceBoxes[1]!.y, 0);
   expect(referenceBoxes[1]!.x).toBeGreaterThan(referenceBoxes[0]!.x);
   expect(referenceBoxes[0]!.height).toBe(64);
+  expect(
+    (await reopened.getByLabel("创作需求", { exact: true }).boundingBox())!
+      .height,
+  ).toBeCloseTo(promptBeforeReferences, 0);
   const referenceFonts = await reopened
     .locator(
       ".direct-creation .editor-field-label, .direct-creation .image-controls > .field > label",
@@ -671,6 +678,25 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     .getByRole("button", { name: "移除引用 画布参考图", exact: true })
     .click();
   await expect(referenceItems).toHaveCount(1);
+  for (const height of [720, 900, 1080]) {
+    await reopened.setViewportSize({ width: 1440, height });
+    await expect
+      .poll(async () => {
+        const prompt = (await reopened
+          .getByLabel("创作需求", { exact: true })
+          .boundingBox())!;
+        const submit = (await reopened
+          .getByRole("button", { name: "提交图片任务", exact: true })
+          .boundingBox())!;
+        return (
+          prompt.height >= 140 &&
+          prompt.height <= 280 &&
+          submit.y + submit.height <= height
+        );
+      })
+      .toBe(true);
+  }
+  await reopened.setViewportSize({ width: 1440, height: 900 });
   await reopened.getByLabel("创作需求").fill("合成测试：参考图");
   await reopened
     .getByRole("button", { name: "提交图片任务", exact: true })

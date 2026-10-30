@@ -1,4 +1,4 @@
-import { X } from "lucide-react";
+import { X, Upload as UploadIcon } from "lucide-react";
 import { useState } from "react";
 import type { ImageUsage } from "@tuyile/contracts";
 import {
@@ -24,6 +24,7 @@ export function ImageControls({
   onChange,
   modelLabel = "图片模型",
   count = true,
+  compact = false,
   labelPrefix = "",
 }: {
   usage?: ImageUsage;
@@ -31,6 +32,7 @@ export function ImageControls({
   onChange: (value: ImageSettings) => void;
   modelLabel?: string;
   count?: boolean;
+  compact?: boolean;
   labelPrefix?: string;
 }) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -64,34 +66,72 @@ export function ImageControls({
       </span>
     );
   };
+  const qualityControl = (
+    <ChoiceField
+      label={label("质量")}
+      name="quality"
+      value={value.quality}
+      onValueChange={(quality) =>
+        patch({ quality: quality as ImageSettings["quality"] })
+      }
+      options={(["low", "medium", "high"] as const).map((q) => ({
+        value: q,
+        label: qualityNames[q],
+        disabled: !qualities.includes(q),
+      }))}
+    />
+  );
   return (
-    <div className="image-controls">
-      <ChoiceField
-        label={label(modelLabel)}
-        value={value.modelKey}
-        onValueChange={(modelKey) => patch({ modelKey })}
-        showSearch={{ optionFilterProp: "label" }}
-        popupMatchSelectWidth={440}
-        optionRender={(option) => (
-          <span className="model-choice-option">
-            <span>{option.label}</span>
-            {usage?.modelOptions?.find((m) => m.id === option.value)
-              ?.isDefault && <span className="model-default-mark">默认</span>}
-          </span>
-        )}
-        options={
-          choices.some((m) => m.value === value.modelKey) || !value.modelKey
-            ? choices
-            : [
-                {
-                  value: value.modelKey,
-                  label: "历史模型（已不可用）",
-                  disabled: true,
-                },
-                ...choices,
-              ]
-        }
-      />
+    <div
+      className={`image-controls${compact ? " compact-image-controls" : ""}`}
+    >
+      <div className={compact ? "parameter-grid" : "model-control-row"}>
+        <ChoiceField
+          label={label(modelLabel)}
+          value={value.modelKey}
+          onValueChange={(modelKey) => patch({ modelKey })}
+          showSearch={{ optionFilterProp: "label" }}
+          popupMatchSelectWidth={440}
+          optionRender={(option) => (
+            <span className="model-choice-option">
+              <span>{option.label}</span>
+              {usage?.modelOptions?.find((m) => m.id === option.value)
+                ?.isDefault && <span className="model-default-mark">默认</span>}
+            </span>
+          )}
+          options={
+            choices.some((m) => m.value === value.modelKey) || !value.modelKey
+              ? choices
+              : [
+                  {
+                    value: value.modelKey,
+                    label: "历史模型（已不可用）",
+                    disabled: true,
+                  },
+                  ...choices,
+                ]
+          }
+          labelRender={
+            compact
+              ? (option) => {
+                  const model =
+                    usage?.modelOptions?.find((m) => m.id === option.value)
+                      ?.modelId ?? String(option.value);
+                  const shortNames: Record<string, string> = {
+                    "gpt-image-2.5-sunburst": "Sunburst",
+                    "gpt-image-2.5-flare": "Flare",
+                  };
+                  return (
+                    <span title={String(option.label)}>
+                      {shortNames[model] ?? model}
+                    </span>
+                  );
+                }
+              : undefined
+          }
+        />
+        {compact && qualityControl}
+      </div>
       <div className="parameter-grid">
         <ChoiceField
           label={label("比例")}
@@ -145,19 +185,7 @@ export function ImageControls({
         />
       </div>
       <div className={`parameter-grid${count ? " image-output-options" : ""}`}>
-        <ChoiceField
-          label={label("质量")}
-          name="quality"
-          value={value.quality}
-          onValueChange={(quality) =>
-            patch({ quality: quality as ImageSettings["quality"] })
-          }
-          options={(["low", "medium", "high"] as const).map((q) => ({
-            value: q,
-            label: qualityNames[q],
-            disabled: !qualities.includes(q),
-          }))}
-        />
+        {!compact && qualityControl}
         {count && (
           <ChoiceField
             label={label(labelPrefix ? "张数" : "图片张数")}
@@ -311,12 +339,16 @@ export function ReferenceAttachments({
               return false;
             }}
           >
-            <Button
-              type="button"
-              disabled={disabled || references.length >= maxReferences}
-            >
-              上传参考图
-            </Button>
+            <Tooltip title="上传参考图" trigger={["hover", "focus"]}>
+              <Button
+                type="button"
+                className="reference-upload-icon"
+                aria-label="上传参考图"
+                disabled={disabled || references.length >= maxReferences}
+              >
+                <UploadIcon size={16} aria-hidden="true" />
+              </Button>
+            </Tooltip>
           </Upload>
         </div>
       </div>

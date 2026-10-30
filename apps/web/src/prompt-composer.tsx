@@ -19,6 +19,7 @@ export function PromptComposer({
   onStyleChange,
   label = "创作需求",
   rows = 4,
+  height,
   compact = false,
   visible = true,
 }: {
@@ -28,6 +29,7 @@ export function PromptComposer({
   onStyleChange: (style: CreationStyle | undefined) => void;
   label?: string;
   rows?: number;
+  height?: number;
   compact?: boolean;
   visible?: boolean;
 }) {
@@ -134,6 +136,7 @@ export function PromptComposer({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           rows={rows}
+          style={height ? { height, minHeight: height } : undefined}
           required
           maxLength={12000}
           placeholder="描述主体、场景、光线、构图和关键细节"
