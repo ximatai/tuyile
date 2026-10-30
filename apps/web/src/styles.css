@@ -2504,3 +2504,81 @@ h3 {
 .prompt-composer-compact > .product-notice {
   grid-column: 1 / -1;
 }
+
+.generation-feedback {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #d6e8fa;
+  border-radius: 6px;
+  background: #f0f7ff;
+  flex-shrink: 0;
+  min-width: 0;
+}
+.generation-indicator {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--brand-blue);
+}
+.generation-feedback-copy {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.generation-feedback-copy strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+.generation-feedback-copy > span {
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.generation-feedback .button {
+  min-height: 28px;
+  height: 28px;
+  padding-inline: 8px;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+.generation-feedback.success {
+  background: #f4fbf7;
+  border-color: #d8eee1;
+}
+.generation-feedback.success .generation-indicator {
+  color: #16854b;
+}
+.generation-feedback.warning {
+  background: #fffaf0;
+  border-color: #f2dfb5;
+}
+.generation-feedback.warning .generation-indicator {
+  color: #a46c00;
+}
+.generation-feedback.error {
+  background: #fff5f5;
+  border-color: #f5d4d4;
+}
+.generation-feedback.error .generation-indicator {
+  color: #c53535;
+}
+.canvas-generation-status {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 5;
+  max-width: calc(100% - 150px);
+  pointer-events: none;
+}
+.canvas-generation-status .generation-feedback {
+  box-shadow: 0 3px 12px #294d7712;
+}
+
+.direct-creation .button.primary.ant-btn-loading:disabled {
+  background: var(--brand-blue);
+  border-color: var(--brand-blue);
+  color: #fff;
+  opacity: 1;
+}

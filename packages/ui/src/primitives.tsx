@@ -83,7 +83,7 @@ export function Button({
   type,
   color: _,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement>) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & { loading?: boolean }) {
   return (
     <AntButton
       className={`button ${className}`}
@@ -187,6 +187,7 @@ export function ChoiceField({
 }
 export {
   Collapse,
+  Spin,
   Image,
   Upload,
   Checkbox,

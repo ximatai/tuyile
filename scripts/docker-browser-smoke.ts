@@ -45,6 +45,33 @@ try {
     .boundingBox();
   const quota = await page.locator(".quota-details button").boundingBox();
   assert(submit && quota && submit.y + submit.height <= quota.y);
+  await page
+    .getByLabel("创作需求", { exact: true })
+    .fill("Synthetic generation feedback acceptance");
+  await page.getByRole("button", { name: "提交图片任务", exact: true }).click();
+  await page.waitForFunction(() => {
+    const button = document.querySelector(".direct-creation form > .primary");
+    return (
+      button?.getAttribute("aria-busy") === "true" &&
+      getComputedStyle(button).backgroundColor === "rgb(0, 98, 176)"
+    );
+  });
+  assert.equal(
+    await page
+      .locator(".direct-creation form > .primary")
+      .evaluate((el) => getComputedStyle(el).backgroundColor),
+    "rgb(0, 98, 176)",
+  );
+  await page.getByRole("status", { name: "图片生成状态" }).waitFor();
+  await page.waitForFunction(() =>
+    document
+      .querySelector('[aria-label="图片生成状态"]')
+      ?.textContent?.includes("图片生成完成"),
+  );
+  await page.screenshot({
+    path: ".codex-temp/docker-generation-feedback.png",
+    animations: "disabled",
+  });
   const projectId = new URL(page.url()).pathname.split("/").at(-1)!;
   const session = await (
     await page.request.get("http://127.0.0.1:8792/api/auth/me")

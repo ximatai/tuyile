@@ -248,8 +248,44 @@ test("background creation survives refresh, page closure and ordinary logout, wi
       .getByText("无风格", { exact: true }),
   ).toBeVisible();
   await page.getByLabel("图片张数").fill("2");
+  let releaseSubmission!: () => void;
+  const submissionGate = new Promise<void>((resolve) => {
+    releaseSubmission = resolve;
+  });
+  await page.route(
+    "**/api/images/tasks",
+    async (route) => {
+      const response = await route.fetch();
+      await submissionGate;
+      await route.fulfill({ response });
+    },
+    { times: 1 },
+  );
   await page.getByRole("button", { name: "提交图片任务", exact: true }).click();
-  await page.locator(".canvas-task-history .ant-collapse-header").click();
+  await expect(
+    page.getByRole("status", { name: "图片生成状态" }),
+  ).toContainText("正在提交图片任务");
+  await expect(page.locator(".direct-creation form > .primary")).toHaveClass(
+    /ant-btn-loading/,
+  );
+  releaseSubmission();
+  await expect(
+    page.getByRole("status", { name: "图片生成状态" }),
+  ).toContainText(/正在生成图片|排队中/);
+  await expect(page.getByLabel("创作需求")).toHaveValue("");
+  await expect(page.locator(".direct-creation form > .primary")).toHaveClass(
+    /ant-btn-loading/,
+  );
+  const progressBefore = (await page
+    .getByLabel("画布生成进度", { exact: true })
+    .boundingBox())!;
+  await page.getByRole("button", { name: "Zoom Out", exact: true }).click();
+  const progressAfter = (await page
+    .getByLabel("画布生成进度", { exact: true })
+    .boundingBox())!;
+  expect(Math.abs(progressBefore.x - progressAfter.x)).toBeLessThan(2);
+  expect(Math.abs(progressBefore.y - progressAfter.y)).toBeLessThan(2);
+  await page.getByRole("button", { name: "查看任务", exact: true }).click();
   await expect(page.getByText("合成测试：关闭页面后继续执行")).toBeVisible();
   const context = page.context();
   await page.close();
@@ -261,11 +297,15 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     reopened.getByRole("heading", { name: "已完成", exact: true }),
   ).toBeVisible({ timeout: 15000 });
   await expect(
+    reopened.getByRole("status", { name: "图片生成状态" }),
+  ).toContainText("图片生成完成");
+  await expect(
     reopened
       .locator(".canvas-task-history")
       .getByRole("link", { name: "下载原图" }),
   ).toHaveCount(2);
   await reopened.locator(".canvas-task-history .ant-collapse-header").click();
+  await reopened.getByRole("button", { name: "Fit View", exact: true }).click();
   await reopened.locator(".react-flow__node-image").first().click();
   await reopened
     .getByRole("button", { name: "引用选中 1 张", exact: true })
@@ -308,10 +348,53 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     .locator(".ant-select-dropdown:visible")
     .getByText("海报视觉", { exact: true })
     .click();
+  const rejectedDraft = await reopened.getByLabel("创作需求").inputValue();
+  await reopened.route(
+    "**/api/images/tasks",
+    (route) =>
+      route.fulfill({
+        status: 409,
+        json: {
+          error: { code: "IMAGE_QUOTA", requestId: "synthetic-rejection" },
+        },
+      }),
+    { times: 1 },
+  );
+  await reopened
+    .getByRole("button", { name: "提交图片任务", exact: true })
+    .click();
+  await expect(
+    reopened.getByRole("status", { name: "图片生成状态" }),
+  ).toContainText("本次图片任务未提交");
+  await expect(
+    reopened.getByRole("status", { name: "图片生成状态" }),
+  ).not.toContainText("图片生成完成");
+  await expect(reopened.getByLabel("创作需求")).toHaveValue(rejectedDraft);
+  await expect(
+    reopened.getByRole("button", { name: "查找这次提交", exact: true }),
+  ).toHaveCount(0);
+  expect(
+    (
+      await (
+        await reopened.request.get(
+          `/api/images/tasks?projectId=${projectUrl.split("/").at(-1)}`,
+        )
+      ).json()
+    ).tasks,
+  ).toHaveLength(1);
   const styledRequest = reopened.waitForRequest(
     (r) =>
       r.method() === "POST" &&
       new URL(r.url()).pathname === "/api/images/tasks",
+  );
+  await reopened.route(
+    "**/api/images/tasks",
+    async (route) => {
+      const response = await route.fetch();
+      expect(response.status()).toBe(202);
+      await route.abort("failed");
+    },
+    { times: 1 },
   );
   await reopened.getByLabel("图片张数").fill("2");
   await reopened
@@ -320,6 +403,22 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   expect((await styledRequest).postDataJSON().prompt).toContain(
     "画面风格：鲜明的海报构图",
   );
+  await expect(
+    reopened.getByRole("status", { name: "图片生成状态" }),
+  ).toContainText("提交结果待确认");
+  await reopened
+    .getByRole("button", { name: "查找这次提交", exact: true })
+    .click();
+  await expect(reopened.getByLabel("创作需求")).toHaveValue("");
+  expect(
+    (
+      await (
+        await reopened.request.get(
+          `/api/images/tasks?projectId=${projectUrl.split("/").at(-1)}`,
+        )
+      ).json()
+    ).tasks,
+  ).toHaveLength(2);
   await expect(reopened.getByText("合成测试：注销后继续")).toBeVisible();
   await reopened.reload();
   await reopened.getByRole("button", { name: "退出登录", exact: true }).click();

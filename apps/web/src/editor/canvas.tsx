@@ -46,6 +46,7 @@ import {
 } from "@tuyile/ui";
 import { useNavigate } from "react-router-dom";
 import { EditorStore } from "./store";
+import { GenerationFeedback } from "../generation-feedback";
 import { useSessionState } from "../session-state";
 import { client, ApiError } from "../api";
 type ImageNode = Node<
@@ -132,27 +133,21 @@ function GroupCard({ data, selected }: NodeProps) {
     </div>
   );
 }
-function TaskCard({ data }: NodeProps) {
-  return (
-    <div className="canvas-task-card">
-      <strong>{String(data.label)}</strong>
-      <p>{String(data.summary)}</p>
-    </div>
-  );
-}
-const nodeTypes = { image: ImageCard, group: GroupCard, task: TaskCard };
+const nodeTypes = { image: ImageCard, group: GroupCard };
 export function CanvasEditor({
   projectId,
   onReference,
   onSelectionChange,
   onReuse,
   tasks,
+  statusStale,
 }: {
   tasks: ImageTask[];
   projectId: string;
   onReference: (id: string) => void;
   onSelectionChange?: (assets: { id: string; name: string }[]) => void;
   onReuse?: (task: ImageTask) => void;
+  statusStale?: boolean;
 }) {
   const state = useSessionState();
   const api = client(state.session.csrfToken);
@@ -184,6 +179,7 @@ export function CanvasEditor({
       onReference={onReference}
       onSelectionChange={onSelectionChange}
       onReuse={onReuse}
+      statusStale={statusStale}
     />
   ) : (
     <p role="status">正在打开画布…</p>
@@ -196,6 +192,7 @@ function CanvasView({
   onSelectionChange,
   onReuse,
   tasks,
+  statusStale,
 }: {
   tasks: ImageTask[];
   store: EditorStore;
@@ -203,6 +200,7 @@ function CanvasView({
   onReference: (id: string) => void;
   onSelectionChange?: (assets: { id: string; name: string }[]) => void;
   onReuse?: (task: ImageTask) => void;
+  statusStale?: boolean;
 }) {
   const state = useSessionState(),
     snap = useSyncExternalStore(store.subscribe, store.get),
@@ -335,34 +333,6 @@ function CanvasView({
       )
       .filter((e, i, a) => a.findIndex((x) => x.id === e.id) === i);
   }, [sources.data, outputs.data, snap.document]);
-  const flowNodes = useMemo(
-    () => [
-      ...nodes,
-      ...tasks
-        .filter(
-          (t) => ["queued", "running"].includes(t.state) || t.pendingReview,
-        )
-        .map((t, i) => ({
-          id: `task-${t.id}`,
-          type: "task",
-          position: { x: 40 + i * 240, y: 10 },
-          width: 220,
-          height: 80,
-          style: { width: 220, height: 80 },
-          draggable: false,
-          selectable: false,
-          data: {
-            label: t.pendingReview
-              ? "结果待核验"
-              : t.state === "queued"
-                ? "排队中"
-                : "执行中",
-            summary: `${t.used}/${t.count} 张 · ${t.held} 张预留`,
-          },
-        })),
-    ],
-    [nodes, tasks],
-  );
   function changes(changes: NodeChange[]) {
     changes = changes.filter((c) => !("id" in c) || !c.id.startsWith("task-"));
     if (!changes.length) return;
@@ -569,7 +539,7 @@ function CanvasView({
         </div>
       )}
       <ReactFlow
-        nodes={flowNodes}
+        nodes={nodes}
         edges={edges}
         nodeTypes={nodeTypes}
         onNodesChange={changes}
@@ -601,6 +571,13 @@ function CanvasView({
         <Background gap={20} size={1} />
         <Controls showInteractive={false} />
       </ReactFlow>
+      {tasks.some(
+        (t) => ["queued", "running"].includes(t.state) || t.pendingReview,
+      ) && (
+        <div className="canvas-generation-status">
+          <GenerationFeedback compact tasks={tasks} stale={statusStale} />
+        </div>
+      )}
       <div className="canvas-toolbar" role="toolbar" aria-label="画布操作">
         <Tooltip title="撤销" trigger={["hover", "focus"]}>
           <Button

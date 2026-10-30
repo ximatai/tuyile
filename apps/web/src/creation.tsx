@@ -1,4 +1,6 @@
 import { PromptComposer } from "./prompt-composer";
+import { GenerationFeedback } from "./generation-feedback";
+import type { GenerationPhase } from "./generation-status";
 import { ImageControls, ReferenceAttachments } from "./image-controls";
 import {
   initialSettings,
@@ -280,6 +282,10 @@ export function CreationPage({
   }
   const [mode, setMode] = useState("direct");
   const [quotaOpen, setQuotaOpen] = useState(false);
+  const [phase, setPhase] = useState<GenerationPhase>("idle");
+  const [submissionRejected, setSubmissionRejected] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const resultsRef = useRef<HTMLDivElement>(null);
   const active = useRef(false);
   const usageQuery = useQuery({
     queryKey: sessionState.key("usage"),
@@ -299,6 +305,33 @@ export function CreationPage({
   });
   const usage = usageQuery.data,
     tasks = taskQuery.data?.tasks ?? [];
+  const generating = tasks.some(
+    (t) => t.state === "running" || t.state === "queued",
+  );
+  const running = tasks.some((t) => t.state === "running");
+  function showTasks() {
+    setHistoryOpen(true);
+    requestAnimationFrame(() =>
+      resultsRef.current
+        ?.querySelector<HTMLElement>(
+          ".canvas-task-history .ant-collapse-header",
+        )
+        ?.focus({ preventScroll: true }),
+    );
+  }
+  async function acceptTask(task: ImageTask) {
+    await sessionState.queries.cancelQueries({
+      queryKey: sessionState.key("tasks", projectId),
+      exact: true,
+    });
+    sessionState.queries.setQueryData<{ tasks: ImageTask[] }>(
+      sessionState.key("tasks", projectId),
+      (old) =>
+        old?.tasks.some((t) => t.id === task.id)
+          ? old
+          : { tasks: [task, ...(old?.tasks ?? [])] },
+    );
+  }
   const initialized = useRef(false);
   useEffect(() => {
     if (usage && usage.models.length && !initialized.current) {
@@ -382,23 +415,32 @@ export function CreationPage({
   async function send(input: ImageInput) {
     if (active.current) return;
     active.current = true;
+    setPhase("submit");
+    setSubmissionRejected(false);
     setBusy(true);
     setError("");
     setPending(input);
     try {
-      await client(csrfToken)("/images/tasks", input);
+      const task = await client(csrfToken)<ImageTask>("/images/tasks", input);
+      await acceptTask(task);
       setPending(null);
       setPrompt("");
       setMobile("results");
-      await refresh();
+      void refresh();
     } catch (e) {
-      if (e instanceof ApiError && e.code !== "INTERNAL_ERROR")
+      const rejected = e instanceof ApiError && e.code !== "INTERNAL_ERROR";
+      if (rejected) {
         setPending(null);
+        setSubmissionRejected(true);
+      }
       setError(
-        `${(e as Error).message} 若提交结果未确认，请查找这次提交，或用同一请求重试。`,
+        rejected
+          ? (e as Error).message
+          : `${(e as Error).message} 若提交结果未确认，请查找这次提交，或用同一请求重试。`,
       );
     } finally {
       active.current = false;
+      setPhase("idle");
       setBusy(false);
     }
   }
@@ -431,16 +473,21 @@ export function CreationPage({
   async function recover() {
     if (!pending) return;
     setBusy(true);
+    setPhase("recover");
     try {
-      await client(csrfToken)(
+      const task = await client(csrfToken)<ImageTask>(
         `/images/recover?projectId=${projectId}&requestKey=${pending.requestKey}`,
       );
+      await acceptTask(task);
       setPending(null);
       setError("");
-      await refresh();
+      setPrompt("");
+      setMobile("results");
+      void refresh();
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      setPhase("idle");
       setBusy(false);
     }
   }
@@ -461,10 +508,11 @@ export function CreationPage({
         </Button>
       </div>
       <div className={`creation-layout show-${mobile}`}>
-        <div className="creation-results">
+        <div className="creation-results" ref={resultsRef}>
           <Suspense fallback={<p role="status">正在加载画布…</p>}>
             <CanvasEditor
               tasks={tasks}
+              statusStale={!!taskQuery.error}
               projectId={projectId}
               onReference={chooseReference}
               onSelectionChange={setCanvasSelection}
@@ -473,6 +521,8 @@ export function CreationPage({
           </Suspense>
           <Collapse
             className="canvas-task-history"
+            activeKey={historyOpen ? ["history"] : []}
+            onChange={(keys) => setHistoryOpen(keys.includes("history"))}
             ghost
             items={[
               {
@@ -566,20 +616,48 @@ export function CreationPage({
               <p className="hint">
                 关页不影响后台执行。取消可能仍计费，中断不自动续跑。
               </p>
+              <GenerationFeedback
+                tasks={tasks}
+                phase={phase}
+                pending={!!pending}
+                stale={!!taskQuery.error}
+                rejected={submissionRejected}
+                onShow={showTasks}
+              />
               <Button
                 className="primary"
-                aria-label={pending ? "重试同一提交" : "提交图片任务"}
+                aria-busy={
+                  busy ||
+                  (!pending && !prompt.trim() && generating && !taskQuery.error)
+                }
+                loading={
+                  busy ||
+                  (!pending && !prompt.trim() && generating && !taskQuery.error)
+                }
+                aria-label={
+                  pending && phase === "idle" ? "重试同一提交" : "提交图片任务"
+                }
                 disabled={
                   busy ||
                   !usage?.models.length ||
-                  (!pending && issues.length > 0)
+                  (!pending && (!prompt.trim() || issues.length > 0))
                 }
               >
                 {busy
-                  ? "正在提交…"
+                  ? phase === "submit"
+                    ? "正在提交…"
+                    : phase === "recover"
+                      ? "正在查找…"
+                      : "正在上传参考图…"
                   : pending
                     ? "重试同一提交"
-                    : `生成 ${settings.count} 张`}
+                    : !prompt.trim() && generating
+                      ? taskQuery.error
+                        ? "状态暂不可用"
+                        : running
+                          ? "正在生成…"
+                          : "排队中…"
+                      : `生成 ${settings.count} 张`}
               </Button>
               {pending && (
                 <Button
