@@ -2784,22 +2784,15 @@ h3 {
   border-radius: 2px;
 }
 .canvas-image-actions {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 5;
   display: flex;
-  flex-wrap: wrap;
   justify-content: flex-end;
   gap: 4px;
-  max-width: calc(100% - 16px);
   opacity: 0;
   pointer-events: none;
   transition: opacity 120ms ease;
 }
-.canvas-image:hover .canvas-image-actions,
-.canvas-image:focus-within .canvas-image-actions,
-.react-flow__node:focus-visible .canvas-image-actions {
+.canvas-image-actions.is-visible,
+.canvas-image-actions:focus-within {
   opacity: 1;
   pointer-events: auto;
 }

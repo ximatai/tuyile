@@ -8,6 +8,9 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import {
   ReactFlow,
+  NodeToolbar,
+  useViewport,
+  useStore,
   useKeyPress,
   Background,
   Controls,
@@ -29,6 +32,7 @@ import type {
   Project,
 } from "@tuyile/contracts";
 import {
+  MoreHorizontal,
   Expand,
   Download,
   ImagePlus,
@@ -43,7 +47,14 @@ import {
   Ungroup,
   AlignStartVertical,
 } from "lucide-react";
-import { Button, Image, Notice, Tooltip, useConfirm } from "@tuyile/ui";
+import {
+  Button,
+  Dropdown,
+  Image,
+  Notice,
+  Tooltip,
+  useConfirm,
+} from "@tuyile/ui";
 import { useNavigate } from "react-router-dom";
 import { EditorStore } from "./store";
 import { GenerationFeedback } from "../generation-feedback";
@@ -58,11 +69,45 @@ type ImageNode = Node<
   },
   "image"
 >;
-function ImageCard({ data, selected }: NodeProps<ImageNode>) {
+function ImageCard({
+  id,
+  data,
+  selected,
+  width = 260,
+  height = 260,
+  positionAbsoluteX,
+  positionAbsoluteY,
+}: NodeProps<ImageNode>) {
   const [preview, setPreview] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const viewport = useViewport();
+  const canvasWidth = useStore((state) => state.width);
+  const canvasHeight = useStore((state) => state.height);
+  const compact = width * viewport.zoom < 160 || height * viewport.zoom < 48;
+  const actionCount = 2 + Number(!!data.reference) + Number(!!data.reuse);
+  const toolbarWidth = compact ? 28 : actionCount * 28 + (actionCount - 1) * 4;
+  const right = (positionAbsoluteX + width) * viewport.zoom + viewport.x;
+  const left = right - 8 - toolbarWidth;
+  const horizontalInset =
+    -8 + Math.max(0, 8 - left) - Math.max(0, right - 8 - (canvasWidth - 8));
+  const top = positionAbsoluteY * viewport.zoom + viewport.y;
+  const bottom = top + height * viewport.zoom;
+  const onScreen =
+    right > 0 &&
+    right - width * viewport.zoom < canvasWidth &&
+    bottom > 0 &&
+    top < canvasHeight;
+  const desiredTop = compact ? (top >= 40 ? top - 36 : bottom + 8) : top + 8;
+  const toolbarTop = Math.max(8, Math.min(desiredTop, canvasHeight - 36));
+  const toolbarOffset = top - 28 - toolbarTop;
+  useEffect(() => setMenuOpen(false), [compact, onScreen]);
+
   return (
     <div
       className="canvas-image"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
       onDoubleClick={(event) => {
         event.stopPropagation();
         setPreview(true);
@@ -84,53 +129,119 @@ function ImageCard({ data, selected }: NodeProps<ImageNode>) {
         src={`/api/images/assets/${data.assetId}/preview`}
         alt={data.label}
       />
-      <div
-        className="canvas-image-actions nodrag nopan"
+      <NodeToolbar
+        nodeId={id}
+        isVisible={onScreen}
+        position={Position.Top}
+        align="end"
+        offset={toolbarOffset}
+        style={{ marginLeft: horizontalInset }}
+        className={`canvas-image-actions nodrag nopan${hovered || selected || (compact && menuOpen) ? " is-visible" : ""}`}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
         role="toolbar"
         aria-label="图片操作"
         onDoubleClick={(event) => event.stopPropagation()}
       >
-        <Tooltip title="预览" trigger={["hover", "focus"]}>
-          <Button
-            type="button"
-            aria-label="查看原图"
-            onClick={() => setPreview(true)}
+        {compact ? (
+          <Dropdown
+            trigger={["click"]}
+            transitionName=""
+            destroyOnHidden
+            open={menuOpen}
+            onOpenChange={setMenuOpen}
+            menu={{
+              items: [
+                { key: "preview", icon: <Expand size={16} />, label: "预览" },
+                {
+                  key: "download",
+                  icon: <Download size={16} />,
+                  label: (
+                    <a href={`/api/images/assets/${data.assetId}/download`}>
+                      下载原图
+                    </a>
+                  ),
+                },
+                ...(data.reference
+                  ? [
+                      {
+                        key: "reference",
+                        icon: <ImagePlus size={16} />,
+                        label: "作为参考图",
+                      },
+                    ]
+                  : []),
+                ...(data.reuse
+                  ? [
+                      {
+                        key: "reuse",
+                        icon: <SlidersHorizontal size={16} />,
+                        label: "复用设置",
+                      },
+                    ]
+                  : []),
+              ],
+              onClick: ({ key }) => {
+                setMenuOpen(false);
+                if (key === "preview") setPreview(true);
+                if (key === "reference") data.reference?.(data.assetId!);
+                if (key === "reuse") data.reuse?.();
+              },
+            }}
           >
-            <Expand size={16} aria-hidden="true" />
-          </Button>
-        </Tooltip>
-        <Tooltip title="下载" trigger={["hover", "focus"]}>
-          <a
-            className="canvas-image-action"
-            aria-label="下载原图"
-            href={`/api/images/assets/${data.assetId}/download`}
-          >
-            <Download size={16} aria-hidden="true" />
-          </a>
-        </Tooltip>
-        {data.reference && (
-          <Tooltip title="参考图" trigger={["hover", "focus"]}>
             <Button
               type="button"
-              aria-label="作为参考图"
-              onClick={() => data.reference?.(data.assetId!)}
+              aria-label="更多图片操作"
+              aria-expanded={menuOpen}
             >
-              <ImagePlus size={16} aria-hidden="true" />
+              <MoreHorizontal size={16} aria-hidden="true" />
             </Button>
-          </Tooltip>
+          </Dropdown>
+        ) : (
+          <>
+            <Tooltip title="预览" trigger={["hover", "focus"]}>
+              <Button
+                type="button"
+                aria-label="查看原图"
+                onClick={() => setPreview(true)}
+              >
+                <Expand size={16} aria-hidden="true" />
+              </Button>
+            </Tooltip>
+            <Tooltip title="下载" trigger={["hover", "focus"]}>
+              <a
+                className="canvas-image-action"
+                aria-label="下载原图"
+                href={`/api/images/assets/${data.assetId}/download`}
+              >
+                <Download size={16} aria-hidden="true" />
+              </a>
+            </Tooltip>
+            {data.reference && (
+              <Tooltip title="参考图" trigger={["hover", "focus"]}>
+                <Button
+                  type="button"
+                  aria-label="作为参考图"
+                  onClick={() => data.reference?.(data.assetId!)}
+                >
+                  <ImagePlus size={16} aria-hidden="true" />
+                </Button>
+              </Tooltip>
+            )}
+            {data.reuse && (
+              <Tooltip title="复用" trigger={["hover", "focus"]}>
+                <Button
+                  type="button"
+                  aria-label="复用图片设置"
+                  onClick={() => data.reuse?.()}
+                >
+                  <SlidersHorizontal size={16} aria-hidden="true" />
+                </Button>
+              </Tooltip>
+            )}
+          </>
         )}
-        {data.reuse && (
-          <Tooltip title="复用" trigger={["hover", "focus"]}>
-            <Button
-              type="button"
-              aria-label="复用图片设置"
-              onClick={() => data.reuse?.()}
-            >
-              <SlidersHorizontal size={16} aria-hidden="true" />
-            </Button>
-          </Tooltip>
-        )}
-      </div>
+      </NodeToolbar>
       <Handle type="source" position={Position.Right} isConnectable={false} />
     </div>
   );

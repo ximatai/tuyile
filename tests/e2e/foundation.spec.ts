@@ -827,6 +827,7 @@ test("desktop administration publishes service model pools and preserves version
 test("desktop canvas saves geometry, handles conflicts and never replaces removed outputs", async ({
   page,
 }) => {
+  test.setTimeout(150000);
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page);
   await page.getByLabel("项目名称").fill("画布保存验证");
@@ -845,10 +846,9 @@ test("desktop canvas saves geometry, handles conflicts and never replaces remove
   const first = await (
     await page.request.get(`/api/projects/${projectId}/canvas`)
   ).json();
-  const imageActions = node.getByRole("toolbar", {
-    name: "图片操作",
-    exact: true,
-  });
+  const imageActions = page.locator(
+    `.react-flow__node-toolbar[data-id="${first.document.nodes[0].id}"]`,
+  );
   await page.mouse.move(5, 5);
   await expect(imageActions).toHaveCSS("opacity", "0");
   const imageGeometry = await node.evaluate((element) => {
@@ -863,11 +863,13 @@ test("desktop canvas saves geometry, handles conflicts and never replaces remove
   expect(imageGeometry.height).toBeLessThan(1);
   await node.hover();
   await expect(imageActions).toHaveCSS("opacity", "1");
-  await node.getByRole("button", { name: "查看原图", exact: true }).click();
+  await imageActions
+    .getByRole("button", { name: "查看原图", exact: true })
+    .click();
   await expect(page.locator(".ant-image-preview")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.locator(".ant-image-preview")).toBeHidden();
-  const downloadAction = node.getByRole("link", {
+  const downloadAction = imageActions.getByRole("link", {
     name: "下载原图",
     exact: true,
   });
@@ -879,13 +881,17 @@ test("desktop canvas saves geometry, handles conflicts and never replaces remove
     "href",
     `/api/images/assets/${first.document.nodes[0].assetId}/download`,
   );
-  await node.getByRole("button", { name: "复用图片设置", exact: true }).click();
+  await imageActions
+    .getByRole("button", { name: "复用图片设置", exact: true })
+    .click();
   await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
     "合成画布图片",
   );
   await page.getByLabel("创作需求", { exact: true }).fill("");
   await node.hover();
-  await node.getByRole("button", { name: "作为参考图", exact: true }).click();
+  await imageActions
+    .getByRole("button", { name: "作为参考图", exact: true })
+    .click();
   await expect(
     page
       .getByTestId("reference-upload")
@@ -901,6 +907,74 @@ test("desktop canvas saves geometry, handles conflicts and never replaces remove
       ).json()
     ).tasks,
   ).toHaveLength(1);
+  const fullButton = await imageActions
+    .getByRole("button", { name: "查看原图", exact: true })
+    .boundingBox();
+  expect(fullButton!.width).toBeCloseTo(28, 0);
+  expect(fullButton!.height).toBeCloseTo(28, 0);
+  for (let i = 0; i < 4; i++) {
+    const zoom = (await savedCanvas()).document.viewport.zoom;
+    await page.getByRole("button", { name: "Zoom Out", exact: true }).click();
+    await expect
+      .poll(async () => (await savedCanvas()).document.viewport.zoom)
+      .toBeLessThan(zoom);
+  }
+  await node.hover();
+  const more = imageActions.getByRole("button", {
+    name: "更多图片操作",
+    exact: true,
+  });
+  await expect(more).toBeVisible();
+  const smallButton = (await more.boundingBox())!;
+  expect(smallButton.width).toBeCloseTo(fullButton!.width, 0);
+  expect(smallButton.height).toBeCloseTo(fullButton!.height, 0);
+  await more.click();
+  const imageMenu = page.getByRole("menu");
+  await expect(
+    imageMenu.getByRole("link", { name: "下载原图", exact: true }),
+  ).toHaveAttribute(
+    "href",
+    `/api/images/assets/${first.document.nodes[0].assetId}/download`,
+  );
+  await imageMenu.getByRole("menuitem", { name: "预览", exact: true }).click();
+  await expect(imageMenu).toBeHidden();
+  await expect(page.locator(".ant-image-preview")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".ant-image-preview")).toBeHidden();
+  await node.hover();
+  await more.click();
+  await imageMenu
+    .getByRole("menuitem", { name: "复用设置", exact: true })
+    .click();
+  await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
+    "合成画布图片",
+  );
+  await page.getByLabel("创作需求", { exact: true }).fill("");
+  await node.hover();
+  await more.click();
+  await imageMenu
+    .getByRole("menuitem", { name: "作为参考图", exact: true })
+    .click();
+  await expect(
+    page
+      .getByTestId("reference-upload")
+      .getByText("画布参考图", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "移除引用 画布参考图", exact: true })
+    .click();
+  for (let i = 0; i < 4; i++) {
+    const zoom = (await savedCanvas()).document.viewport.zoom;
+    await page.getByRole("button", { name: "Zoom In", exact: true }).click();
+    await expect
+      .poll(async () => (await savedCanvas()).document.viewport.zoom)
+      .toBeGreaterThan(zoom);
+  }
+  await expect(
+    imageActions.getByRole("button", { name: "查看原图", exact: true }),
+  ).toBeVisible();
+  expect((await savedCanvas()).document.nodes).toEqual(first.document.nodes);
+  const beforePan = await savedCanvas();
   const pane = (await page.locator(".react-flow__pane").boundingBox())!;
   async function savedCanvas() {
     return (await page.request.get(`/api/projects/${projectId}/canvas`)).json();
@@ -914,7 +988,7 @@ test("desktop canvas saves geometry, handles conflicts and never replaces remove
   await dragAt(pane.x + pane.width - 120, pane.y + 90);
   await expect
     .poll(async () => (await savedCanvas()).document.viewport.x)
-    .not.toBe(first.document.viewport.x);
+    .not.toBe(beforePan.document.viewport.x);
   const afterBlank = await savedCanvas();
   expect(afterBlank.document.nodes).toEqual(first.document.nodes);
   await page.getByRole("button", { name: "拖拽工具", exact: true }).click();
