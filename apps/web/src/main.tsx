@@ -8,6 +8,7 @@ import {
   Link,
   Navigate,
   useLocation,
+  useNavigate,
   useBlocker,
 } from "react-router-dom";
 import {
@@ -21,10 +22,11 @@ import {
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
-  ShieldCheck,
+  KeyRound,
+  ChevronDown,
 } from "lucide-react";
 import type { SessionView } from "@tuyile/contracts";
-import { Button, Notice, UiProvider, Tooltip } from "@tuyile/ui";
+import { Button, Notice, UiProvider, Tooltip, Dropdown } from "@tuyile/ui";
 import { client, ApiError, notifySessionChange, sessionTabId } from "./api";
 import { SessionProvider, useSessionState } from "./session-state";
 import "./styles.css";
@@ -132,7 +134,8 @@ function App() {
 function Shell() {
   const state = useSessionState(),
     { session } = state,
-    path = useLocation().pathname;
+    path = useLocation().pathname,
+    navigate = useNavigate();
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [collapsed, setCollapsed] = useState(() => {
@@ -224,14 +227,13 @@ function Shell() {
           {nav("/gallery", "图库", <Images size={20} />)}
           {nav("/prompts", "提示池", <WandSparkles size={20} />)}
           {nav("/favorites", "收藏", <Star size={20} />)}
-          {nav("/usage", "额度与任务", <Database size={20} />)}
+          {nav("/usage", "额度", <Database size={20} />)}
           {session.user.role === "admin" && (
             <>
               {nav("/admin/users", "账号管理", <Users size={20} />)}
               {nav("/admin/images", "模型服务", <ImagePlus size={20} />)}
             </>
           )}
-          {nav("/account", "账户安全", <ShieldCheck size={20} />)}
         </nav>
         <Suspense fallback={null}>
           <ProjectNavigation />
@@ -274,22 +276,54 @@ function Shell() {
                   "/gallery": "图库",
                   "/prompts": "提示池",
                   "/favorites": "收藏",
-                  "/usage": "额度与任务",
+                  "/usage": "额度",
                   "/admin/users": "账号管理",
                   "/admin/images": "模型服务",
-                  "/account": "账户安全",
+                  "/account": "修改密码",
                 } as Record<string, string>
               )[path] ?? "项目空间"}
             </span>
           )}
           <div className="actions">
-            <span className="username" title={session.user.username}>
-              {session.user.username}
-            </span>
-            <Button disabled={busy} onClick={() => void logout()}>
-              <LogOut size={16} />
-              <span>{busy ? "正在退出…" : "退出登录"}</span>
-            </Button>
+            <Dropdown
+              trigger={["click"]}
+              placement="bottomRight"
+              autoFocus
+              disabled={busy}
+              menu={{
+                items: [
+                  {
+                    key: "password",
+                    icon: <KeyRound size={16} />,
+                    label: "修改密码",
+                  },
+                  { type: "divider" },
+                  {
+                    key: "logout",
+                    icon: <LogOut size={16} />,
+                    label: busy ? "正在退出…" : "退出登录",
+                    disabled: busy,
+                  },
+                ],
+                onClick: ({ key }) => {
+                  if (key === "password") navigate("/account");
+                  if (key === "logout") void logout();
+                },
+              }}
+            >
+              <Button
+                type="button"
+                className="account-menu-trigger"
+                aria-label="账户菜单"
+                disabled={busy}
+                loading={busy}
+              >
+                <span className="username" title={session.user.username}>
+                  {session.user.username}
+                </span>
+                <ChevronDown size={14} />
+              </Button>
+            </Dropdown>
           </div>
         </header>
         <main className="content">

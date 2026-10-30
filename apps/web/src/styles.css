@@ -168,6 +168,7 @@ form {
   font-size: 12px;
 }
 .shell {
+  --app-header-height: 48px;
   min-height: 100vh;
   display: grid;
   grid-template-columns: 208px minmax(0, 1fr);
@@ -221,7 +222,7 @@ form {
   position: sticky;
   top: 0;
   z-index: 20;
-  height: 72px;
+  height: var(--app-header-height);
   border-bottom: 1px solid var(--line);
   background: var(--surface);
   display: flex;
@@ -241,6 +242,17 @@ form {
   color: var(--muted);
   max-width: 180px;
   overflow-wrap: anywhere;
+}
+.main-column header .username {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.account-menu-trigger.ant-btn {
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
+  padding-inline: 6px;
 }
 .content {
   padding: 36px;
@@ -430,6 +442,7 @@ form {
 @media (max-width: 700px) {
   .shell,
   .shell.collapsed {
+    --app-header-height: 68px;
     display: block;
   }
   .sidebar,
@@ -889,7 +902,7 @@ form {
 }
 .workspace-shell .content {
   padding: 0;
-  height: calc(100dvh - 64px);
+  height: calc(100dvh - var(--app-header-height));
   overflow: hidden;
 }
 .workspace-shell .project-workspace {
@@ -1065,9 +1078,6 @@ form {
 .main-column header .workspace-title {
   padding: 0;
   border: 0;
-}
-.workspace-shell .content {
-  height: calc(100dvh - 72px);
 }
 .canvas-copy-message {
   position: absolute;
@@ -1545,7 +1555,6 @@ form {
     padding: 16px 8px;
   }
   .main-column header {
-    height: 64px;
     padding: 0 24px;
   }
   .brand {
@@ -1566,9 +1575,6 @@ form {
   }
   .image-admin > .muted {
     margin: 8px 0 20px;
-  }
-  .workspace-shell .content {
-    height: calc(100dvh - 64px);
   }
   .content {
     padding: 20px 24px;

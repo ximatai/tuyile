@@ -32,6 +32,23 @@ try {
   );
   await login.click();
   await page.getByRole("heading", { name: "我的项目", exact: true }).waitFor();
+  assert.equal(
+    (await page.locator(".main-column > header").boundingBox())!.height,
+    48,
+  );
+  await page
+    .getByRole("button", { name: "账户菜单", exact: true })
+    .press("Enter");
+  await page.getByRole("menuitem", { name: "修改密码", exact: true }).waitFor();
+  await page.getByRole("menuitem", { name: "退出登录", exact: true }).waitFor();
+  await page.keyboard.press("Escape");
+  await page.getByRole("menu").waitFor({ state: "hidden" });
+  await page.getByRole("button", { name: "账户菜单", exact: true }).click();
+  await page
+    .getByRole("menuitem", { name: "修改密码", exact: true })
+    .press("Enter");
+  await page.getByRole("heading", { name: "修改密码", exact: true }).waitFor();
+  await page.getByRole("link", { name: "项目", exact: true }).click();
   await page
     .getByRole("link", { name: /Docker synthetic acceptance/ })
     .first()

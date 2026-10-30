@@ -15,6 +15,10 @@ async function login(
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await expect(page.getByRole("heading", { name: "我的项目" })).toBeVisible();
 }
+async function logoutFromMenu(page: Page) {
+  await page.getByRole("button", { name: "账户菜单", exact: true }).click();
+  await page.getByRole("menuitem", { name: "退出登录", exact: true }).click();
+}
 test("desktop and mobile: persistent projects, activation, account boundaries and password revocation", async ({
   page,
   browser,
@@ -84,7 +88,26 @@ test("desktop and mobile: persistent projects, activation, account boundaries an
   await expect(member.getByRole("alert")).toContainText(
     "内容不存在或你无权访问",
   );
-  await member.getByRole("link", { name: "账户安全", exact: true }).click();
+  await expect(
+    member.getByRole("link", { name: "账户安全", exact: true }),
+  ).toHaveCount(0);
+  await member
+    .getByRole("button", { name: "账户菜单", exact: true })
+    .press("Enter");
+  await expect(
+    member.getByRole("menuitem", { name: "修改密码", exact: true }),
+  ).toBeVisible();
+  await member.keyboard.press("Escape");
+  await expect(
+    member.getByRole("menuitem", { name: "修改密码", exact: true }),
+  ).toBeHidden();
+  await member.getByRole("button", { name: "账户菜单", exact: true }).click();
+  await member
+    .getByRole("menuitem", { name: "修改密码", exact: true })
+    .press("Enter");
+  await expect(
+    member.getByRole("heading", { name: "修改密码", exact: true }),
+  ).toBeVisible();
   await member.getByLabel("当前密码").fill(newPassword);
   const changed = randomBytes(24).toString("base64url");
   await member.getByLabel("新密码", { exact: true }).fill(changed);
@@ -99,7 +122,7 @@ test("desktop and mobile: persistent projects, activation, account boundaries an
   await expect(
     secondTab.getByRole("heading", { name: "我的项目" }),
   ).toBeVisible();
-  await member.getByRole("button", { name: "退出登录", exact: true }).click();
+  await logoutFromMenu(member);
   await expect(
     secondTab.getByRole("heading", { name: "登录图一乐" }),
   ).toBeVisible({ timeout: 15000 });
@@ -437,7 +460,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   ).toHaveLength(2);
   await expect(reopened.getByText("合成测试：注销后继续")).toBeVisible();
   await reopened.reload();
-  await reopened.getByRole("button", { name: "退出登录", exact: true }).click();
+  await logoutFromMenu(reopened);
   await expect(
     reopened.getByRole("heading", { name: "登录图一乐" }),
   ).toBeVisible();
@@ -512,9 +535,9 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     path: ".codex-temp/m3-step3-wide-results.png",
     fullPage: true,
   });
-  await reopened.getByRole("link", { name: "额度与任务", exact: true }).click();
+  await reopened.getByRole("link", { name: "额度", exact: true }).click();
   await expect(
-    reopened.getByRole("heading", { name: "我的额度与任务" }),
+    reopened.getByRole("heading", { name: "我的额度" }),
   ).toBeVisible();
   await expect(
     reopened.getByRole("heading", { name: "上传的参考图" }),
@@ -555,6 +578,7 @@ test("desktop administration publishes service model pools and preserves version
       await page.evaluate(() => window.scrollTo(0, 0));
       const header = page.locator(".main-column > header");
       const before = await header.boundingBox();
+      expect(before!.height).toBe(48);
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
       await expect
         .poll(() => page.evaluate(() => window.scrollY))
@@ -562,7 +586,7 @@ test("desktop administration publishes service model pools and preserves version
       const after = await header.boundingBox();
       expect(after!.y).toBe(before!.y);
       await expect(
-        header.getByRole("button", { name: "退出登录" }),
+        header.getByRole("button", { name: "账户菜单" }),
       ).toBeInViewport();
       await page.evaluate(() => window.scrollTo(0, 0));
       if (collapsed)
@@ -729,7 +753,7 @@ test("desktop canvas saves geometry, handles conflicts and never replaces remove
   expect(response.ok()).toBe(true);
   await page.locator(".react-flow__controls-zoomin").click();
   await expect(page.getByText(/画布已在其他页面修改/)).toBeVisible();
-  await page.getByRole("link", { name: "查看全部任务与额度" }).click();
+  await page.getByRole("link", { name: "查看额度", exact: true }).click();
   await expect(page).toHaveURL(projectUrl);
   await expect(page.getByText(/未能保存画布/)).toBeVisible();
   let rejectedRequest:
@@ -802,6 +826,19 @@ test("desktop canvas saves geometry, handles conflicts and never replaces remove
   );
   await expect(page.getByText(/未能保存画布/)).toHaveCount(0);
   async function checkWorkspaceBounds() {
+    await expect
+      .poll(() =>
+        page
+          .locator(".shell")
+          .evaluate(
+            (el) =>
+              el
+                .getAnimations()
+                .filter((animation) => animation.playState === "running")
+                .length,
+          ),
+      )
+      .toBe(0);
     const panel = (await page.locator(".creation-panel").boundingBox())!;
     const canvas = (await page.locator(".canvas-surface").boundingBox())!;
     const navigation = (await page.locator(".sidebar").boundingBox())!;

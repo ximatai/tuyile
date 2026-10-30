@@ -693,7 +693,7 @@ export function CreationPage({
                 </Popover>
               </div>
             )}
-            <Link to="/usage">查看全部任务与额度</Link>
+            <Link to="/usage">查看额度</Link>
           </div>
           <div className="agent-creation" hidden={mode !== "agent"}>
             <AgentPanel
@@ -765,7 +765,7 @@ export function UsagePage({ csrfToken }: { csrfToken: string }) {
   }
   return (
     <section>
-      <h1>我的额度与任务</h1>
+      <h1>我的额度</h1>
       {(error || usageQuery.error || tasksQuery.error) && (
         <Notice error>
           {error || usageQuery.error?.message || tasksQuery.error?.message}
