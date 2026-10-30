@@ -67,7 +67,6 @@ corepack pnpm dev
 - [当前能力与后续方向](docs/delivery-roadmap.md)。
 - [贡献指南](CONTRIBUTING.md)：开发环境、变更范围、验证和提交。
 - [源码与镜像发布指南](docs/releasing.md)：许可、隐私、扫描与发布边界。
-- [本轮开源准备检查](docs/open-source-readiness.md)：检查范围、结果和剩余注意事项。
 
 欢迎可复现的问题报告与完整、聚焦的改进。请使用合成数据，提交前移除凭据、私人图片、绝对路径和未脱敏日志。
 

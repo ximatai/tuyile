@@ -80,7 +80,7 @@ corepack pnpm test:recovery
 
 数据库测试必须串行，共用`.codex-temp/database-tests.lock`。reset/seed仅允许loopback55440的`tuyile_test`，不得指向开发或Docker验收库。强制中断留下锁时先确认没有存活测试进程，再处理锁；不能靠删锁绕过并发守卫。
 
-e2e自行启动/关闭测试服务，凭据随机，截图和trace被忽略。界面验收以1440/1920桌面为主，保留已有390px历史回归，不新增手机专项。浏览器几何检查应等真实布局动画结束，不以固定sleep或过渡中的跨帧测量冒充稳定布局。
+e2e自行启动/关闭测试服务，凭据随机，截图和trace被忽略。界面验收以1440/1920桌面为主。浏览器几何检查应等真实布局动画结束，不以固定sleep或过渡中的跨帧测量冒充稳定布局。
 
 恢复演练需要Docker Desktop、OpenSSL及Chromium，会暂时停止再恢复原专用测试PG，只清理本次随机新卷，不改开发库。详细失败与中断清理见[运行手册](operations.md)。
 

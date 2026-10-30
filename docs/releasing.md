@@ -32,7 +32,7 @@ git archive --format=tar.gz --prefix=tuyile/ --output=.codex-temp/releases/tuyil
 tar -tzf .codex-temp/releases/tuyile-source.tar.gz
 ```
 
-`.gitattributes`让源码包省略内部阶段日志docs/archive和代理协作文件AGENTS.md；现行文档和许可证保留。该设置不移除仓库或历史中的文件，若公开整个Git仓库，它们仍可被访问。不要使用`tar`直接打包工作目录，也不要强制把忽略文件加入Git。
+`.gitattributes`让源码包省略代理协作文件AGENTS.md；现行文档和许可证保留。该设置不隐藏Git历史；历史中的实施记录仍会随完整仓库公开。不要使用`tar`直接打包工作目录，也不要强制把忽略文件加入Git。
 
 发布前检查包内清单和解包后的文档链接，再对解包内容运行Gitleaks：
 
@@ -50,7 +50,7 @@ Docker构建上下文采用允许目录加私密/生成文件排除，镜像显�
 
 分发二进制前，在目标平台检查`corepack pnpm licenses list --prod --json`及原生包的README / versions.json。sharp/libvips包含LGPL和其他许可证组件；保留对应许可、版权说明，按实际分发方式满足对应源码与替换/重新链接要求。[第三方声明](../THIRD_PARTY_NOTICES.md)给出来源。不要把某台机器的npm级清单当作完整的跨平台二进制合规证明。
 
-本项目未发布公共镜像或软件包。工作区`private: true`防止npm误发布；不应为了公开源码而去掉它。
+工作区`private: true`防止npm误发布；公开源码无需去掉它。
 
 ## 公网部署
 

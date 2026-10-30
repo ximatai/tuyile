@@ -1,6 +1,6 @@
 # Tuyile repository instructions
 
-Read docs/README.md, docs/product-baseline.md, docs/architecture.md and docs/delivery-roadmap.md before product work. Read an active engineering plan when one is listed in docs/delivery-roadmap.md; completed plans in docs/archive/ are historical evidence, not pending instructions. docs/development.md defines local commands and isolation.
+Read docs/README.md, docs/product-baseline.md, docs/architecture.md and docs/delivery-roadmap.md before product work. Read an active engineering plan when one is listed in docs/delivery-roadmap.md; completed plans in Git history are historical evidence, not pending instructions. docs/development.md defines local commands and isolation.
 
 - Main agent implements each complete stage personally. One stage, one commit, then self-review and one independent reviewer; fixes amend the stage commit. Do not delegate implementation or split stages into smaller deliveries.
 - Node version is pinned in .node-version; pnpm is pinned in package.json. Use corepack pnpm when the host's pnpm wrapper selects another runtime.

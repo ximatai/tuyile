@@ -1,6 +1,6 @@
-# 本地运行、备份恢复与发布材料
+# 运行与备份恢复
 
-本文说明现有运行与恢复流程。当前仅完成本地验收，未公开部署，不做旧业务数据迁移。沿用模块化单体、一个 Worker、PostgreSQL 和私有图片卷，不增加备份平台或调度服务。
+部署由 API、一个 Worker、PostgreSQL 和私有图片卷组成。本文说明独立运行、HTTPS 配置与成套备份恢复。
 
 ## 独立运行
 
@@ -62,7 +62,7 @@ corepack pnpm test:recovery
 
 `RECOVERY_TEST_ABORT_AFTER_CLONE=1 corepack pnpm test:recovery` 是有意中断反例，预期退出非零；正常SIGINT/SIGTERM会等待清理临时容器/卷并恢复原测试实例，失败或中断不会写入成功报告。SIGKILL或宿主机故障无法保证执行清理：先确认测试进程已结束，依据该次忽略目录的 `run.json` 精确识别随机恢复项目、Nginx容器及本次API进程。核对PID仍对应本次8795端口的编译API后再结束它，仅清理本次代理和恢复项目，再启动原 `tuyile-test` PostgreSQL。不要盲目按PID终止进程、按前缀批量删除卷，或把原项目当恢复项目清理。
 
-本地演练通过不表示生产已部署。历史验收证据与当前交付状态见[交付状态](delivery-roadmap.md)。
+本地演练通过不能替代目标部署环境的验证。
 
 ## 公开分发
 
