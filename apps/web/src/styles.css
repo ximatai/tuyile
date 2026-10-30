@@ -3193,3 +3193,7 @@ h3 {
 .user-policy-save > button {
   width: 100%;
 }
+
+.user-policy-models {
+  margin-top: 12px;
+}

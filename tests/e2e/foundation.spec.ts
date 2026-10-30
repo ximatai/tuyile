@@ -54,6 +54,18 @@ test("desktop and mobile: persistent projects, activation, account boundaries an
   const quota = drawer.getByLabel("每日图片额度", { exact: true });
   await expect(quota).toBeVisible();
   const originalQuota = await quota.inputValue();
+  const storage = drawer.getByLabel("存储上限（GB）", { exact: true });
+  const originalStorage = await storage.inputValue();
+  await expect(
+    drawer.getByLabel("图片最大边长（px）", { exact: true }),
+  ).toBeHidden();
+  await drawer.getByText("高级设置", { exact: true }).click();
+  await expect(
+    drawer.getByLabel("图片最大边长（px）", { exact: true }),
+  ).toBeVisible();
+  await drawer.getByText("高级设置", { exact: true }).click();
+  await storage.fill("1.5");
+
   await quota.fill("7");
   await drawer.getByRole("button", { name: "关闭", exact: true }).click();
   await page
@@ -73,6 +85,8 @@ test("desktop and mobile: persistent projects, activation, account boundaries an
     .getByRole("button", { name: "管理", exact: true })
     .click();
   await expect(quota).toHaveValue("7");
+  await expect(storage).toHaveValue("1.5");
+  await storage.fill(originalStorage);
   await quota.fill(originalQuota);
   await drawer
     .getByRole("button", { name: "保存用户配置", exact: true })

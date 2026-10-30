@@ -1,19 +1,26 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import type { ImagePolicy, ModelCatalogSnapshot } from "@tuyile/contracts";
-import { Button, Field, ChoiceField, Notice, Select } from "@tuyile/ui";
+import {
+  Button,
+  Field,
+  ChoiceField,
+  Notice,
+  Select,
+  Collapse,
+  Radio,
+} from "@tuyile/ui";
 import { useSessionState } from "./session-state";
 import { client } from "./api";
-const fields: Record<string, string> = {
-  imageLimit: "每日图片额度",
-  attemptsLimit: "每日上游尝试上限",
-  storageLimit: "存储上限（字节）",
-  concurrency: "每用户执行并发",
-  queueLimit: "每用户排队上限",
-  maxEdge: "最大边长",
-  maxPixels: "最大像素数",
-  maxCount: "单次最多张数",
-};
+const GB = 1024 ** 3;
+const advancedFields = [
+  { key: "maxCount", label: "每次最多生成（张）", min: 1, max: 16 },
+  { key: "attemptsLimit", label: "每日模型调用上限（次）", min: 0, max: 10000 },
+  { key: "concurrency", label: "同时执行的任务数", min: 1, max: 8 },
+  { key: "queueLimit", label: "最多排队的任务数", min: 1, max: 100 },
+  { key: "maxEdge", label: "图片最大边长（px）", min: 256, max: 8192 },
+  { key: "maxPixels", label: "图片最大像素数", min: 65536, max: 32000000 },
+] as const;
 
 export function UserPolicyEditor({
   userId,
@@ -28,6 +35,7 @@ export function UserPolicyEditor({
 }) {
   const state = useSessionState(),
     api = client(csrfToken);
+  const [modelScope, setModelScope] = useState<"all" | "custom" | null>(null);
   const [draft, setDraft] = useState<ImagePolicy | null>(null);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
@@ -56,7 +64,12 @@ export function UserPolicyEditor({
   }
   async function save(e: FormEvent) {
     e.preventDefault();
-    if (!current || busy) return;
+    if (
+      !current ||
+      busy ||
+      (modelScope === "custom" && !current.allowedModels.length)
+    )
+      return;
     setBusy(true);
     onBusyChange(true);
     setError("");
@@ -84,9 +97,12 @@ export function UserPolicyEditor({
         value: e.id,
         label: `${e.modelId} · ${catalog.data!.services.find((s) => s.id === e.serviceId)?.name ?? "服务不可用"}`,
       })) ?? [];
+  const scope =
+    modelScope ?? (current?.allowedModels.length ? "custom" : "all");
+  const incompleteScope = scope === "custom" && !current?.allowedModels.length;
   return (
     <section className="user-policy-editor" aria-label="额度与模型">
-      <h3>额度与限制</h3>
+      <h3>使用额度</h3>
       {(error || policy.error || catalog.error) && (
         <Notice error>
           {error || policy.error?.message || catalog.error?.message}
@@ -97,54 +113,108 @@ export function UserPolicyEditor({
       {current && (
         <form aria-label="保存用户配置" onSubmit={(e) => void save(e)}>
           <div className="parameter-grid">
-            {Object.entries(fields).map(([key, label]) => (
-              <Field
-                key={key}
-                label={label}
-                type="number"
-                min={
-                  ["imageLimit", "attemptsLimit", "storageLimit"].includes(key)
-                    ? 0
-                    : 1
-                }
-                value={Number(current[key as keyof ImagePolicy])}
-                required
-                onChange={(e) => patch({ [key]: Number(e.target.value) })}
-              />
-            ))}
-          </div>
-          <ChoiceField
-            label="最高质量"
-            value={current.maxQuality}
-            onValueChange={(v) =>
-              patch({ maxQuality: v as ImagePolicy["maxQuality"] })
-            }
-            options={["low", "medium", "high"].map((value) => ({
-              value,
-              label: (
-                { low: "低", medium: "中", high: "高" } as Record<
-                  string,
-                  string
-                >
-              )[value],
-            }))}
-          />
-          <label className="field">
-            <span>允许的图像模型</span>
-            <Select
-              mode="multiple"
-              aria-label="允许的图像模型"
-              value={current.allowedModels}
-              options={choices}
-              onChange={(allowedModels) => patch({ allowedModels })}
-              placeholder="留空跟随全局图像池"
+            <Field
+              label="每日图片额度"
+              type="number"
+              min={0}
+              max={10000}
+              required
+              value={current.imageLimit}
+              onChange={(e) => patch({ imageLimit: Number(e.target.value) })}
             />
-          </label>
+            <Field
+              label="存储上限（GB）"
+              title="1 GB 按 1024³ 字节计算"
+              type="number"
+              min={0}
+              max={1024}
+              step="any"
+              required
+              value={current.storageLimit / GB}
+              onChange={(e) =>
+                patch({ storageLimit: Math.round(Number(e.target.value) * GB) })
+              }
+            />
+          </div>
+          <h3>模型权限</h3>
+          <Radio.Group
+            aria-label="模型使用范围"
+            value={scope}
+            onChange={(e) => {
+              setModelScope(e.target.value);
+              if (e.target.value === "all") patch({ allowedModels: [] });
+            }}
+            options={[
+              { value: "all", label: "全部开放模型" },
+              { value: "custom", label: "指定模型" },
+            ]}
+          />
+          {scope === "custom" && (
+            <label className="field user-policy-models">
+              <span>允许使用的图片模型</span>
+              <Select
+                mode="multiple"
+                aria-label="允许使用的图片模型"
+                value={current.allowedModels}
+                options={choices}
+                onChange={(allowedModels) => patch({ allowedModels })}
+                placeholder="选择模型"
+                status={incompleteScope ? "warning" : undefined}
+              />
+            </label>
+          )}
           <p className="hint">
-            留空使用全局开放范围；选定后只允许这些模型。降额不撤销已接受任务。
+            {scope === "all"
+              ? "跟随模型服务中的开放范围。"
+              : "仅允许使用选中的模型。"}
           </p>
+          <Collapse
+            ghost
+            items={[
+              {
+                key: "advanced",
+                label: "高级设置",
+                children: (
+                  <>
+                    <p className="hint">一般无需修改，保留现有设置即可。</p>
+                    <div className="parameter-grid">
+                      {advancedFields.map(({ key, label, min, max }) => (
+                        <Field
+                          key={key}
+                          label={label}
+                          type="number"
+                          min={min}
+                          max={max}
+                          required
+                          value={current[key]}
+                          onChange={(e) =>
+                            patch({ [key]: Number(e.target.value) })
+                          }
+                        />
+                      ))}
+                    </div>
+                    <ChoiceField
+                      label="图片质量上限"
+                      value={current.maxQuality}
+                      onValueChange={(v) =>
+                        patch({ maxQuality: v as ImagePolicy["maxQuality"] })
+                      }
+                      options={[
+                        { value: "low", label: "低" },
+                        { value: "medium", label: "中" },
+                        { value: "high", label: "高" },
+                      ]}
+                    />
+                  </>
+                ),
+              },
+            ]}
+          />
           <div className="user-policy-save">
-            <Button className="primary" disabled={busy || !dirty}>
+            <Button
+              className="primary"
+              disabled={busy || !dirty || incompleteScope}
+            >
               {busy ? "正在保存…" : "保存用户配置"}
             </Button>
           </div>
