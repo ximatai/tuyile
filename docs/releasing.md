@@ -20,7 +20,7 @@ gitleaks git --config .gitleaks.toml --log-opts="--all --full-history" --redact=
 4. 检查提交作者姓名/邮箱、commit message、分支/tag、内部地址和历史素材。export-ignore不隐藏Git clone或push中的历史；若要改写历史，先备份并明确授权，不在普通文档整理中自动执行。
 5. 检查截图EXIF、账号、路径、模型输出及素材授权。不要把`.env`、备份、trace、私有图片卷、`.git`或整个工作目录上传到release。
 6. 确认LICENSE、NOTICE、第三方许可与包元数据一致；依赖、模型访问权和素材权利分别处理。
-7. 公开托管仓库时设置私密漏洞报告渠道、必要的分支保护和扫描，依据[安全政策](../SECURITY.md)接收报告。
+7. 公开托管仓库时设置私密漏洞报告渠道、必要的分支保护和扫描，依据[安全政策](../.github/SECURITY.md)接收报告。
 
 ## 源码包
 

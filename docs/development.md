@@ -1,6 +1,6 @@
 # 本地开发与验证
 
-贡献方式见[贡献指南](../CONTRIBUTING.md)，产品与技术边界分别见[产品基线](product-baseline.md)和[架构设计](architecture.md)。本文只保留当前操作方法，版本能力与验证边界见[当前能力](delivery-roadmap.md)。
+贡献方式见[贡献指南](../.github/CONTRIBUTING.md)，产品与技术边界分别见[产品基线](product-baseline.md)和[架构设计](architecture.md)。本文只保留当前操作方法，版本能力与验证边界见[当前能力](delivery-roadmap.md)。
 
 ## 环境与启动
 

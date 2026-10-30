@@ -1,6 +1,6 @@
 # 贡献指南
 
-感谢参与 Tuyile。请先阅读[产品范围](docs/product-baseline.md)、[架构设计](docs/architecture.md)和[本地开发](docs/development.md)，避免把小规模图片创作工具扩展成通用平台。
+感谢参与 Tuyile。请先阅读[产品范围](../docs/product-baseline.md)、[架构设计](../docs/architecture.md)和[本地开发](../docs/development.md)，避免把小规模图片创作工具扩展成通用平台。
 
 ## 变更方式
 
@@ -13,11 +13,11 @@
 
 ## 开发与验证
 
-使用仓库固定的 Node/pnpm 及独立 PostgreSQL。初始化、账号与测试命令见[开发说明](docs/development.md)。涉及代码时运行类型检查、构建及受影响的单元、真实 PG、浏览器和 Docker 检查；涉及恢复与部署时补充对应演练。
+使用仓库固定的 Node/pnpm 及独立 PostgreSQL。初始化、账号与测试命令见[开发说明](../docs/development.md)。涉及代码时运行类型检查、构建及受影响的单元、真实 PG、浏览器和 Docker 检查；涉及恢复与部署时补充对应演练。
 
 数据库集成、浏览器、runtime 和恢复测试必须串行，只允许专用 loopback55440 / tuyile_test 执行 reset/seed。禁止清空开发库或复制其他实例的凭据和图片卷。自动回归使用 fake Provider，不产生真实模型费用。
 
-提交前运行 `corepack pnpm check:release` 检查 Git 暂存区，并按[发布指南](docs/releasing.md)运行 Gitleaks。不要只检查工作区：已暂存的秘密不会因为未暂存的删改而消失。
+提交前运行 `corepack pnpm check:release` 检查 Git 暂存区，并按[发布指南](../docs/releasing.md)运行 Gitleaks。不要只检查工作区：已暂存的秘密不会因为未暂存的删改而消失。
 
 ## 隐私、资源与许可
 

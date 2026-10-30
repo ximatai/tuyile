@@ -9,8 +9,8 @@
 | 自托管、HTTPS、成套备份与恢复    | [运行手册](operations.md)                                                           |
 | 布局、控件、交互与视觉约束       | [界面规范](ui-direction.md)                                                         |
 | 版本能力、限制与后续方向         | [当前能力](delivery-roadmap.md)                                                     |
-| 开发变更与PR                     | [贡献指南](../CONTRIBUTING.md)                                                      |
-| 漏洞报告、数据外发与安全边界     | [安全政策](../SECURITY.md)                                                          |
+| 开发变更与PR                     | [贡献指南](../.github/CONTRIBUTING.md)                                              |
+| 漏洞报告、数据外发与安全边界     | [安全政策](../.github/SECURITY.md)                                                  |
 | 源码/镜像的许可、隐私与打包      | [发布指南](releasing.md)                                                            |
 | 项目与第三方许可                 | [LICENSE](../LICENSE)、[NOTICE](../NOTICE)、[第三方声明](../THIRD_PARTY_NOTICES.md) |
 | 底层UI库补丁                     | [补丁说明](../patches/README.md)                                                    |
