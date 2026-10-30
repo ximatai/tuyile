@@ -429,7 +429,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     .locator(".canvas-task-history > .ant-collapse-item > .ant-collapse-header")
     .click();
   await expect(
-    reopened.getByRole("heading", { name: "已完成", exact: true }),
+    reopened.locator(".canvas-task-history .task-tile-state.state-succeeded"),
   ).toBeVisible({ timeout: 15000 });
   await expect(
     reopened.getByRole("status", { name: "图片生成状态" }),
@@ -458,6 +458,17 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     .locator(".canvas-task-history > .ant-collapse-item > .ant-collapse-header")
     .click();
   // Reusing a task is an editable draft; preview and reference actions must not dispatch work.
+  const taskDetails = reopened
+    .getByRole("button", { name: "任务详情", exact: true })
+    .first();
+  await taskDetails.click();
+  await expect(reopened.locator(".task-tile-details")).toContainText(
+    "合成风格：柔和自然光",
+  );
+  await reopened.keyboard.press("Escape");
+  await expect(taskDetails).toHaveAttribute("aria-expanded", "false");
+  await expect(taskDetails).toBeFocused();
+  await taskDetails.click();
   await reopened.getByRole("button", { name: "复用设置", exact: true }).click();
   await expect(reopened.getByLabel("创作需求")).toHaveValue(
     "合成测试：关闭页面后继续执行",
@@ -482,6 +493,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   await expect(reopened.locator(".ant-image-preview")).toBeVisible();
   await reopened.keyboard.press("Escape");
   await expect(reopened.locator(".ant-image-preview")).toBeHidden();
+  await reopened.locator(".task-tile-images figure").first().hover();
   await reopened
     .getByRole("button", { name: "继续修改", exact: true })
     .first()
@@ -591,7 +603,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     .locator(".canvas-task-history > .ant-collapse-item > .ant-collapse-header")
     .click();
   await expect(
-    reopened.getByRole("heading", { name: "已完成", exact: true }),
+    reopened.locator(".canvas-task-history .task-tile-state.state-succeeded"),
   ).toHaveCount(2, { timeout: 15000 });
   const png = (await import("sharp")).default;
   const bytes = await png({
@@ -615,7 +627,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     .getByRole("button", { name: "提交图片任务", exact: true })
     .click();
   await expect(
-    reopened.getByRole("heading", { name: "已完成", exact: true }),
+    reopened.locator(".canvas-task-history .task-tile-state.state-succeeded"),
   ).toHaveCount(3, { timeout: 15000 });
   await reopened.screenshot({
     path: ".codex-temp/stage2-desktop-workbench.png",
@@ -644,7 +656,8 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   );
   expect(cardLayout.length).toBe(3);
   expect(cardLayout.every((card) => !card.overflow)).toBe(true);
-  expect(cardLayout[0]!.width).toBeLessThan(500);
+  expect(cardLayout[0]!.width).toBeLessThan(280);
+  expect(Math.abs(cardLayout[0]!.y - cardLayout[2]!.y)).toBeLessThan(2);
   expect(Math.abs(cardLayout[0]!.y - cardLayout[1]!.y)).toBeLessThan(2);
   expect(cardLayout[1]!.x).toBeGreaterThan(cardLayout[0]!.x);
   const quotaTrigger = reopened.locator(".quota-details button");
@@ -1429,8 +1442,9 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
         `img[src="/api/images/assets/${dependentTask.outputs[0].id}/preview"]`,
       ),
     })
-    .getByRole("button", { name: "复用设置", exact: true })
+    .getByRole("button", { name: "任务详情", exact: true })
     .click();
+  await page.getByRole("button", { name: "复用设置", exact: true }).click();
   await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
     dependentTask.prompt,
   );
