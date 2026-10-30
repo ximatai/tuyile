@@ -1,6 +1,6 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useSessionState } from "./session-state";
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, useRef, type FormEvent } from "react";
 import type {
   UserView,
   UsersPage,
@@ -30,7 +30,16 @@ export function AdminPage({
   const [passwordResult, setPasswordResult] =
     useState<TemporaryPasswordResult | null>(null);
   const [selectedId, setSelectedId] = useState("");
+  const [selectedAccount, setSelectedAccount] = useState<UserView | null>(null);
   const [search, setSearch] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(
+      () => setSearchTerm(search.trim().toLowerCase()),
+      250,
+    );
+    return () => clearTimeout(timer);
+  }, [search]);
   const [policyBusy, setPolicyBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -39,12 +48,31 @@ export function AdminPage({
     [copied, setCopied] = useState(false);
   const state = useSessionState();
   const confirm = useConfirm();
+  const leaveState = useRef({ dirty, busy: policyBusy || busy });
+  leaveState.current = { dirty, busy: policyBusy || busy };
+  const leaveConfirm = useRef(confirm);
+  leaveConfirm.current = confirm;
+  useEffect(
+    () =>
+      state.registerNavigationGuard({
+        isDirty: () => leaveState.current.dirty || leaveState.current.busy,
+        canLeave: () =>
+          leaveState.current.busy
+            ? Promise.resolve(false)
+            : leaveConfirm.current("有未保存的用户配置，放弃修改并离开页面？"),
+      }),
+    [state],
+  );
   const api = client(csrfToken);
   const query = useInfiniteQuery({
-    queryKey: state.key("admin-users"),
+    queryKey: state.key("admin-users", searchTerm),
     initialPageParam: 0,
     queryFn: ({ signal, pageParam }) =>
-      api<UsersPage>(`/admin/users?offset=${pageParam}`, undefined, signal),
+      api<UsersPage>(
+        `/admin/users?offset=${pageParam}&search=${encodeURIComponent(searchTerm)}`,
+        undefined,
+        signal,
+      ),
     getNextPageParam: (p, pages) => (p.hasMore ? pages.length * 50 : undefined),
   });
   const users = [
@@ -54,7 +82,9 @@ export function AdminPage({
     ],
     loading = query.isPending,
     hasMore = query.hasNextPage;
-  const selectedUser = users.find((u) => u.id === selectedId);
+  const selectedUser =
+    users.find((u) => u.id === selectedId) ??
+    (selectedAccount?.id === selectedId ? selectedAccount : undefined);
   async function selectUser(id: string) {
     if (id === selectedId || policyBusy || busy) return;
     if (dirty && !(await confirm("有未保存的用户配置，放弃修改？"))) return;
@@ -62,6 +92,7 @@ export function AdminPage({
     setError("");
     setPasswordResult(null);
     setCopied(false);
+    setSelectedAccount(users.find((user) => user.id === id) ?? null);
     setSelectedId(id);
   }
   async function action(run: () => Promise<unknown>) {
@@ -141,6 +172,7 @@ export function AdminPage({
           className="users-search"
           aria-label="搜索用户"
           placeholder="搜索用户名"
+          maxLength={64}
           prefix={<Search size={16} />}
           allowClear
           value={search}
@@ -213,9 +245,7 @@ export function AdminPage({
       ) : (
         <Table<UserView>
           rowKey="id"
-          dataSource={users.filter((u) =>
-            u.username.includes(search.trim().toLowerCase()),
-          )}
+          dataSource={users}
           pagination={false}
           scroll={{ x: 620 }}
           columns={[

@@ -159,17 +159,21 @@ function Shell() {
   useEffect(() => {
     if (blocker.state !== "blocked") return;
     let alive = true;
-    void state
-      .flush()
-      .then(() => {
-        if (alive) blocker.proceed();
-      })
-      .catch((e) => {
-        if (alive) {
-          setError(`未能保存画布，已留在当前项目。${e.message}`);
-          blocker.reset();
-        }
-      });
+    void (async () => {
+      const allowed = await state.canLeave();
+      if (!alive) return;
+      if (!allowed) {
+        blocker.reset();
+        return;
+      }
+      await state.flush();
+      if (alive) blocker.proceed();
+    })().catch((e) => {
+      if (alive) {
+        setError(`未能保存画布，已留在当前项目。${e.message}`);
+        blocker.reset();
+      }
+    });
     return () => {
       alive = false;
     };
@@ -188,6 +192,10 @@ function Shell() {
     setBusy(true);
     setError("");
     try {
+      if (!(await state.canLeave())) {
+        setBusy(false);
+        return;
+      }
       await state.flush();
       await client(session.csrfToken)("/auth/logout", {});
       state.clear();

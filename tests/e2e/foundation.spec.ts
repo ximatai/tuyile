@@ -2323,3 +2323,133 @@ test("user quota inputs align in finite and unlimited modes on desktop", async (
     drawer.getByRole("button", { name: "保存用户配置", exact: true }),
   ).toBeDisabled();
 });
+
+test("user policy draft survives a pending search", async ({ page }) => {
+  await login(page);
+  await page.getByRole("link", { name: "用户管理", exact: true }).click();
+  await expect(
+    page.getByRole("cell", { name: "admin", exact: true }),
+  ).toBeVisible();
+  let release!: () => void;
+  let reached!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const requested = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  await page.route("**/api/admin/users?**", async (route) => {
+    if (new URL(route.request().url()).searchParams.get("search") === "admin") {
+      reached();
+      await gate;
+    }
+    await route.continue();
+  });
+  await page.getByLabel("搜索用户", { exact: true }).fill("admin");
+  await page
+    .getByRole("row")
+    .filter({ has: page.getByRole("cell", { name: "admin", exact: true }) })
+    .getByRole("button", { name: "管理", exact: true })
+    .click();
+  const drawer = page.getByRole("dialog", { name: /^admin/ });
+  await drawer.getByRole("checkbox", { name: "不限额", exact: true }).uncheck();
+  const quota = drawer.getByLabel("每日图片额度", { exact: true });
+  await quota.fill("17");
+  await requested;
+  const response = page.waitForResponse(
+    (r) =>
+      r.url().includes("/api/admin/users?") &&
+      new URL(r.url()).searchParams.get("search") === "admin",
+  );
+  release();
+  await response;
+  await expect(quota).toHaveValue("17");
+  await drawer.getByRole("button", { name: "关闭", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "请确认", exact: true })
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await expect(drawer).toBeHidden();
+});
+
+test("user search reaches older pages and unsaved policies block history and reload", async ({
+  page,
+}) => {
+  await login(page);
+  const session = await (await page.request.get("/api/auth/me")).json();
+  const headers = {
+    Origin: "http://127.0.0.1:5180",
+    "X-CSRF-Token": session.csrfToken,
+  };
+  for (const username of [
+    "older_search_target",
+    ...Array.from({ length: 50 }, (_, i) => `search_user_${i}`),
+  ]) {
+    expect(
+      (
+        await page.request.post("/api/admin/users", {
+          headers,
+          data: { username },
+        })
+      ).status(),
+    ).toBe(201);
+  }
+  await page.getByRole("link", { name: "用户管理", exact: true }).click();
+  await expect(
+    page.getByRole("row").filter({ hasText: "older_search_target" }),
+  ).toHaveCount(0);
+  await page
+    .getByLabel("搜索用户", { exact: true })
+    .fill("OLDER_SEARCH_TARGET");
+  await expect(
+    page.getByRole("row").filter({ hasText: "older_search_target" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "加载更多账号", exact: true }),
+  ).toHaveCount(0);
+  await page.getByLabel("搜索用户", { exact: true }).fill("admin");
+  await page
+    .getByRole("row")
+    .filter({ has: page.getByRole("cell", { name: "admin", exact: true }) })
+    .getByRole("button", { name: "管理", exact: true })
+    .click();
+  const drawer = page.getByRole("dialog", { name: /^admin/ });
+  await drawer.getByRole("checkbox", { name: "不限额", exact: true }).uncheck();
+  const quota = drawer.getByLabel("每日图片额度", { exact: true });
+  await quota.fill("17");
+  const back = page.goBack();
+  const confirmation = page.getByRole("dialog", {
+    name: "请确认",
+    exact: true,
+  });
+  await expect(confirmation).toBeVisible();
+  await page.goBack();
+  await expect(
+    page.getByText("有未保存的用户配置，放弃修改并离开页面？", { exact: true }),
+  ).toHaveCount(1);
+  await confirmation.getByRole("button", { name: "取消", exact: true }).click();
+  await back;
+  await expect(quota).toHaveValue("17");
+  const reloadDialog = page.waitForEvent("dialog");
+  const reload = page.reload({ timeout: 2000 }).catch(() => null);
+  const prompt = await reloadDialog;
+  expect(prompt.type()).toBe("beforeunload");
+  await prompt.dismiss();
+  await reload;
+  await expect(quota).toHaveValue("17");
+  const leave = page.goBack();
+  await expect(confirmation).toBeVisible();
+  await page.goBack();
+  await expect(
+    page.getByText("有未保存的用户配置，放弃修改并离开页面？", { exact: true }),
+  ).toHaveCount(1);
+  await confirmation.getByRole("button", { name: "确认", exact: true }).click();
+  await leave;
+  await expect(page).toHaveURL(/\/projects$/);
+  await expect(
+    page.getByRole("dialog", { name: "请确认", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "我的项目", exact: true }),
+  ).toBeVisible();
+});

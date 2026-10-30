@@ -47,6 +47,75 @@ describe("real PostgreSQL identity and HTTP boundaries", () => {
       await pool.end();
     }
   });
+  it("preserves configured quotas when upgrading through migration 15 and does not rewrite already applied databases", async () => {
+    const admin = await login();
+    const member = await db.service.createUser(
+      admin.view.user,
+      "quota_upgrade",
+    );
+    await db.pool.query(
+      "INSERT INTO image_policies(user_id,image_limit,attempts_limit) VALUES($1,20,60),($2,7,42)",
+      [admin.view.user.id, member.user.id],
+    );
+    const { pool: owner } = createDatabase(testUrls().owner);
+    try {
+      await owner.query("BEGIN");
+      await owner.query("DELETE FROM schema_migrations WHERE version=15");
+      await owner.query(
+        "ALTER TABLE image_policies DROP CONSTRAINT image_policies_image_limit_check",
+      );
+      await owner.query(
+        "ALTER TABLE image_policies ADD CONSTRAINT image_policies_image_limit_check CHECK(image_limit>=0)",
+      );
+      await owner.query(
+        "ALTER TABLE image_policies ALTER COLUMN image_limit SET DEFAULT 20",
+      );
+      await owner.query(
+        "ALTER TABLE image_policies ALTER COLUMN attempts_limit SET DEFAULT 60",
+      );
+      await owner.query("COMMIT");
+    } finally {
+      await owner.end();
+    }
+    await migrate(testUrls().owner);
+    const limits = (
+      await db.pool.query(
+        "SELECT user_id,image_limit,attempts_limit FROM image_policies ORDER BY user_id",
+      )
+    ).rows;
+    expect(
+      limits.find((row) => row.user_id === admin.view.user.id),
+    ).toMatchObject({ image_limit: 20, attempts_limit: 60 });
+    expect(limits.find((row) => row.user_id === member.user.id)).toMatchObject({
+      image_limit: 7,
+      attempts_limit: 42,
+    });
+    const third = await db.service.createUser(admin.view.user, "quota_new");
+    await db.pool.query("INSERT INTO image_policies(user_id) VALUES($1)", [
+      third.user.id,
+    ]);
+    expect(
+      (
+        await db.pool.query(
+          "SELECT image_limit,attempts_limit FROM image_policies WHERE user_id=$1",
+          [third.user.id],
+        )
+      ).rows[0],
+    ).toEqual({ image_limit: 100, attempts_limit: 300 });
+    await db.pool.query(
+      "UPDATE image_policies SET image_limit=-1,attempts_limit=300 WHERE user_id=$1",
+      [admin.view.user.id],
+    );
+    await migrate(testUrls().owner);
+    expect(
+      (
+        await db.pool.query(
+          "SELECT image_limit,attempts_limit FROM image_policies WHERE user_id=$1",
+          [admin.view.user.id],
+        )
+      ).rows[0],
+    ).toEqual({ image_limit: -1, attempts_limit: 300 });
+  });
   it("recovers the administrator through private CLI output without leaking or overwriting", async () => {
     const old = await login();
     const file = `.codex-temp/recovery-test-${randomUUID()}.json`;
@@ -469,6 +538,32 @@ describe("real PostgreSQL identity and HTTP boundaries", () => {
     ).json();
     expect(users.users).toHaveLength(50);
     expect(rest.users).toHaveLength(5);
+    const found = await (
+      await app.request("/api/admin/users?search=MEMBER0", { headers })
+    ).json();
+    expect(found.users.map((u: { username: string }) => u.username)).toEqual([
+      "member0",
+    ]);
+    expect(found.hasMore).toBe(false);
+    const filteredPage = await (
+      await app.request("/api/admin/users?search=member&offset=50", { headers })
+    ).json();
+    expect(filteredPage.users).toHaveLength(4);
+    const literal = await (
+      await app.request("/api/admin/users?search=member_", { headers })
+    ).json();
+    expect(literal.users).toEqual([]);
+    expect(
+      (
+        await app.request("/api/admin/users?search=" + "a".repeat(65), {
+          headers,
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (await app.request("/api/admin/users?search=%00", { headers })).status,
+    ).toBe(400);
+
     expect(new Set([...users.users, ...rest.users].map((x) => x.id)).size).toBe(
       55,
     );

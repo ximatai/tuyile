@@ -20,6 +20,7 @@ import {
   z,
   loginInput,
   pageOffset,
+  userSearch,
   createUserInput,
   redeemInput,
   changePasswordInput,
@@ -228,6 +229,7 @@ export function createApp(
     const users = await service.users(
       c.get("session").user,
       pageOffset.parse(c.req.query("offset")),
+      userSearch.parse(c.req.query("search")),
     );
     return c.json({ users: users.slice(0, 50), hasMore: users.length > 50 });
   });

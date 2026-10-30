@@ -41,7 +41,28 @@ export async function migrate(url: string) {
       if (old && old.checksum !== checksum)
         throw new Error("MIGRATION_CHECKSUM_MISMATCH");
       if (!old) {
+        // Migration 15 mixed schema defaults with a heuristic data rewrite. Preserve
+        // existing limits when upgrading through it; never infer intent from 20/60.
+        // Keep the historical SQL/checksum unchanged for already-upgraded databases.
+        if (version === 15)
+          await c.query("LOCK TABLE image_policies IN ACCESS EXCLUSIVE MODE");
+        const existingPolicies =
+          version === 15
+            ? (
+                await c.query(
+                  "SELECT user_id,image_limit,attempts_limit FROM image_policies FOR UPDATE",
+                )
+              ).rows
+            : null;
         await c.query(sql);
+        if (existingPolicies?.length) {
+          await c.query(
+            `UPDATE image_policies p SET image_limit=b.image_limit,attempts_limit=b.attempts_limit
+            FROM jsonb_to_recordset($1::jsonb) AS b(user_id uuid,image_limit integer,attempts_limit integer)
+            WHERE p.user_id=b.user_id`,
+            [JSON.stringify(existingPolicies)],
+          );
+        }
         await c.query(
           "INSERT INTO schema_migrations(version,checksum) VALUES($1,$2)",
           [version, checksum],

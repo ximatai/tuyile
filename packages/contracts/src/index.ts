@@ -68,6 +68,13 @@ export interface UsersPage {
   users: UserView[];
   hasMore: boolean;
 }
+export const userSearch = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .max(64)
+  .refine((value) => !value.includes("\0"))
+  .default("");
 export const pageOffset = z.coerce.number().int().min(0).max(100000).default(0);
 export * from "./creation.js";
 export * from "./extensions.js";

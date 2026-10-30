@@ -47,7 +47,7 @@ export interface Repository {
   ): Promise<void>;
   setEnabled(id: string, enabled: boolean): Promise<void>;
   revokeUser(id: string): Promise<void>;
-  listUsers(offset?: number): Promise<UserView[]>;
+  listUsers(offset?: number, search?: string): Promise<UserView[]>;
   createToken(
     userId: string,
     kind: "activate" | "reset",
@@ -162,10 +162,10 @@ export class Workbench {
       r.deleteSession(this.security.digest(token)),
     );
   }
-  async users(p: Principal, offset = 0) {
+  async users(p: Principal, offset = 0, search = "") {
     return this.store.transaction(async (r) => {
       await this.actor(r, p, true);
-      return r.listUsers(offset);
+      return r.listUsers(offset, search.trim().toLowerCase());
     });
   }
   private async link(

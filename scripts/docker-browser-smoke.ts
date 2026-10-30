@@ -63,18 +63,20 @@ try {
   await page
     .getByRole("button", { name: "提交图片任务", exact: true })
     .waitFor();
-  await page.locator(".quota-details button").waitFor();
+  await page.locator("header .header-usage").waitFor();
   const submit = await page
     .getByRole("button", { name: "提交图片任务", exact: true })
     .boundingBox();
-  const quota = await page.locator(".quota-details button").boundingBox();
-  assert(submit && quota && submit.y + submit.height <= quota.y);
+  const quota = await page.locator("header .header-usage").boundingBox();
+  assert(submit && quota && quota.y + quota.height <= submit.y);
   await page
     .getByLabel("创作需求", { exact: true })
     .fill("Synthetic generation feedback acceptance");
   await page.getByRole("button", { name: "提交图片任务", exact: true }).click();
   await page.waitForFunction(() => {
-    const button = document.querySelector(".direct-creation form > .primary");
+    const button = document.querySelector(
+      ".direct-creation .generation-submit-row > .primary",
+    );
     return (
       button?.getAttribute("aria-busy") === "true" &&
       getComputedStyle(button).backgroundColor === "rgb(0, 98, 176)"
@@ -82,16 +84,12 @@ try {
   });
   assert.equal(
     await page
-      .locator(".direct-creation form > .primary")
+      .locator(".direct-creation .generation-submit-row > .primary")
       .evaluate((el) => getComputedStyle(el).backgroundColor),
     "rgb(0, 98, 176)",
   );
   await page.getByRole("status", { name: "图片生成状态" }).waitFor();
-  await page.waitForFunction(() =>
-    document
-      .querySelector('[aria-label="图片生成状态"]')
-      ?.textContent?.includes("已生成"),
-  );
+  await page.getByText("已生成 1 张", { exact: true }).waitFor();
   await page.screenshot({
     path: ".codex-temp/docker-generation-feedback.png",
     animations: "disabled",
@@ -132,6 +130,10 @@ try {
   await page.locator(".ant-image-preview").waitFor();
   await page.keyboard.press("Escape");
   await page.locator(".ant-image-preview").waitFor({ state: "hidden" });
+  await page
+    .getByRole("button", { name: "任务详情", exact: true })
+    .first()
+    .click();
   await page
     .getByRole("button", { name: "复用设置", exact: true })
     .first()
@@ -255,26 +257,47 @@ try {
   await page.getByRole("tab", { name: "Agent", exact: true }).click();
   await page.getByLabel("告诉 Agent 你的想法", { exact: true }).waitFor();
   await page.getByRole("tab", { name: "直接创作", exact: true }).click();
-  await page.getByLabel("图片模型", { exact: true }).click();
-  await page.locator(".ant-select-dropdown:visible").waitFor();
-  await page.keyboard.press("Escape");
-  await page
-    .locator(".ant-select-dropdown:visible")
-    .waitFor({ state: "hidden" });
+  assert.equal(
+    await page.getByLabel("图片模型", { exact: true }).isEnabled(),
+    false,
+  );
   await page.screenshot({
     path: ".codex-temp/docker-stage2-workbench.png",
     fullPage: true,
   });
-  await page.getByRole("link", { name: "账号管理", exact: true }).click();
+  await page.getByRole("link", { name: "用户管理", exact: true }).click();
+  await page.getByLabel("搜索用户", { exact: true }).fill(auth.username);
   await page
-    .getByRole("button", { name: "重新生成链接", exact: true })
-    .first()
+    .getByRole("row")
+    .filter({
+      has: page.getByRole("cell", { name: auth.username, exact: true }),
+    })
+    .getByRole("button", { name: "管理", exact: true })
     .click();
-  await page.getByRole("dialog").waitFor();
+  const ownDrawer = page.getByRole("dialog", {
+    name: new RegExp(auth.username),
+  });
+  assert.equal(
+    await ownDrawer
+      .getByRole("button", { name: "更多账号操作", exact: true })
+      .count(),
+    0,
+  );
+  const quotaInput = ownDrawer.getByLabel("每日图片额度", { exact: true });
+  const originalQuota = await quotaInput.inputValue();
+  await quotaInput.fill(String(Number(originalQuota) + 1));
+  await ownDrawer.getByRole("button", { name: "关闭", exact: true }).click();
   await page
-    .getByRole("dialog")
+    .getByRole("dialog", { name: "请确认", exact: true })
     .getByRole("button", { name: "取消", exact: true })
     .click();
+  assert.equal(
+    await quotaInput.inputValue(),
+    String(Number(originalQuota) + 1),
+  );
+  await quotaInput.fill(originalQuota);
+  await ownDrawer.getByRole("button", { name: "关闭", exact: true }).click();
+  await ownDrawer.waitFor({ state: "hidden" });
   await page.setViewportSize({ width: 1920, height: 1080 });
   assert(
     await page.evaluate(
@@ -316,7 +339,7 @@ try {
   });
   assert.deepEqual(errors, []);
   console.log(
-    "Built Docker Chromium: nonce styles, themed button, Select popup, confirmation dialog and medium/large desktop layout passed",
+    "Built Docker Chromium: nonce styles, themed button, singleton model lock, confirmation dialog and medium/large desktop layout passed",
   );
 } finally {
   await browser.close();

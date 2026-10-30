@@ -102,11 +102,11 @@ class PgRepository implements Repository {
     );
     await this.c.query("DELETE FROM sessions WHERE user_id=$1", [id]);
   }
-  async listUsers(offset = 0): Promise<UserView[]> {
+  async listUsers(offset = 0, search = ""): Promise<UserView[]> {
     return (
       await this.c.query(
-        `SELECT id,username,role,enabled,password_hash IS NOT NULL AS activated, must_change_password AS "mustChangePassword" FROM users ORDER BY created_at DESC,id LIMIT 51 OFFSET $1`,
-        [offset],
+        `SELECT id,username,role,enabled,password_hash IS NOT NULL AS activated, must_change_password AS "mustChangePassword" FROM users WHERE ($2='' OR strpos(username,$2)>0) ORDER BY created_at DESC,id LIMIT 51 OFFSET $1`,
+        [offset, search],
       )
     ).rows;
   }
