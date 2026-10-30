@@ -1,3 +1,4 @@
+import { HeaderUsage } from "./header-usage";
 import React, { lazy, Suspense, useState, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -290,6 +291,7 @@ function Shell() {
             </span>
           )}
           <div className="actions">
+            <HeaderUsage csrfToken={session.csrfToken} />
             <Dropdown
               trigger={["click"]}
               placement="bottomRight"

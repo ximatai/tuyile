@@ -1,3 +1,4 @@
+import { UsageSummary } from "./usage-summary";
 import { Download, ImagePlus, MoreHorizontal, Info } from "lucide-react";
 import { Excerpt } from "./interface-help";
 import { composeCreativePrompt, type CreationStyle } from "@tuyile/contracts";
@@ -14,7 +15,6 @@ import {
   type ImageSettings,
 } from "./image-settings";
 import { AgentPanel } from "./agent-panel";
-import { Link } from "react-router-dom";
 import { lazy, Suspense, useCallback } from "react";
 const CanvasEditor = lazy(() =>
   import("./editor/canvas").then((m) => ({ default: m.CanvasEditor })),
@@ -441,37 +441,6 @@ export function TaskResults({
     </div>
   );
 }
-export function UsageSummary({ usage }: { usage: ImageUsage }) {
-  return (
-    <div className="usage-summary">
-      <h2>今日图片额度</h2>
-      <div className="usage-numbers">
-        <span>
-          已用 <strong>{usage.used}</strong>
-        </span>
-        <span>
-          预留 <strong>{usage.held}</strong>
-        </span>
-        <span>
-          可用 <strong>{usage.available}</strong>
-        </span>
-      </div>
-      {usage.earlierHeld > 0 && (
-        <p className="hint">历史日期另有 {usage.earlierHeld} 张待结算预留。</p>
-      )}
-      <p className="hint">
-        上游尝试 {usage.attempts} / {usage.policy.attemptsLimit} · 每日上海时间
-        00:00 切换
-      </p>
-      <p className="hint">
-        存储{" "}
-        {((usage.storageUsed + usage.storageReserved) / 1048576).toFixed(1)} /{" "}
-        {(usage.policy.storageLimit / 1048576).toFixed(0)} MiB（包含预留）
-      </p>
-      <p className="hint">次数额度不代表账单上限。</p>
-    </div>
-  );
-}
 export function CreationPage({
   csrfToken,
   projectId,
@@ -543,7 +512,6 @@ export function CreationPage({
     setError("");
   }
   const [mode, setMode] = useState("direct");
-  const [quotaOpen, setQuotaOpen] = useState(false);
   const [phase, setPhase] = useState<GenerationPhase>("idle");
   const [submissionRejected, setSubmissionRejected] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -824,7 +792,6 @@ export function CreationPage({
           <Tabs
             activeKey={mode}
             onChange={(next) => {
-              setQuotaOpen(false);
               setMode(next);
             }}
             items={[
@@ -889,12 +856,6 @@ export function CreationPage({
                 <Notice error>{issues.join(" ")}</Notice>
               )}
               {error && <Notice error>{error}</Notice>}
-              <div className="execution-note">
-                <span>关页继续 · 取消可能计费 · 中断不续跑</span>
-                <HelpPopover title="后台执行与计费">
-                  取消可能仍计费；Worker 中断后不自动续跑，已保存结果会保留。
-                </HelpPopover>
-              </div>
               <GenerationFeedback
                 tasks={tasks}
                 phase={phase}
@@ -902,42 +863,56 @@ export function CreationPage({
                 stale={!!taskQuery.error}
                 rejected={submissionRejected}
                 onShow={showTasks}
+                ready={taskQuery.isSuccess}
               />
-              <Button
-                className="primary"
-                aria-busy={
-                  busy ||
-                  (!pending && !prompt.trim() && generating && !taskQuery.error)
-                }
-                loading={
-                  busy ||
-                  (!pending && !prompt.trim() && generating && !taskQuery.error)
-                }
-                aria-label={
-                  pending && phase === "idle" ? "重试同一提交" : "提交图片任务"
-                }
-                disabled={
-                  busy ||
-                  !usage?.models.length ||
-                  (!pending && (!prompt.trim() || issues.length > 0))
-                }
-              >
-                {busy
-                  ? phase === "submit"
-                    ? "正在提交…"
-                    : phase === "recover"
-                      ? "正在查找…"
-                      : "正在上传参考图…"
-                  : pending
-                    ? "重试同一提交"
-                    : !prompt.trim() && generating
-                      ? taskQuery.error
-                        ? "状态暂不可用"
-                        : running
-                          ? "正在生成…"
-                          : "排队中…"
-                      : `生成 ${settings.count} 张`}
-              </Button>
+              <div className="generation-submit-row">
+                <Button
+                  className="primary"
+                  aria-busy={
+                    busy ||
+                    (!pending &&
+                      !prompt.trim() &&
+                      generating &&
+                      !taskQuery.error)
+                  }
+                  loading={
+                    busy ||
+                    (!pending &&
+                      !prompt.trim() &&
+                      generating &&
+                      !taskQuery.error)
+                  }
+                  aria-label={
+                    pending && phase === "idle"
+                      ? "重试同一提交"
+                      : "提交图片任务"
+                  }
+                  disabled={
+                    busy ||
+                    !usage?.models.length ||
+                    (!pending && (!prompt.trim() || issues.length > 0))
+                  }
+                >
+                  {busy
+                    ? phase === "submit"
+                      ? "正在提交…"
+                      : phase === "recover"
+                        ? "正在查找…"
+                        : "正在上传参考图…"
+                    : pending
+                      ? "重试同一提交"
+                      : !prompt.trim() && generating
+                        ? taskQuery.error
+                          ? "状态暂不可用"
+                          : running
+                            ? "正在生成…"
+                            : "排队中…"
+                        : `生成 ${settings.count} 张`}
+                </Button>
+                <HelpPopover title="后台执行与计费">
+                  提交后可关闭页面，任务在后台继续。取消可能仍计费；后台中断后不自动续跑，已保存结果会保留。
+                </HelpPopover>
+              </div>
               {pending && (
                 <Button
                   type="button"
@@ -948,32 +923,6 @@ export function CreationPage({
                 </Button>
               )}
             </form>
-            {usage && (
-              <div className="quota-details">
-                <Popover
-                  trigger="click"
-                  placement="leftBottom"
-                  open={quotaOpen}
-                  onOpenChange={setQuotaOpen}
-                  content={<UsageSummary usage={usage} />}
-                >
-                  <Button
-                    type="button"
-                    aria-expanded={quotaOpen}
-                    onKeyDown={(event) => {
-                      if (event.key === "Escape") {
-                        setQuotaOpen(false);
-                        event.stopPropagation();
-                      }
-                    }}
-                  >
-                    今日可用 {usage.available} 张
-                    {usage.held > 0 ? ` · 预留 ${usage.held} 张` : ""}
-                  </Button>
-                </Popover>
-                <Link to="/usage">查看额度</Link>
-              </div>
-            )}
           </div>
           <div className="agent-creation" hidden={mode !== "agent"}>
             <AgentPanel

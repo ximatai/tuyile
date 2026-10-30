@@ -1,0 +1,63 @@
+import { useEffect, useRef, useState, type ComponentRef } from "react";
+import { Link, useLocation } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import type { ImageUsage } from "@tuyile/contracts";
+import { Button, Popover } from "@tuyile/ui";
+import { client } from "./api";
+import { useSessionState } from "./session-state";
+import { UsageSummary } from "./usage-summary";
+export function HeaderUsage({ csrfToken }: { csrfToken: string }) {
+  const session = useSessionState();
+  const { pathname } = useLocation();
+  const [open, setOpen] = useState(false);
+  const trigger = useRef<ComponentRef<typeof Button>>(null);
+  const query = useQuery({
+    queryKey: session.key("usage"),
+    queryFn: ({ signal }) =>
+      client(csrfToken)<ImageUsage>("/images/usage", undefined, signal),
+    refetchInterval: 1500,
+  });
+  useEffect(() => setOpen(false), [pathname]);
+  function escape(event: React.KeyboardEvent) {
+    if (event.key === "Escape") {
+      event.stopPropagation();
+      setOpen(false);
+      trigger.current?.focus();
+    }
+  }
+  return (
+    <Popover
+      trigger="click"
+      placement="bottomRight"
+      open={open}
+      onOpenChange={setOpen}
+      classNames={{ root: "header-usage-popover" }}
+      content={
+        <div onKeyDown={escape}>
+          {query.error && <p role="alert">额度暂时无法更新</p>}
+          {query.data && <UsageSummary usage={query.data} />}
+          <Link to="/usage" onClick={() => setOpen(false)}>
+            查看额度
+          </Link>
+        </div>
+      }
+    >
+      <Button
+        ref={trigger}
+        type="button"
+        className="header-usage"
+        aria-expanded={open}
+        onKeyDown={escape}
+      >
+        {query.error
+          ? "额度暂不可用"
+          : query.data
+            ? `今日可用 ${query.data.available} 张`
+            : "额度加载中…"}
+        {!query.error && !!query.data?.held && (
+          <span> · 预留 {query.data.held} 张</span>
+        )}
+      </Button>
+    </Popover>
+  );
+}

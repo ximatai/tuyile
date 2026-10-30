@@ -359,7 +359,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     .click();
   await expect(
     page.getByText(
-      "取消可能仍计费；Worker 中断后不自动续跑，已保存结果会保留。",
+      "提交后可关闭页面，任务在后台继续。取消可能仍计费；后台中断后不自动续跑，已保存结果会保留。",
       { exact: true },
     ),
   ).toBeVisible();
@@ -398,17 +398,17 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   await expect(
     page.getByRole("status", { name: "图片生成状态" }),
   ).toContainText("正在提交图片任务");
-  await expect(page.locator(".direct-creation form > .primary")).toHaveClass(
-    /ant-btn-loading/,
-  );
+  await expect(
+    page.locator(".direct-creation .generation-submit-row > .primary"),
+  ).toHaveClass(/ant-btn-loading/);
   releaseSubmission();
   await expect(
     page.getByRole("status", { name: "图片生成状态" }),
   ).toContainText(/正在生成图片|排队中/);
   await expect(page.getByLabel("创作需求")).toHaveValue("");
-  await expect(page.locator(".direct-creation form > .primary")).toHaveClass(
-    /ant-btn-loading/,
-  );
+  await expect(
+    page.locator(".direct-creation .generation-submit-row > .primary"),
+  ).toHaveClass(/ant-btn-loading/);
   const progressBefore = (await page
     .getByLabel("画布生成进度", { exact: true })
     .boundingBox())!;
@@ -433,7 +433,18 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   ).toBeVisible({ timeout: 15000 });
   await expect(
     reopened.getByRole("status", { name: "图片生成状态" }),
-  ).toContainText("已生成");
+  ).toHaveCount(0);
+  await expect(reopened.locator(".ant-notification-notice")).toHaveCount(0, {
+    timeout: 8000,
+  });
+  await reopened.reload();
+  await reopened
+    .locator(".canvas-task-history > .ant-collapse-item > .ant-collapse-header")
+    .click();
+  await expect(
+    reopened.locator(".canvas-task-history .task-tile-state.state-succeeded"),
+  ).toHaveCount(1);
+  await expect(reopened.locator(".ant-notification-notice")).toHaveCount(0);
   await expect(
     reopened
       .locator(".canvas-task-history")
@@ -629,6 +640,15 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   await expect(
     reopened.locator(".canvas-task-history .task-tile-state.state-succeeded"),
   ).toHaveCount(3, { timeout: 15000 });
+  const completionNotice = reopened.locator(".ant-notification-notice");
+  await expect(completionNotice).toContainText("已生成 1 张");
+  await expect(
+    completionNotice.getByRole("button", { name: "查看任务", exact: true }),
+  ).toBeVisible();
+  await expect(completionNotice).toBeHidden({ timeout: 8000 });
+  await expect(
+    reopened.getByRole("status", { name: "图片生成状态" }),
+  ).toHaveCount(0);
   await reopened.screenshot({
     path: ".codex-temp/stage2-desktop-workbench.png",
     fullPage: true,
@@ -636,12 +656,13 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   const submitBox = await reopened
     .getByRole("button", { name: "提交图片任务", exact: true })
     .boundingBox();
-  const quotaBox = await reopened
-    .locator(".quota-details button")
-    .boundingBox();
+  const quotaBox = await reopened.locator("header .header-usage").boundingBox();
   expect(submitBox).not.toBeNull();
   expect(quotaBox).not.toBeNull();
-  expect(submitBox!.y + submitBox!.height).toBeLessThanOrEqual(quotaBox!.y);
+  expect(quotaBox!.y).toBeLessThan(submitBox!.y);
+  await expect(reopened.locator(".creation-panel .quota-details")).toHaveCount(
+    0,
+  );
   const taskCards = reopened.locator(".canvas-task-history .task-result");
   const cardLayout = await taskCards.evaluateAll((cards) =>
     cards.map((card) => {
@@ -660,7 +681,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   expect(Math.abs(cardLayout[0]!.y - cardLayout[2]!.y)).toBeLessThan(2);
   expect(Math.abs(cardLayout[0]!.y - cardLayout[1]!.y)).toBeLessThan(2);
   expect(cardLayout[1]!.x).toBeGreaterThan(cardLayout[0]!.x);
-  const quotaTrigger = reopened.locator(".quota-details button");
+  const quotaTrigger = reopened.locator("header .header-usage");
   await quotaTrigger.focus();
   await reopened.keyboard.press("Enter");
   await expect(quotaTrigger).toHaveAttribute("aria-expanded", "true");
@@ -1205,7 +1226,7 @@ test("desktop canvas saves geometry, handles conflicts and never replaces remove
     const submit = (await page
       .getByRole("button", { name: "提交图片任务", exact: true })
       .boundingBox())!;
-    const quota = (await page.locator(".quota-details button").boundingBox())!;
+    const quota = (await page.locator("header .header-usage").boundingBox())!;
     const viewport = page.viewportSize()!;
     expect(
       Math.abs(canvas.x - (navigation.x + navigation.width)),

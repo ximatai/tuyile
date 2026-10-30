@@ -2962,3 +2962,31 @@ h3 {
   background: var(--paper);
   color: var(--brand-blue);
 }
+
+.main-column header .header-usage.ant-btn {
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  color: var(--muted);
+  padding-inline: 8px;
+  font-size: 12px;
+}
+.header-usage-popover .usage-summary {
+  width: 300px;
+}
+.header-usage-popover .ant-popover-inner {
+  padding: 16px;
+  border-radius: 10px;
+}
+.generation-submit-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.generation-submit-row > .primary {
+  flex: 1;
+  min-width: 0;
+}
+.generation-submit-row .help-trigger {
+  flex-shrink: 0;
+}
