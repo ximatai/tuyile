@@ -1,3 +1,4 @@
+import { finishTemporaryPassword } from "../test-database.js";
 import { isIP } from "node:net";
 import assert from "node:assert/strict";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
@@ -217,7 +218,7 @@ try {
     },
   );
   const member = await f.service.createUser(f.principal, "recovery-member");
-  await f.service.redeem(member.token, testPassword, "activate");
+  await finishTemporaryPassword(f.service, member, testPassword);
   const memberSession = await f.service.login("recovery-member", testPassword);
   const memberPrincipal = (await f.service.authenticate(memberSession.token))
     .user;

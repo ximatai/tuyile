@@ -113,12 +113,31 @@ const member = await request("/admin/users", {
     username: `test_${randomBytes(5).toString("hex")}`,
   }),
   password = randomBytes(24).toString("base64url");
+const temporaryLogin = await fetch(`${base}/api/auth/login`, {
+  method: "POST",
+  headers,
+  body: JSON.stringify({
+    username: member.user.username,
+    password: member.temporaryPassword,
+  }),
+});
+assert.equal(temporaryLogin.status, 200);
+const temporaryView = await temporaryLogin.json();
+assert.equal(temporaryView.user.mustChangePassword, true);
+const temporaryCookie = temporaryLogin.headers.get("set-cookie")!.split(";")[0];
 assert.equal(
   (
-    await fetch(`${base}/api/auth/activate`, {
+    await fetch(`${base}/api/auth/password`, {
       method: "POST",
-      headers,
-      body: JSON.stringify({ token: member.token, password }),
+      headers: {
+        ...headers,
+        Cookie: temporaryCookie,
+        "X-CSRF-Token": temporaryView.csrfToken,
+      },
+      body: JSON.stringify({
+        currentPassword: member.temporaryPassword,
+        password,
+      }),
     })
   ).status,
   200,

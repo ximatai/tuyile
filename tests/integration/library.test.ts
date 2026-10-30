@@ -1,3 +1,4 @@
+import { finishTemporaryPassword } from "../test-database.js";
 import { beforeEach, afterEach, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import { CanvasService, LibraryService, promptTemplates } from "@tuyile/core";
@@ -156,7 +157,7 @@ it("exports only authorized private originals and denies cross-workspace favorit
     Buffer.from((await f.creation.bytes(f.principal, asset.id)).bytes),
   );
   const created = await f.service.createUser(f.principal, "library-member");
-  await f.service.redeem(created.token, testPassword, "activate");
+  await finishTemporaryPassword(f.service, created, testPassword);
   const login = await f.service.login("library-member", testPassword),
     other = await f.service.authenticate(login.token);
   expect(await library.assets(other.user)).toEqual([]);

@@ -3,7 +3,7 @@ import type {
   Project,
   UserView,
   LinkResult,
-  PasswordResetResult,
+  TemporaryPasswordResult,
 } from "@tuyile/contracts";
 export class AppError extends Error {
   constructor(
@@ -185,15 +185,43 @@ export class Workbench {
     } = u;
     return { user, token, kind, expiresAt: expiresAt.toISOString() };
   }
-  async createUser(p: Principal, name: string) {
+  private async temporaryCredential() {
+    const password = this.security.random().slice(0, 24);
+    return { password, hash: await this.security.hashPassword(password) };
+  }
+  private temporaryResult(
+    user: UserRecord,
+    password: string,
+    expiresAt: Date,
+  ): TemporaryPasswordResult {
+    return {
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        enabled: user.enabled,
+        activated: true,
+        mustChangePassword: true,
+      },
+      temporaryPassword: password,
+      expiresAt: expiresAt.toISOString(),
+    };
+  }
+  async createUser(
+    p: Principal,
+    name: string,
+  ): Promise<TemporaryPasswordResult> {
+    const credential = await this.temporaryCredential();
     return this.store.transaction(async (r) => {
       await this.actor(r, p, true);
-      return this.link(r, await r.createUser(name, "member", null), "activate");
+      const user = await r.createUser(name, "member", credential.hash);
+      const expiresAt = this.expiry(24);
+      await r.setPassword(user.id, credential.hash, expiresAt);
+      return this.temporaryResult(user, credential.password, expiresAt);
     });
   }
-  async reset(p: Principal, userId: string): Promise<PasswordResetResult> {
-    const temporaryPassword = this.security.random().slice(0, 24);
-    const hash = await this.security.hashPassword(temporaryPassword);
+  async reset(p: Principal, userId: string): Promise<TemporaryPasswordResult> {
+    const credential = await this.temporaryCredential();
     return this.store.transaction(async (r) => {
       await r.bootstrapLock();
       for (const id of [...new Set([p.id, userId])].sort())
@@ -204,21 +232,10 @@ export class Workbench {
       if (!u) throw new AppError("NOT_FOUND", 404);
       if (!u.enabled) throw new AppError("ACCOUNT_DISABLED", 409);
       const expiresAt = this.expiry(24);
-      await r.setPassword(userId, hash, expiresAt);
+      await r.setPassword(userId, credential.hash, expiresAt);
       await r.revokeUser(userId);
       await r.deleteTokens(userId);
-      return {
-        user: {
-          id: u.id,
-          username: u.username,
-          role: u.role,
-          enabled: u.enabled,
-          activated: true,
-          mustChangePassword: true,
-        },
-        temporaryPassword,
-        expiresAt: expiresAt.toISOString(),
-      };
+      return this.temporaryResult(u, credential.password, expiresAt);
     });
   }
   // Deployment-side recovery only; no HTTP adapter exposes this use case.

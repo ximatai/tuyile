@@ -3,9 +3,8 @@ import { useSessionState } from "./session-state";
 import { useState, type FormEvent } from "react";
 import type {
   UserView,
-  LinkResult,
   UsersPage,
-  PasswordResetResult,
+  TemporaryPasswordResult,
 } from "@tuyile/contracts";
 import {
   Button,
@@ -28,9 +27,8 @@ export function AdminPage({
   csrfToken: string;
   ownId: string;
 }) {
-  const [resetResult, setResetResult] = useState<PasswordResetResult | null>(
-    null,
-  );
+  const [passwordResult, setPasswordResult] =
+    useState<TemporaryPasswordResult | null>(null);
   const [selectedId, setSelectedId] = useState("");
   const [search, setSearch] = useState("");
   const [policyBusy, setPolicyBusy] = useState(false);
@@ -38,7 +36,6 @@ export function AdminPage({
   const [createOpen, setCreateOpen] = useState(false);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
-    [link, setLink] = useState<LinkResult | null>(null),
     [copied, setCopied] = useState(false);
   const state = useSessionState();
   const confirm = useConfirm();
@@ -49,7 +46,6 @@ export function AdminPage({
     queryFn: ({ signal, pageParam }) =>
       api<UsersPage>(`/admin/users?offset=${pageParam}`, undefined, signal),
     getNextPageParam: (p, pages) => (p.hasMore ? pages.length * 50 : undefined),
-    enabled: link?.user.id !== ownId,
   });
   const users = [
       ...new Map(
@@ -64,34 +60,22 @@ export function AdminPage({
     if (dirty && !(await confirm("有未保存的用户配置，放弃修改？"))) return;
     setDirty(false);
     setError("");
-    setResetResult(null);
+    setPasswordResult(null);
     setCopied(false);
     setSelectedId(id);
   }
-  async function action(run: () => Promise<LinkResult | unknown>) {
+  async function action(run: () => Promise<unknown>) {
     setBusy(true);
     setError("");
-    setLink(null);
-    setResetResult(null);
+    setPasswordResult(null);
     setCopied(false);
     try {
       const result = await run();
       if (result && typeof result === "object" && "temporaryPassword" in result)
-        setResetResult(result as PasswordResetResult);
-      if (result && typeof result === "object" && "token" in result)
-        setLink(result as LinkResult);
-      if (
-        result &&
-        typeof result === "object" &&
-        "user" in result &&
-        (result as LinkResult).user.id === ownId
-      )
-        notifySessionChange();
-      else {
-        await state.queries.invalidateQueries({
-          queryKey: state.key("admin-users"),
-        });
-      }
+        setPasswordResult(result as TemporaryPasswordResult);
+      await state.queries.invalidateQueries({
+        queryKey: state.key("admin-users"),
+      });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -113,47 +97,38 @@ export function AdminPage({
     if (busy) return;
     const f = e.currentTarget;
     void action(async () => {
-      const v = await api<LinkResult>("/admin/users", {
+      const v = await api<TemporaryPasswordResult>("/admin/users", {
         username: new FormData(f).get("username"),
       });
       setCreateOpen(false);
       return v;
     });
   }
-  const url = link ? `${location.origin}/login#${link.kind}=${link.token}` : "";
-  const linkResult = link ? (
-    <section className="link-result" aria-label="账号链接">
-      {link.user.id === ownId && (
-        <Notice>
-          当前会话已结束。请保存此链接并打开，设置新密码后重新登录。
-        </Notice>
-      )}
-      <h2>
-        {link.kind === "activate" ? "激活链接" : "重置链接"}：
-        {link.user.username}
-      </h2>
-      <p>
-        仅展示此次，请通过可信渠道交付。有效期至{" "}
-        {new Date(link.expiresAt).toLocaleString("zh-CN")}，使用一次即失效。
-      </p>
+  const temporaryResult = passwordResult ? (
+    <section className="link-result" aria-label="临时密码交付">
+      <h3>{passwordResult.user.username} · 临时密码</h3>
       <Field
-        label="复制交付链接"
-        value={url}
+        label="临时密码"
+        value={passwordResult.temporaryPassword}
         readOnly
         onFocus={(e) => e.target.select()}
       />
+      <p className="hint">
+        仅展示本次，请复制交给 {passwordResult.user.username}。24
+        小时内有效，登录后必须修改。
+      </p>
       <div className="actions">
         <Button
           onClick={() => {
             void navigator.clipboard
-              .writeText(url)
+              .writeText(passwordResult.temporaryPassword)
               .then(() => setCopied(true))
-              .catch(() => setError("自动复制失败，请选中链接手动复制。"));
+              .catch(() => setError("自动复制失败，请选中密码手动复制。"));
           }}
         >
-          {copied ? "已复制" : "复制链接"}
+          {copied ? "已复制" : "复制临时密码"}
         </Button>
-        <Button onClick={() => setLink(null)}>隐藏链接</Button>
+        <Button onClick={() => setPasswordResult(null)}>隐藏密码</Button>
       </div>
     </section>
   ) : null;
@@ -232,7 +207,7 @@ export function AdminPage({
       {((!createOpen && error) || query.error) && (
         <Notice error>{(!createOpen && error) || query.error?.message}</Notice>
       )}
-      {!selectedUser && linkResult}
+      {!selectedUser && temporaryResult}
       {loading ? (
         <p role="status">正在加载账号…</p>
       ) : (
@@ -365,37 +340,7 @@ export function AdminPage({
         {selectedUser && (
           <>
             {error && <Notice error>{error}</Notice>}
-            {resetResult?.user.id === selectedId && (
-              <section className="link-result" aria-label="重置结果">
-                <h3>临时密码</h3>
-                <Field
-                  label="临时密码"
-                  value={resetResult.temporaryPassword}
-                  readOnly
-                  onFocus={(e) => e.target.select()}
-                />
-                <p className="hint">
-                  仅展示本次，请复制交给 {resetResult.user.username}。24
-                  小时内有效，登录后必须修改。
-                </p>
-                <div className="actions">
-                  <Button
-                    onClick={() => {
-                      void navigator.clipboard
-                        .writeText(resetResult.temporaryPassword)
-                        .then(() => setCopied(true))
-                        .catch(() =>
-                          setError("自动复制失败，请选中密码手动复制。"),
-                        );
-                    }}
-                  >
-                    {copied ? "已复制" : "复制临时密码"}
-                  </Button>
-                  <Button onClick={() => setResetResult(null)}>隐藏密码</Button>
-                </div>
-              </section>
-            )}
-            {link?.user.id === selectedId && linkResult}
+            {passwordResult?.user.id === selectedId && temporaryResult}
             <UserPolicyEditor
               key={selectedUser.id}
               userId={selectedUser.id}

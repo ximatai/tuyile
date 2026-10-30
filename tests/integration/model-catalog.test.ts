@@ -1,3 +1,4 @@
+import { finishTemporaryPassword } from "../test-database.js";
 import { expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
 import {
@@ -501,7 +502,7 @@ it("protects catalog administration with role and CSRF checks and exposes only p
     ).toBe(403);
     const member = await f.service.createUser(f.principal, "catalog-member");
     const { testPassword } = await import("../test-database.js");
-    await f.service.redeem(member.token, testPassword, "activate");
+    await finishTemporaryPassword(f.service, member, testPassword);
     const login = await f.service.login("catalog-member", testPassword);
     const memberHeaders = { Cookie: `tuyile_session=${login.token}` };
     expect(

@@ -1,3 +1,4 @@
+import { finishTemporaryPassword } from "../test-database.js";
 import { beforeEach, afterEach, it, expect } from "vitest";
 import { randomUUID } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
@@ -59,7 +60,7 @@ it("applies role defaults consistently before and after policy creation and allo
     imageLimit: 100,
     attemptsLimit: 300,
   });
-  await f.service.redeem(link.token, testPassword, "activate");
+  await finishTemporaryPassword(f.service, link, testPassword);
   const session = await f.service.login("quota_member", testPassword);
   const member = (await f.service.authenticate(session.token)).user;
   expect(await f.repo.usage(member)).toMatchObject({
@@ -163,7 +164,7 @@ it("persists referenced generation after ordinary logout; keeps content private 
     (await f.creation.bytes(f.principal, completed.outputs[0].id)).bytes.length,
   ).toBeGreaterThan(0);
   const member = await f.service.createUser(f.principal, "other");
-  await f.service.redeem(member.token, testPassword, "activate");
+  await finishTemporaryPassword(f.service, member, testPassword);
   const session = await f.service.login("other", testPassword),
     p = (await f.service.authenticate(session.token)).user;
   await expect(f.repo.task(p, t.id)).rejects.toMatchObject({ status: 404 });
@@ -247,7 +248,7 @@ it("stops dispatch on cancel, disable/re-enable or credential reset; in-flight o
   expect((await f.repo.task(f.principal, pending.id)).state).toBe("cancelled");
   expect((await f.repo.usage(f.principal)).held).toBe(0);
   const member = await f.service.createUser(f.principal, "revoked");
-  await f.service.redeem(member.token, testPassword, "activate");
+  await finishTemporaryPassword(f.service, member, testPassword);
   const session = await f.service.login("revoked", testPassword),
     p = (await f.service.authenticate(session.token)).user;
   const project = await f.service.createProject(p, "revoked project");

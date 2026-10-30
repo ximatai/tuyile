@@ -1,3 +1,4 @@
+import { finishTemporaryPassword } from "../test-database.js";
 import { spawn } from "node:child_process";
 import { readFile, stat, unlink } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
@@ -21,7 +22,7 @@ async function login(name = "admin") {
 }
 async function member(p: Principal, name: string) {
   const l = await db.service.createUser(p, name);
-  await db.service.redeem(l.token, testPassword, "activate");
+  await finishTemporaryPassword(db.service, l, testPassword);
   return login(name);
 }
 describe("real PostgreSQL identity and HTTP boundaries", () => {
@@ -90,12 +91,42 @@ describe("real PostgreSQL identity and HTTP boundaries", () => {
       await unlink(file).catch(() => {});
     }
   });
-  it("allows only one activation redemption; replaced or expired temporary passwords fail", async () => {
+  it("allows only one initial password change; replaced or expired temporary passwords fail", async () => {
     const a = await login();
     const link = await db.service.createUser(a.view.user, "alice");
+    expect(link).not.toHaveProperty("token");
+    expect(link.user.mustChangePassword).toBe(true);
+    const initialHash = (
+      await db.pool.query("SELECT password_hash FROM users WHERE id=$1", [
+        link.user.id,
+      ])
+    ).rows[0].password_hash;
+    expect(initialHash).toMatch(/^scrypt\$/);
+    expect(initialHash).not.toContain(link.temporaryPassword);
+    expect(
+      (
+        await db.pool.query(
+          "SELECT count(*)::int n FROM password_tokens WHERE user_id=$1",
+          [link.user.id],
+        )
+      ).rows[0].n,
+    ).toBe(0);
+    const initial = await db.service.login("alice", link.temporaryPassword);
+    const view = await db.service.authenticate(initial.token);
+    await expect(db.service.projects(view.user)).rejects.toMatchObject({
+      code: "PASSWORD_CHANGE_REQUIRED",
+    });
     const results = await Promise.allSettled([
-      db.service.redeem(link.token, testPassword, "activate"),
-      db.service.redeem(link.token, testPassword, "activate"),
+      db.service.changePassword(
+        view.user,
+        link.temporaryPassword,
+        testPassword,
+      ),
+      db.service.changePassword(
+        view.user,
+        link.temporaryPassword,
+        testPassword,
+      ),
     ]);
     expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
     const old = await db.service.reset(a.view.user, link.user.id);

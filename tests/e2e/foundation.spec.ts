@@ -19,7 +19,7 @@ async function logoutFromMenu(page: Page) {
   await page.getByRole("button", { name: "账户菜单", exact: true }).click();
   await page.getByRole("menuitem", { name: "退出登录", exact: true }).click();
 }
-test("desktop and mobile: persistent projects, activation, account boundaries and password revocation", async ({
+test("desktop and mobile: persistent projects, initial password, account boundaries and password revocation", async ({
   page,
   browser,
 }) => {
@@ -53,7 +53,9 @@ test("desktop and mobile: persistent projects, activation, account boundaries an
     .getByRole("button", { name: "新增用户", exact: true })
     .click();
   await expect(createUserDialog).toBeHidden();
-  const activation = await page.getByLabel("复制交付链接").inputValue();
+  const initialTemporaryPassword = await page
+    .getByLabel("临时密码", { exact: true })
+    .inputValue();
   await page
     .getByRole("row")
     .filter({ hasText: "designer01" })
@@ -126,7 +128,7 @@ test("desktop and mobile: persistent projects, activation, account boundaries an
 
   await expect(
     page.getByRole("row").filter({ hasText: "designer01" }),
-  ).toContainText("待激活");
+  ).toContainText("待修改密码");
   await page.screenshot({
     path: ".codex-temp/stage1-desktop-admin.png",
     fullPage: true,
@@ -136,13 +138,26 @@ test("desktop and mobile: persistent projects, activation, account boundaries an
   });
   const member = await context.newPage();
   const newPassword = randomBytes(24).toString("base64url");
-  await member.goto(activation);
-  await expect(member.getByRole("heading", { name: "激活账号" })).toBeVisible();
-  await expect(member).toHaveURL(/\/login$/);
+  await member.goto("http://127.0.0.1:5180/login");
+  await member.getByLabel("账号", { exact: true }).fill("designer01");
+  await member
+    .getByLabel("密码", { exact: true })
+    .fill(initialTemporaryPassword);
+  await member.getByRole("button", { name: "登录", exact: true }).click();
+  await expect(
+    member.getByRole("heading", { name: "设置自己的密码", exact: true }),
+  ).toBeVisible();
+  await member
+    .getByLabel("临时密码", { exact: true })
+    .fill(initialTemporaryPassword);
   await member.getByLabel("新密码", { exact: true }).fill(newPassword);
-  await member.getByLabel("确认新密码").fill(newPassword);
-  await member.getByRole("button", { name: "保存密码" }).click();
-  await expect(member.getByText("密码已设置，请登录。")).toBeVisible();
+  await member.getByLabel("确认新密码", { exact: true }).fill(newPassword);
+  await member
+    .getByRole("button", { name: "保存并重新登录", exact: true })
+    .click();
+  await expect(
+    member.getByRole("heading", { name: "登录图一乐", exact: true }),
+  ).toBeVisible();
   await member.getByLabel("账号", { exact: true }).fill("designer01");
   await member.getByLabel("密码", { exact: true }).fill(newPassword);
   await member.getByRole("button", { name: "登录", exact: true }).click();
@@ -271,21 +286,35 @@ test("administrator resets a password and user must replace the temporary passwo
     .getByRole("button", { name: "新增用户", exact: true })
     .click();
   await expect(createUserDialog).toBeHidden();
-  const activation = await page.getByLabel("复制交付链接").inputValue();
+  const initialTemporaryPassword = await page
+    .getByLabel("临时密码", { exact: true })
+    .inputValue();
   const context = await browser.newContext();
   const member = await context.newPage();
   await member.goto("http://127.0.0.1:5180/login");
   await expect(
     member.getByRole("heading", { name: "登录图一乐" }),
   ).toBeVisible();
-  await member.goto(activation);
-  await expect(member.getByRole("heading", { name: "激活账号" })).toBeVisible();
-  await expect(member).toHaveURL(/\/login$/);
+  await member.getByLabel("账号", { exact: true }).fill("hashuser02");
+  await member
+    .getByLabel("密码", { exact: true })
+    .fill(initialTemporaryPassword);
+  await member.getByRole("button", { name: "登录", exact: true }).click();
+  await expect(
+    member.getByRole("heading", { name: "设置自己的密码", exact: true }),
+  ).toBeVisible();
   const first = randomBytes(24).toString("base64url");
+  await member
+    .getByLabel("临时密码", { exact: true })
+    .fill(initialTemporaryPassword);
   await member.getByLabel("新密码", { exact: true }).fill(first);
-  await member.getByLabel("确认新密码").fill(first);
-  await member.getByRole("button", { name: "保存密码" }).click();
-  await expect(member.getByText("密码已设置，请登录。")).toBeVisible();
+  await member.getByLabel("确认新密码", { exact: true }).fill(first);
+  await member
+    .getByRole("button", { name: "保存并重新登录", exact: true })
+    .click();
+  await expect(
+    member.getByRole("heading", { name: "登录图一乐", exact: true }),
+  ).toBeVisible();
   await page
     .getByRole("row")
     .filter({ hasText: "hashuser02" })

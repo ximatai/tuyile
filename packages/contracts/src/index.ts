@@ -30,7 +30,7 @@ export interface UserView {
   activated: boolean;
   mustChangePassword?: boolean;
 }
-export interface PasswordResetResult {
+export interface TemporaryPasswordResult {
   user: UserView;
   temporaryPassword: string;
   expiresAt: string;

@@ -1,3 +1,4 @@
+import { finishTemporaryPassword } from "../test-database.js";
 import { beforeEach, afterEach, expect, it } from "vitest";
 import {
   AdministrationService,
@@ -119,7 +120,7 @@ it("returns metadata-only administration summaries and reports reconciliation di
     f.principal.id,
   ]);
   const created = await f.service.createUser(f.principal, "admin-stats-member");
-  await f.service.redeem(created.token, testPassword, "activate");
+  await finishTemporaryPassword(f.service, created, testPassword);
   const login = await f.service.login("admin-stats-member", testPassword),
     member = (await f.service.authenticate(login.token)).user;
   await expect(admin.summary(member)).rejects.toMatchObject({

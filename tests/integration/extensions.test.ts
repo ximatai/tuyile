@@ -1,3 +1,4 @@
+import { finishTemporaryPassword } from "../test-database.js";
 import { beforeEach, afterEach, it, expect } from "vitest";
 import {
   ExtensionService,
@@ -163,7 +164,7 @@ it("registers immutable skills, verifies dependencies and refuses member adminis
     ),
   ).rejects.toMatchObject({ code: "SKILL_UNAVAILABLE" });
   const member = await f.service.createUser(f.principal, "member");
-  await f.service.redeem(member.token, testPassword, "activate");
+  await finishTemporaryPassword(f.service, member, testPassword);
   const login = await f.service.login("member", testPassword),
     p = (await f.service.authenticate(login.token)).user;
   await expect(

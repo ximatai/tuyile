@@ -47,3 +47,16 @@ export async function resetDatabase() {
   await service.bootstrap("admin", testPassword);
   return { pool, store, service };
 }
+
+export async function finishTemporaryPassword(
+  service: Workbench,
+  result: import("@tuyile/contracts").TemporaryPasswordResult,
+  password = testPassword,
+) {
+  const session = await service.login(
+    result.user.username,
+    result.temporaryPassword,
+  );
+  const view = await service.authenticate(session.token);
+  await service.changePassword(view.user, result.temporaryPassword, password);
+}
