@@ -6,7 +6,10 @@ import {
   styleParagraph,
   standardSizes,
 } from "../../apps/web/src/creation-presets";
-import { supportedSizePresets } from "../../apps/web/src/image-settings";
+import {
+  sizeOptionLabel,
+  supportedSizePresets,
+} from "../../apps/web/src/image-settings";
 const capability: ImageCapability = {
   model: "test",
   generation: true,
@@ -38,7 +41,9 @@ it("limits resolution tiers to declared dimensions and personal budgets", () => 
     supportedSizePresets(usage, { ...capability, sizes: ["1024x1024"] }),
   ).toEqual([{ tier: "1K", ratio: "1:1", width: 1024, height: 1024 }]);
   const allowed = supportedSizePresets(usage, capability);
-  expect(new Set(allowed.map((p) => p.tier))).toEqual(new Set(["1K", "2K"]));
+  expect(new Set(allowed.map((p) => p.tier))).toEqual(
+    new Set(["1K", "2K", "720p"]),
+  );
   expect(allowed.some((p) => p.ratio === "16:9")).toBe(true);
   expect(
     supportedSizePresets(
@@ -76,4 +81,12 @@ it("provides smaller valid presets under restrictive policies and every standard
     expect(p.width % 16).toBe(0);
     expect(p.height % 16).toBe(0);
   }
+});
+
+it("names common sizes only when the pixels match exactly", () => {
+  expect(sizeOptionLabel({ width: 1280, height: 720 })).toBe(
+    "1280 × 720 · 720p",
+  );
+  expect(sizeOptionLabel({ width: 1920, height: 1088 })).toBe("1920 × 1088");
+  expect(sizeOptionLabel({ width: 1024, height: 1024 })).toBe("1024 × 1024");
 });

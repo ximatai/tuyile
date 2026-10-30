@@ -108,11 +108,15 @@ const tierSizes: [string, [number, number][]][] = [
     ],
   ],
 ];
-export const standardSizes: SizePreset[] = tierSizes.flatMap(([tier, sizes]) =>
-  sizes.map(([width, height], i) => ({
-    tier,
-    ratio: ratios[i]!,
-    width,
-    height,
-  })),
-);
+export const standardSizes: SizePreset[] = [
+  ...tierSizes.flatMap(([tier, sizes]) =>
+    sizes.map(([width, height], i) => ({
+      tier,
+      ratio: ratios[i]!,
+      width,
+      height,
+    })),
+  ),
+  { tier: "720p", ratio: "16:9", width: 1280, height: 720 },
+  { tier: "720p", ratio: "9:16", width: 720, height: 1280 },
+];

@@ -204,3 +204,14 @@ export function supportedSizePresets(
     });
   return presets;
 }
+
+export function sizeOptionLabel(size: Pick<SizePreset, "width" | "height">) {
+  const pixels = `${size.width} × ${size.height}`;
+  const common = new Map([
+    ["1280x720", "720p"],
+    ["1920x1080", "1080p"],
+    ["2560x1440", "1440p"],
+    ["3840x2160", "4K"],
+  ]).get(`${size.width}x${size.height}`);
+  return common ? `${pixels} · ${common}` : pixels;
+}

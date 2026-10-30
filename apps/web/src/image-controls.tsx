@@ -14,6 +14,7 @@ import {
   modelChoices,
   selectedCapability,
   supportedSizePresets,
+  sizeOptionLabel,
   type ImageSettings,
 } from "./image-settings";
 export function ImageControls({
@@ -92,29 +93,6 @@ export function ImageControls({
       />
       <div className="parameter-grid">
         <ChoiceField
-          label={label("分辨率")}
-          labelExtra={
-            <span className="size-pixels" aria-label={label("实际尺寸")}>
-              {value.width} × {value.height} px
-            </span>
-          }
-          value={currentSize?.tier ?? "custom"}
-          options={[...new Set(sizes.map((s) => s.tier))]
-            .map((tier) => ({ value: tier, label: tier }))
-            .concat(currentSize ? [] : [{ value: "custom", label: "自定义" }])}
-          onValueChange={(tier) => {
-            if (tier === "custom") {
-              setAdvancedOpen(true);
-              return;
-            }
-            const next =
-              sizes.find(
-                (s) => s.tier === tier && s.ratio === currentSize?.ratio,
-              ) ?? sizes.find((s) => s.tier === tier);
-            if (next) patch({ width: next.width, height: next.height });
-          }}
-        />
-        <ChoiceField
           label={label("比例")}
           value={currentSize?.ratio ?? "custom"}
           optionRender={(option) => ratioLabel(String(option.value))}
@@ -131,6 +109,36 @@ export function ImageControls({
               sizes.find(
                 (s) => s.ratio === ratio && s.tier === currentSize?.tier,
               ) ?? sizes.find((s) => s.ratio === ratio);
+            if (next) patch({ width: next.width, height: next.height });
+          }}
+        />
+        <ChoiceField
+          label={label("尺寸")}
+          labelExtra={
+            <span className="size-pixels" aria-label={label("实际尺寸")}>
+              {value.width} × {value.height} px
+            </span>
+          }
+          value={`${value.width}x${value.height}`}
+          options={sizes
+            .filter((s) => !currentSize || s.ratio === currentSize.ratio)
+            .sort((a, b) => a.width * a.height - b.width * b.height)
+            .map((s) => ({
+              value: `${s.width}x${s.height}`,
+              label: sizeOptionLabel(s),
+            }))
+            .concat(
+              currentSize
+                ? []
+                : [
+                    {
+                      value: `${value.width}x${value.height}`,
+                      label: `${value.width} × ${value.height}（自定义）`,
+                    },
+                  ],
+            )}
+          onValueChange={(key) => {
+            const next = sizes.find((s) => `${s.width}x${s.height}` === key);
             if (next) patch({ width: next.width, height: next.height });
           }}
         />

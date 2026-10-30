@@ -252,7 +252,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   const resolutionHeading = page
     .locator(".direct-creation .field-heading")
     .filter({ has: page.getByLabel("实际尺寸", { exact: true }) });
-  await expect(resolutionHeading).toContainText("分辨率");
+  await expect(resolutionHeading).toContainText("尺寸");
   const headingGeometry = await resolutionHeading.evaluate((heading) => {
     const title = heading.querySelector("label")!.getBoundingClientRect();
     const pixels = heading
@@ -264,11 +264,11 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     };
   });
   expect(headingGeometry).toEqual({ sameLine: true, fits: true });
-  await page.getByRole("combobox", { name: "分辨率", exact: true }).click();
+  await page.getByRole("combobox", { name: "尺寸", exact: true }).click();
   await page
     .locator(".ant-select-dropdown:visible")
     .locator(".ant-select-item-option-content")
-    .filter({ hasText: /^2K$/ })
+    .filter({ hasText: /^2048 × 2048$/ })
     .click();
   await page.getByRole("combobox", { name: "比例", exact: true }).click();
   await page
@@ -279,15 +279,33 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   await expect(page.getByLabel("实际尺寸", { exact: true })).toHaveText(
     "2048 × 1152 px",
   );
-  await page.getByRole("combobox", { name: "分辨率", exact: true }).click();
+  await page.getByRole("combobox", { name: "尺寸", exact: true }).click();
   await page
     .locator(".ant-select-dropdown:visible")
     .locator(".ant-select-item-option-content")
-    .filter({ hasText: /^1K$/ })
+    .filter({ hasText: /^1824 × 1024$/ })
     .click();
   await expect(page.getByLabel("实际尺寸", { exact: true })).toHaveText(
     "1824 × 1024 px",
   );
+  await page.getByRole("combobox", { name: "尺寸", exact: true }).click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("1280 × 720 · 720p", { exact: true })
+    .click();
+  await expect(page.getByLabel("实际尺寸", { exact: true })).toHaveText(
+    "1280 × 720 px",
+  );
+  await page.getByRole("combobox", { name: "尺寸", exact: true }).click();
+  await expect(
+    page
+      .locator(".ant-select-dropdown:visible")
+      .getByText("2048 × 2048", { exact: true }),
+  ).toHaveCount(0);
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("1824 × 1024", { exact: true })
+    .click();
   await expect(
     page.getByRole("combobox", { name: "比例", exact: true }),
   ).toHaveAttribute("aria-expanded", "false");
