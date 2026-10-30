@@ -835,7 +835,23 @@ test("desktop administration publishes service model pools and preserves version
   await login(page);
   await page.goto("/admin/images");
   await page.getByRole("button", { name: "接入现有配置", exact: true }).click();
+  await expect(
+    page.getByRole("region", { name: "可用模型", exact: true }),
+  ).toHaveCount(0);
+  const conversationPoolBox = (await page
+    .getByRole("region", { name: "对话模型池", exact: true })
+    .boundingBox())!;
+  const imagePoolBox = (await page
+    .getByRole("region", { name: "图像生成模型池", exact: true })
+    .boundingBox())!;
+  expect(conversationPoolBox.y).toBeCloseTo(imagePoolBox.y, 0);
+  expect(imagePoolBox.x).toBeGreaterThan(conversationPoolBox.x);
+  await page.getByRole("button", { name: "添加对话模型", exact: true }).click();
   await page.getByRole("button", { name: "获取模型", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "添加对话模型", exact: true })
+    .getByRole("button", { name: "关闭", exact: true })
+    .click();
   // A long administration page must scroll underneath the shared navigation.
   await page.getByRole("tab", { name: "运行与核验", exact: true }).click();
   await expect(
@@ -866,6 +882,7 @@ test("desktop administration publishes service model pools and preserves version
   }
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole("tab", { name: "模型服务", exact: true }).click();
+  await page.getByRole("button", { name: "添加对话模型", exact: true }).click();
   await page
     .getByRole("button", { name: "将 test-planner 加入对话池", exact: true })
     .click();
@@ -930,6 +947,17 @@ test("desktop administration publishes service model pools and preserves version
   await expect(
     chatPool.getByText("test-planner", { exact: true }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "添加对话模型", exact: true }).click();
+  await expect(
+    page.getByRole("button", {
+      name: "将 test-planner 加入对话池",
+      exact: true,
+    }),
+  ).toBeDisabled();
+  await page
+    .getByRole("dialog", { name: "添加对话模型", exact: true })
+    .getByRole("button", { name: "关闭", exact: true })
+    .click();
   await page.getByRole("button", { name: "保存开放配置", exact: true }).click();
   await expect(
     page.getByText("模型开放配置已保存，新的创作可以使用。", { exact: true }),
@@ -1815,12 +1843,17 @@ test("administrators add a service and users select same-named models from the c
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
-  const savedSession = JSON.parse(
-    await readFile(".codex-temp/model-pools-admin-session.json", "utf8"),
-  );
-  await page.context().addCookies(savedSession.cookies);
-  await page.goto("/projects");
+  const savedSession = await readFile(
+    ".codex-temp/model-pools-admin-session.json",
+    "utf8",
+  )
+    .then(JSON.parse)
+    .catch(() => null);
+  if (savedSession) await page.context().addCookies(savedSession.cookies);
+  if (!(await page.request.get("/api/auth/me")).ok()) await login(page);
+  else await page.goto("/projects");
   await page.goto("/admin/images");
+  await page.getByRole("button", { name: "管理服务", exact: true }).click();
   await page.getByRole("button", { name: "新增服务", exact: true }).click();
   await page.getByLabel("服务名称", { exact: true }).fill("备用测试服务");
   await page.getByLabel("接入协议", { exact: true }).click();
@@ -1832,17 +1865,27 @@ test("administrators add a service and users select same-named models from the c
   await expect(
     page.getByText("服务已保存，可以获取模型列表。", { exact: true }),
   ).toBeVisible();
+  await page
+    .getByRole("button", { name: "添加图片生成模型", exact: true })
+    .click();
   await page.getByRole("button", { name: "获取模型", exact: true }).click();
   await page.getByRole("button", { name: "手动登记模型", exact: true }).click();
   await page.getByLabel("模型 ID", { exact: true }).fill("invalid model");
   await page.getByRole("button", { name: "登记候选模型", exact: true }).click();
-  await expect(page.getByRole("dialog").getByRole("alert")).toBeVisible();
+  await expect(
+    page
+      .getByRole("dialog", { name: "手动登记模型", exact: true })
+      .getByRole("alert"),
+  ).toBeVisible();
   await page.getByLabel("模型 ID", { exact: true }).fill("manual-candidate");
   await page.getByRole("button", { name: "登记候选模型", exact: true }).click();
-  await expect(page.getByRole("dialog")).toBeHidden();
+  await expect(
+    page.getByRole("dialog", { name: "手动登记模型", exact: true }),
+  ).toBeHidden();
   await page
     .getByRole("button", { name: "将 test-image 加入图像生成池", exact: true })
     .click();
+  await page.getByRole("button", { name: "添加对话模型", exact: true }).click();
   await page
     .getByRole("button", { name: "将 test-planner 加入对话池", exact: true })
     .click();
@@ -1897,25 +1940,36 @@ test("administrators add a service and users select same-named models from the c
   await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
     "Synthetic preserved draft",
   );
-  await expect(
-    page.getByText("当前尺寸不受支持，请选择画面规格。", { exact: false }),
-  ).toBeVisible();
   await expect(page.getByLabel("宽度", { exact: true })).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "自定义尺寸", exact: true }),
   ).toHaveCount(0);
+  for (const name of ["比例", "尺寸", "质量", "格式"]) {
+    await expect(
+      page.getByRole("combobox", { name, exact: true }),
+    ).toBeDisabled();
+  }
   await expect(
-    page.getByRole("button", { name: "提交图片任务", exact: true }),
-  ).toBeDisabled();
-  await page.getByLabel("比例", { exact: true }).click();
-  await expect(
-    page
+    page.locator(".direct-creation .field").filter({
+      has: page.getByRole("combobox", { name: "尺寸", exact: true }),
+    }),
+  ).toContainText("768 × 1024");
+  await page.unroute(usageRoute);
+  await page.waitForResponse((response) =>
+    response.url().endsWith("/api/images/usage"),
+  );
+  for (const [name, option] of [
+    ["比例", "1:1"],
+    ["质量", "标准"],
+    ["格式", "PNG"],
+  ]) {
+    await page.getByRole("combobox", { name, exact: true }).click();
+    await page
       .locator(".ant-select-dropdown:visible")
       .locator(".ant-select-item-option-content")
-      .filter({ hasText: /^3:4$/ }),
-  ).toBeVisible();
-  await page.keyboard.press("Escape");
-  await page.unroute(usageRoute);
+      .filter({ hasText: new RegExp(`^${option}$`) })
+      .click();
+  }
   await expect(
     page.getByRole("button", { name: "提交图片任务", exact: true }),
   ).toBeEnabled();
@@ -1975,11 +2029,14 @@ test("administrators add a service and users select same-named models from the c
   await page.getByRole("link", { name: "模型服务", exact: true }).click();
   await page
     .getByRole("region", { name: "服务接入", exact: true })
-    .getByRole("combobox", { name: "模型服务", exact: true })
+    .getByRole("combobox", { name: "当前服务", exact: true })
     .click();
   await page
     .locator(".ant-select-dropdown:visible")
     .getByText("备用测试服务", { exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "添加图片生成模型", exact: true })
     .click();
   const tableBody = page.locator(".model-catalog-candidates .ant-table-body");
   await expect
@@ -1997,12 +2054,21 @@ test("administrators add a service and users select same-named models from the c
   expect(popup!.x + popup!.width).toBeLessThanOrEqual(1440);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("tooltip")).toBeHidden();
-  await page.getByRole("button", { name: "服务管理", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "添加图片生成模型", exact: true })
+    .getByRole("button", { name: "关闭", exact: true })
+    .click();
+  await page.getByRole("button", { name: "管理服务", exact: true }).click();
+  await page.getByRole("button", { name: "更多服务操作", exact: true }).click();
   await expect(page.getByRole("menu")).toBeVisible();
   const menu = await page.getByRole("menu").boundingBox();
   expect(menu!.y + menu!.height).toBeLessThanOrEqual(1000);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("menu")).toBeHidden();
+  await page
+    .getByRole("dialog", { name: "管理服务", exact: true })
+    .getByRole("button", { name: "关闭", exact: true })
+    .click();
   await page.screenshot({
     path: ".codex-temp/ui-clarity-models-1440.png",
     fullPage: true,

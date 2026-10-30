@@ -43,6 +43,9 @@ export function ModelServicesAdmin() {
     queryFn: ({ signal }) =>
       api<ModelCatalogSnapshot>("/model-admin/catalog", undefined, signal),
   });
+  const [addingKind, setAddingKind] = useState<ModelKind>("conversation");
+  const [adding, setAdding] = useState<ModelKind | null>(null);
+  const [managing, setManaging] = useState(false);
   const [selected, setSelected] = useState(""),
     [search, setSearch] = useState(""),
     [busy, setBusy] = useState(false),
@@ -155,6 +158,7 @@ export function ModelServicesAdmin() {
     });
   }
   function editService(s?: ModelServiceView) {
+    setManaging(false);
     setError("");
     setEditor(
       s
@@ -243,9 +247,9 @@ export function ModelServicesAdmin() {
             </Button>
           </Notice>
         )}
-        <section className="model-service-bar" aria-label="服务接入">
+        <section className="model-service-overview" aria-label="服务接入">
           <ChoiceField
-            label="模型服务"
+            label="当前服务"
             hideLabel
             value={service?.id ?? ""}
             onValueChange={setSelected}
@@ -254,195 +258,24 @@ export function ModelServicesAdmin() {
               label: `${s.name}${s.revoked ? "（已撤销）" : !s.enabled ? "（已停用）" : ""}`,
             }))}
           />
-          <div className="model-service-summary">
-            {service ? (
-              <>
-                <span>
-                  {service.mode === "fake" ? "本地合成测试" : service.baseUrl}
-                </span>
-                <Tag>
-                  {service.revoked
-                    ? "已撤销"
-                    : service.enabled
-                      ? "已配置"
-                      : "已停用"}
-                </Tag>
-              </>
-            ) : (
-              <span>接入一个服务后，获取它提供的模型。</span>
-            )}
-          </div>
-          <div className="actions">
-            <Tooltip
-              title={draft ? "先保存或放弃模型池修改" : undefined}
-              trigger={["hover", "focus"]}
-            >
-              <span tabIndex={draft ? 0 : undefined}>
-                <Button
-                  type="button"
-                  disabled={busy || !!draft}
-                  onClick={() => editService()}
-                >
-                  新增服务
-                </Button>
-              </span>
-            </Tooltip>
-            <Tooltip
-              title={draft ? "先保存或放弃模型池修改" : undefined}
-              trigger={["hover", "focus"]}
-            >
-              <span tabIndex={draft ? 0 : undefined}>
-                <Button
-                  type="button"
-                  disabled={busy || !!draft || !service || service.revoked}
-                  onClick={() => editService(service)}
-                >
-                  编辑服务
-                </Button>
-              </span>
-            </Tooltip>
-            <Button
-              className="primary"
-              type="button"
-              disabled={busy || !service || !service.enabled || service.revoked}
-              onClick={() =>
-                void run(async () => {
-                  await api(`/model-admin/services/${service!.id}/refresh`, {});
-                  setMessage("模型列表已更新，开放范围保持不变。");
-                })
-              }
-            >
-              {busy ? "正在处理…" : "获取模型"}
-            </Button>
-          </div>
+          <Tag>
+            {service
+              ? service.revoked
+                ? "已撤销"
+                : service.enabled
+                  ? "已配置"
+                  : "已停用"
+              : "未接入服务"}
+          </Tag>
+          <Button type="button" onClick={() => setManaging(true)}>
+            管理服务
+          </Button>
         </section>
         <div className="model-catalog-grid">
-          <section className="model-catalog-candidates" aria-label="可用模型">
-            <div className="model-pool-heading">
-              <div className="heading-with-help">
-                <h2>可用模型</h2>
-                <HelpPopover title="模型开放规则">
-                  获取目录不会调用模型。将候选加入相应模型池，核对能力后保存才向用户开放。目录刷新不会改变已开放范围，已提交任务保留原配置。
-                </HelpPopover>
-              </div>
-              <span>{service ? candidates.length : 0} 个</span>
-            </div>
-            <Input
-              aria-label="筛选服务模型"
-              placeholder="按模型名称筛选"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              allowClear
-            />
-            <Table
-              rowKey="modelId"
-              size="small"
-              dataSource={candidates}
-              pagination={{
-                pageSize: 6,
-                showSizeChanger: false,
-                showLessItems: true,
-              }}
-              scroll={{ y: 330 }}
-              columns={[
-                {
-                  title: "模型",
-                  dataIndex: "modelId",
-                  render: (_: unknown, m: (typeof candidates)[number]) => (
-                    <div className="model-identifier">
-                      <strong>{m.modelId}</strong>
-                      {!m.present && <small>最近未发现</small>}
-                      {m.manual && <small>已手动登记</small>}
-                    </div>
-                  ),
-                },
-                {
-                  title: "加入",
-                  width: 110,
-                  render: (_: unknown, m: (typeof candidates)[number]) => (
-                    <div className="model-add-actions">
-                      {(["conversation", "image"] as const).map((kind) => (
-                        <Button
-                          type="button"
-                          key={kind}
-                          aria-label={`将 ${m.modelId} 加入${kind === "image" ? "图像生成" : "对话"}池`}
-                          disabled={
-                            busy ||
-                            !service?.enabled ||
-                            service.revoked ||
-                            entries.some(
-                              (e) =>
-                                e.serviceId === service.id &&
-                                e.modelId === m.modelId &&
-                                e.kind === kind,
-                            )
-                          }
-                          onClick={() => add(m.modelId, kind)}
-                        >
-                          {kind === "image" ? "图像生成" : "对话"}
-                        </Button>
-                      ))}
-                    </div>
-                  ),
-                },
-              ]}
-            />
-            <Button
-              type="button"
-              disabled={busy || !service || service.revoked}
-              onClick={() => {
-                setError("");
-                setManualId("");
-                setManual(true);
-              }}
-            >
-              手动登记模型
-            </Button>
-            {service && (
-              <Dropdown
-                autoFocus
-                trigger={["click"]}
-                menu={{
-                  items: [
-                    {
-                      key: "version",
-                      label: `版本 ${service.revision}`,
-                      disabled: true,
-                    },
-                    {
-                      key: "updated",
-                      label: service.catalogUpdatedAt
-                        ? `最近获取 ${new Date(service.catalogUpdatedAt).toLocaleString("zh-CN")}`
-                        : "尚未获取模型",
-                      disabled: true,
-                    },
-                    { type: "divider" },
-                    {
-                      key: "state",
-                      label: service.enabled ? "停用服务" : "启用服务",
-                      disabled: busy || !!draft || service.revoked,
-                      onClick: () =>
-                        void toggleService(service, !service.enabled),
-                    },
-                    {
-                      key: "revoke",
-                      label: "紧急撤销",
-                      danger: true,
-                      disabled: busy || !!draft || service.revoked,
-                      onClick: () => void toggleService(service, false, true),
-                    },
-                  ],
-                }}
-              >
-                <Button type="button" aria-label="服务管理" disabled={busy}>
-                  <MoreHorizontal size={16} />
-                  服务管理
-                </Button>
-              </Dropdown>
-            )}
-          </section>
           {(["conversation", "image"] as const).map((kind) => {
-            const list = entries.filter((e) => e.kind === kind);
+            const list = entries
+              .filter((e) => e.kind === kind)
+              .sort((a, b) => Number(b.isDefault) - Number(a.isDefault));
             return (
               <section
                 className="model-pool-panel"
@@ -450,10 +283,23 @@ export function ModelServicesAdmin() {
                 key={kind}
               >
                 <div className="model-pool-heading">
-                  <h2>{kind === "image" ? "图像生成模型池" : "对话模型池"}</h2>
-                  <Tag color="blue">
-                    开放 {list.filter((e) => e.enabled).length}
-                  </Tag>
+                  <h2>
+                    {kind === "image" ? "图片生成模型" : "对话模型"}
+                    <span className="model-pool-count">{list.length}</span>
+                  </h2>
+                  <Button
+                    type="button"
+                    aria-label={
+                      kind === "image" ? "添加图片生成模型" : "添加对话模型"
+                    }
+                    onClick={() => {
+                      setSearch("");
+                      setAddingKind(kind);
+                      setAdding(kind);
+                    }}
+                  >
+                    添加模型
+                  </Button>
                 </div>
                 <Radio.Group
                   aria-label={`${kind === "image" ? "图像生成" : "对话"}默认模型`}
@@ -544,7 +390,9 @@ export function ModelServicesAdmin() {
                   ))}
                 </Radio.Group>
                 {!list.length && (
-                  <div className="model-pool-empty">从左侧选择模型加入此池</div>
+                  <div className="model-pool-empty">
+                    点击“添加模型”配置此模型池
+                  </div>
                 )}
               </section>
             );
@@ -577,6 +425,238 @@ export function ModelServicesAdmin() {
             </footer>
           </Affix>
         )}
+        <Drawer
+          title={addingKind === "image" ? "添加图片生成模型" : "添加对话模型"}
+          open={!!adding}
+          size={640}
+          onClose={() => {
+            if (!busy) setAdding(null);
+          }}
+          destroyOnHidden
+        >
+          {error && <Notice error>{error}</Notice>}
+          <section className="model-catalog-candidates" aria-label="可用模型">
+            <div className="model-pool-heading">
+              <div className="heading-with-help">
+                <HelpPopover title="模型开放规则">
+                  获取目录不会调用模型。将候选加入相应模型池，核对能力后保存才向用户开放。目录刷新不会改变已开放范围，已提交任务保留原配置。
+                </HelpPopover>
+              </div>
+              <span>{service ? candidates.length : 0} 个候选</span>
+            </div>
+            <ChoiceField
+              label="候选模型服务"
+              value={service?.id ?? ""}
+              onValueChange={setSelected}
+              options={services.map((s) => ({
+                value: s.id,
+                label: `${s.name}${s.revoked ? "（已撤销）" : !s.enabled ? "（已停用）" : ""}`,
+              }))}
+            />
+            <Button
+              className="primary"
+              type="button"
+              disabled={busy || !service || !service.enabled || service.revoked}
+              onClick={() =>
+                void run(async () => {
+                  await api(`/model-admin/services/${service!.id}/refresh`, {});
+                  setMessage("模型列表已更新，开放范围保持不变。");
+                })
+              }
+            >
+              {busy ? "正在处理…" : "获取模型"}
+            </Button>
+            <Input
+              aria-label="筛选服务模型"
+              placeholder="按模型名称筛选"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              allowClear
+            />
+            <Table
+              rowKey="modelId"
+              size="small"
+              dataSource={candidates}
+              pagination={{
+                pageSize: 6,
+                showSizeChanger: false,
+                showLessItems: true,
+              }}
+              scroll={{ y: 330 }}
+              columns={[
+                {
+                  title: "模型",
+                  dataIndex: "modelId",
+                  render: (_: unknown, m: (typeof candidates)[number]) => (
+                    <div className="model-identifier">
+                      <strong>{m.modelId}</strong>
+                      {!m.present && <small>最近未发现</small>}
+                      {m.manual && <small>已手动登记</small>}
+                    </div>
+                  ),
+                },
+                {
+                  title: "加入",
+                  width: 90,
+                  render: (_: unknown, m: (typeof candidates)[number]) => (
+                    <div className="model-add-actions">
+                      <Button
+                        type="button"
+                        aria-label={`将 ${m.modelId} 加入${addingKind === "image" ? "图像生成" : "对话"}池`}
+                        disabled={
+                          busy ||
+                          !service?.enabled ||
+                          service.revoked ||
+                          entries.some(
+                            (e) =>
+                              e.serviceId === service.id &&
+                              e.modelId === m.modelId &&
+                              e.kind === addingKind,
+                          )
+                        }
+                        onClick={() => {
+                          add(m.modelId, addingKind);
+                          setAdding(null);
+                        }}
+                      >
+                        {entries.some(
+                          (e) =>
+                            e.serviceId === service?.id &&
+                            e.modelId === m.modelId &&
+                            e.kind === addingKind,
+                        )
+                          ? "已添加"
+                          : "添加"}
+                      </Button>
+                    </div>
+                  ),
+                },
+              ]}
+            />
+            <Button
+              type="button"
+              disabled={busy || !service || service.revoked}
+              onClick={() => {
+                setError("");
+                setManualId("");
+                setManual(true);
+              }}
+            >
+              手动登记模型
+            </Button>
+          </section>
+        </Drawer>
+        <Drawer
+          title="管理服务"
+          open={managing}
+          size={600}
+          onClose={() => setManaging(false)}
+          destroyOnHidden
+        >
+          {error && <Notice error>{error}</Notice>}
+          <section className="model-service-bar" aria-label="服务接入">
+            <ChoiceField
+              label="模型服务"
+              hideLabel
+              value={service?.id ?? ""}
+              onValueChange={setSelected}
+              options={services.map((s) => ({
+                value: s.id,
+                label: `${s.name}${s.revoked ? "（已撤销）" : !s.enabled ? "（已停用）" : ""}`,
+              }))}
+            />
+            <div className="model-service-summary">
+              {service ? (
+                <>
+                  <span>
+                    {service.mode === "fake" ? "本地合成测试" : service.baseUrl}
+                  </span>
+                  <Tag>
+                    {service.revoked
+                      ? "已撤销"
+                      : service.enabled
+                        ? "已配置"
+                        : "已停用"}
+                  </Tag>
+                </>
+              ) : (
+                <span>接入一个服务后，获取它提供的模型。</span>
+              )}
+            </div>
+            <div className="actions">
+              <Tooltip
+                title={draft ? "先保存或放弃模型池修改" : undefined}
+                trigger={["hover", "focus"]}
+              >
+                <span tabIndex={draft ? 0 : undefined}>
+                  <Button
+                    type="button"
+                    disabled={busy || !!draft}
+                    onClick={() => editService()}
+                  >
+                    新增服务
+                  </Button>
+                </span>
+              </Tooltip>
+              <Tooltip
+                title={draft ? "先保存或放弃模型池修改" : undefined}
+                trigger={["hover", "focus"]}
+              >
+                <span tabIndex={draft ? 0 : undefined}>
+                  <Button
+                    type="button"
+                    disabled={busy || !!draft || !service || service.revoked}
+                    onClick={() => editService(service)}
+                  >
+                    编辑服务
+                  </Button>
+                </span>
+              </Tooltip>
+            </div>
+          </section>
+          {service && (
+            <Dropdown
+              autoFocus
+              trigger={["click"]}
+              menu={{
+                items: [
+                  {
+                    key: "version",
+                    label: `版本 ${service.revision}`,
+                    disabled: true,
+                  },
+                  {
+                    key: "updated",
+                    label: service.catalogUpdatedAt
+                      ? `最近获取 ${new Date(service.catalogUpdatedAt).toLocaleString("zh-CN")}`
+                      : "尚未获取模型",
+                    disabled: true,
+                  },
+                  { type: "divider" },
+                  {
+                    key: "state",
+                    label: service.enabled ? "停用服务" : "启用服务",
+                    disabled: busy || !!draft || service.revoked,
+                    onClick: () =>
+                      void toggleService(service, !service.enabled),
+                  },
+                  {
+                    key: "revoke",
+                    label: "紧急撤销",
+                    danger: true,
+                    disabled: busy || !!draft || service.revoked,
+                    onClick: () => void toggleService(service, false, true),
+                  },
+                ],
+              }}
+            >
+              <Button type="button" aria-label="更多服务操作" disabled={busy}>
+                <MoreHorizontal size={16} />
+                更多服务操作
+              </Button>
+            </Dropdown>
+          )}{" "}
+        </Drawer>
         <Drawer
           title={editor?.id ? "编辑模型服务" : "新增模型服务"}
           open={!!editor}

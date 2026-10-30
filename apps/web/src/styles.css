@@ -3087,3 +3087,68 @@ h3 {
   box-shadow: none;
   color: var(--muted);
 }
+
+/* Configured model pools are primary; discovery stays in the add drawer. */
+.model-catalog-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+}
+.model-service-overview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+}
+.model-service-overview > .field {
+  width: 220px;
+}
+.model-service-overview > .button {
+  margin-left: auto;
+}
+.model-pool-heading {
+  margin-bottom: 12px;
+}
+.model-pool-heading h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+}
+.model-pool-count {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+.model-pool-panel .model-pool-entry:last-child {
+  border-bottom: 0;
+}
+.model-pool-panel .model-entry-actions {
+  margin-top: 10px;
+}
+.model-pool-panel .model-entry-actions .ant-radio-wrapper {
+  margin-right: auto;
+}
+.model-catalog-candidates {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+.model-catalog-candidates > .field {
+  margin: 0;
+}
+.model-catalog-candidates > .button {
+  justify-self: start;
+  margin: 0;
+}
+.ant-drawer-body .model-service-bar {
+  display: grid;
+  gap: 16px;
+  padding: 0;
+  border: 0;
+}
+.ant-drawer-body .model-service-bar > .field {
+  min-width: 0;
+}
+.ant-drawer-body .model-service-bar + .button {
+  margin-top: 16px;
+}
