@@ -3152,3 +3152,14 @@ h3 {
 .ant-drawer-body .model-service-bar + .button {
   margin-top: 16px;
 }
+
+.model-capability-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.model-conversation-advanced {
+  display: grid;
+  gap: 12px;
+}

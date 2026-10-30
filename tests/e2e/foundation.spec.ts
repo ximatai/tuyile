@@ -891,6 +891,21 @@ test("desktop administration publishes service model pools and preserves version
     exact: true,
   });
   await chatPool.getByRole("button", { name: "能力设置", exact: true }).click();
+  await page.getByRole("button", { name: "高级设置", exact: true }).click();
+  await page
+    .getByLabel("单次规划总输出 token 预算", { exact: true })
+    .fill("8192");
+  await page.getByLabel("支持参考图理解", { exact: true }).check();
+  await page.getByRole("button", { name: "恢复默认", exact: true }).click();
+  await expect(
+    page.getByLabel("单次规划总输出 token 预算", { exact: true }),
+  ).toHaveValue("4096");
+  await expect(
+    page.getByLabel("单次规划输入字符上限", { exact: true }),
+  ).toHaveValue("32000");
+  await expect(
+    page.getByLabel("支持参考图理解", { exact: true }),
+  ).not.toBeChecked();
   await page.getByLabel("支持参考图理解", { exact: true }).check();
   await page
     .getByRole("button", { name: "应用到待发布配置", exact: true })
@@ -902,6 +917,20 @@ test("desktop administration publishes service model pools and preserves version
   await imagePool
     .getByRole("button", { name: "能力设置", exact: true })
     .click();
+  await page.getByLabel(/^限定尺寸/).fill("512x512");
+  await page.getByRole("button", { name: "恢复默认", exact: true }).click();
+  await expect(page.getByLabel(/^限定尺寸/)).toHaveValue("1024x1024");
+  await expect(page.getByLabel("模型最大边长", { exact: true })).toHaveValue(
+    "1024",
+  );
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "关闭", exact: true })
+    .click();
+  await imagePool
+    .getByRole("button", { name: "能力设置", exact: true })
+    .click();
+  await expect(page.getByLabel(/^限定尺寸/)).toHaveValue("");
   await page.getByLabel("模型最大边长", { exact: true }).fill("2048");
   const sizes = page.getByLabel(/^限定尺寸/);
   const abilitySave = await page

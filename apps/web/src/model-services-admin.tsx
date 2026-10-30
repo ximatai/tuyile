@@ -1,4 +1,8 @@
 import {
+  recommendedModelCapabilities,
+  conversationModelKnowledge,
+} from "./model-recommendations";
+import {
   imageModelKnowledge,
   imageDeclarationWithinKnownLimits,
 } from "@tuyile/contracts";
@@ -14,6 +18,7 @@ import {
 } from "@tuyile/contracts";
 import {
   Button,
+  Collapse,
   ChoiceField,
   Field,
   Checkbox,
@@ -115,28 +120,7 @@ export function ModelServicesAdmin() {
         kind,
         enabled: true,
         isDefault: !entries.some((e) => e.kind === kind && e.enabled),
-        ...(kind === "image"
-          ? {
-              image: {
-                model,
-                generation: true,
-                editing: false,
-                maxReferences: 0,
-                maxEdge: 1024,
-                maxPixels: 1048576,
-                sizes: ["1024x1024"],
-                qualities: ["medium"],
-                formats: ["png"],
-              },
-            }
-          : {
-              conversation: {
-                supportsImages: false,
-                responseMode: "json_object" as const,
-                maxOutputTokens: 4096,
-                maxInputCharacters: 32000,
-              },
-            }),
+        ...recommendedModelCapabilities(model, kind),
       },
     ]);
   }
@@ -782,14 +766,35 @@ export function ModelServicesAdmin() {
           open={!!advanced}
           size={560}
           footer={
-            <Button
-              className="primary"
-              type="submit"
-              form="model-capability-editor"
-              disabled={busy}
-            >
-              应用到待发布配置
-            </Button>
+            <div className="model-capability-footer">
+              <Button
+                type="button"
+                disabled={busy || !advanced}
+                onClick={() => {
+                  if (!advanced) return;
+                  const next = {
+                    ...advanced,
+                    ...recommendedModelCapabilities(
+                      advanced.modelId,
+                      advanced.kind,
+                    ),
+                  };
+                  setAdvanced(next);
+                  setSizes(next.image?.sizes.join(",") ?? "");
+                  setError("");
+                }}
+              >
+                恢复默认
+              </Button>
+              <Button
+                className="primary"
+                type="submit"
+                form="model-capability-editor"
+                disabled={busy}
+              >
+                应用到待发布配置
+              </Button>
+            </div>
           }
           onClose={() => setAdvanced(null)}
           destroyOnHidden
@@ -829,7 +834,18 @@ export function ModelServicesAdmin() {
                 }
               }}
             >
-              {imageModelKnowledge(advanced.modelId) ? (
+              {conversationModelKnowledge(advanced.modelId) ? (
+                <p className="hint">
+                  官方资料支持参考图理解（2026-10-30）。恢复默认会使用系统推荐预算。
+                  <a
+                    href={conversationModelKnowledge(advanced.modelId)!.source}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    能力依据
+                  </a>
+                </p>
+              ) : imageModelKnowledge(advanced.modelId) ? (
                 <p className="hint">
                   已校准官方文档（2026-10-30）：PNG / JPEG /
                   WebP；边长不超过3840，像素655360—8294400，比例不超过3:1。
@@ -862,48 +878,63 @@ export function ModelServicesAdmin() {
                   >
                     支持参考图理解
                   </Checkbox>
-                  <ChoiceField
-                    label="结构化输出方式"
-                    value={advanced.conversation.responseMode}
-                    onValueChange={(v) =>
-                      setAdvanced({
-                        ...advanced,
-                        conversation: {
-                          ...advanced.conversation!,
-                          responseMode: v as "text" | "json_object",
-                        },
-                      })
-                    }
-                    options={[
-                      { value: "json_object", label: "JSON 模式" },
-                      { value: "text", label: "文本输出后校验" },
+                  <Collapse
+                    ghost
+                    size="small"
+                    items={[
+                      {
+                        key: "advanced",
+                        label: "高级设置",
+                        children: (
+                          <div className="model-conversation-advanced">
+                            {" "}
+                            <ChoiceField
+                              label="结构化输出方式"
+                              value={advanced.conversation.responseMode}
+                              onValueChange={(v) =>
+                                setAdvanced({
+                                  ...advanced,
+                                  conversation: {
+                                    ...advanced.conversation!,
+                                    responseMode: v as "text" | "json_object",
+                                  },
+                                })
+                              }
+                              options={[
+                                { value: "json_object", label: "JSON 模式" },
+                                { value: "text", label: "文本输出后校验" },
+                              ]}
+                            />
+                            {(
+                              ["maxOutputTokens", "maxInputCharacters"] as const
+                            ).map((key) => (
+                              <Field
+                                key={key}
+                                label={
+                                  key === "maxOutputTokens"
+                                    ? "单次规划总输出 token 预算"
+                                    : "单次规划输入字符上限"
+                                }
+                                type="number"
+                                min={key === "maxOutputTokens" ? 256 : 1000}
+                                max={key === "maxOutputTokens" ? 8192 : 64000}
+                                value={advanced.conversation![key]}
+                                onChange={(e) =>
+                                  setAdvanced({
+                                    ...advanced,
+                                    conversation: {
+                                      ...advanced.conversation!,
+                                      [key]: Number(e.target.value),
+                                    },
+                                  })
+                                }
+                              />
+                            ))}
+                          </div>
+                        ),
+                      },
                     ]}
                   />
-                  {(["maxOutputTokens", "maxInputCharacters"] as const).map(
-                    (key) => (
-                      <Field
-                        key={key}
-                        label={
-                          key === "maxOutputTokens"
-                            ? "单次规划总输出 token 预算"
-                            : "单次规划输入字符上限"
-                        }
-                        type="number"
-                        min={key === "maxOutputTokens" ? 256 : 1000}
-                        max={key === "maxOutputTokens" ? 8192 : 64000}
-                        value={advanced.conversation![key]}
-                        onChange={(e) =>
-                          setAdvanced({
-                            ...advanced,
-                            conversation: {
-                              ...advanced.conversation!,
-                              [key]: Number(e.target.value),
-                            },
-                          })
-                        }
-                      />
-                    ),
-                  )}
                 </>
               )}
               {advanced.image && (
