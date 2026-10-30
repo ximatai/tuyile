@@ -252,6 +252,14 @@ it("confirms once and executes dependent image steps with persistent source line
     second = await f.done(tasks[1].id);
   expect(first.state).toBe("succeeded");
   expect(second.state).toBe("succeeded");
+  expect(second.settings?.referenceIds).toEqual([first.outputs[0].id]);
+  const listed = await f.repo.tasks(f.principal, f.project.id);
+  expect(
+    listed.find((task) => task.id === second.id)?.settings?.referenceIds,
+  ).toEqual([first.outputs[0].id]);
+  expect(
+    listed.find((task) => task.id === first.id)?.settings?.referenceIds,
+  ).toEqual([]);
   expect(
     (
       await f.pool.query(

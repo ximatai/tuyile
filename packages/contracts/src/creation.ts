@@ -65,6 +65,15 @@ export interface ImageTask {
   prompt: string;
   model: string;
   count: number;
+  settings?: Pick<
+    ImageInput,
+    | "width"
+    | "height"
+    | "quality"
+    | "format"
+    | "modelSelectionId"
+    | "referenceIds"
+  >;
   used: number;
   held: number;
   pendingReview: boolean;

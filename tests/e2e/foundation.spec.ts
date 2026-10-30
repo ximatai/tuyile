@@ -210,6 +210,30 @@ test("background creation survives refresh, page closure and ordinary logout, wi
       .locator(".canvas-task-history")
       .getByRole("link", { name: "下载原图" }),
   ).toHaveCount(2);
+  // Reusing a task is an editable draft; preview and reference actions must not dispatch work.
+  await reopened.getByRole("button", { name: "复用设置", exact: true }).click();
+  await expect(reopened.getByLabel("创作需求")).toHaveValue(
+    "合成测试：关闭页面后继续执行",
+  );
+  await expect(reopened.getByLabel("图片张数")).toHaveValue("2");
+  await expect(reopened.getByLabel("画面规格")).toBeVisible();
+  await reopened.locator(".output-grid .ant-image").first().click();
+  await expect(reopened.locator(".ant-image-preview")).toBeVisible();
+  await reopened.keyboard.press("Escape");
+  await expect(reopened.locator(".ant-image-preview")).toBeHidden();
+  await reopened
+    .getByRole("button", { name: "继续修改", exact: true })
+    .first()
+    .click();
+  await expect(
+    reopened
+      .getByTestId("reference-upload")
+      .getByText("画布参考图", { exact: true }),
+  ).toBeVisible();
+  await reopened
+    .getByRole("button", { name: "移除引用 画布参考图", exact: true })
+    .click();
+  await expect(reopened.locator(".task-result")).toHaveCount(1);
   await reopened.getByLabel("创作需求").fill("合成测试：注销后继续");
   await reopened.getByLabel("图片张数").fill("2");
   await reopened
@@ -241,7 +265,9 @@ test("background creation survives refresh, page closure and ordinary logout, wi
       mimeType: "image/png",
       buffer: bytes,
     });
-  await expect(reopened.getByText("synthetic.png")).toBeVisible();
+  await expect(
+    reopened.getByTestId("reference-upload").getByText("synthetic.png"),
+  ).toBeVisible();
   await reopened.getByLabel("创作需求").fill("合成测试：参考图");
   await reopened
     .getByRole("button", { name: "提交图片任务", exact: true })
@@ -749,6 +775,42 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
     animations: "disabled",
     path: ".codex-temp/m3-agent-result-1920.png",
   });
+  const completedTasks = (
+    await (
+      await page.request.get(`/api/images/tasks?projectId=${projectId}`)
+    ).json()
+  ).tasks;
+  const dependentTask = completedTasks.find((task: any) => task.count === 1);
+  expect(dependentTask.settings.referenceIds).toHaveLength(2);
+  await page.locator(".canvas-task-history .ant-collapse-header").click();
+  await page
+    .locator(".task-result")
+    .filter({
+      has: page.locator(
+        `img[src="/api/images/assets/${dependentTask.outputs[0].id}/preview"]`,
+      ),
+    })
+    .getByRole("button", { name: "复用设置", exact: true })
+    .click();
+  await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
+    dependentTask.prompt,
+  );
+  await expect(
+    page.getByTestId("reference-upload").locator(".attachment"),
+  ).toHaveCount(2);
+  for (const id of dependentTask.settings.referenceIds)
+    await expect(
+      page
+        .getByTestId("reference-upload")
+        .locator(`img[src="/api/images/assets/${id}/preview"]`),
+    ).toBeVisible();
+  expect(
+    (
+      await (
+        await page.request.get(`/api/images/tasks?projectId=${projectId}`)
+      ).json()
+    ).tasks,
+  ).toHaveLength(2);
 });
 
 test("Gallery reuse, ZIP export, favorites, prompt application and project cleanup preserve originals and usage", async ({
@@ -829,7 +891,11 @@ test("Gallery reuse, ZIP export, favorites, prompt application and project clean
     .first()
     .getByRole("button", { name: "用作参考", exact: true })
     .click();
-  await expect(page.getByText("图库参考图", { exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByTestId("reference-upload")
+      .getByText("图库参考图", { exact: true }),
+  ).toBeVisible();
   await page.getByRole("link", { name: "提示池", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "提示池", exact: true }),
@@ -1028,11 +1094,54 @@ test("administrators add a service and users select same-named models from the c
     .locator(".project-card")
     .filter({ hasText: "多服务选择验收" })
     .click();
+  await page
+    .getByLabel("创作需求", { exact: true })
+    .fill("Synthetic preserved draft");
+  const usageRoute = "**/api/images/usage";
+  await page.route(usageRoute, async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    body.modelOptions = body.modelOptions.map((m: any) =>
+      m.id === entry.id
+        ? {
+            ...m,
+            image: {
+              ...m.image,
+              sizes: ["768x1024"],
+              qualities: ["low"],
+              formats: ["jpeg"],
+            },
+          }
+        : m,
+    );
+    await route.fulfill({ response, json: body });
+  });
+  await page.waitForResponse((r) => r.url().endsWith("/api/images/usage"));
   await page.getByLabel("图片模型", { exact: true }).click();
   await page
     .locator(".ant-select-dropdown:visible")
     .getByText("test-image · 备用测试服务", { exact: true })
     .click();
+  await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
+    "Synthetic preserved draft",
+  );
+  await expect(
+    page.getByText("当前尺寸不受支持，请选择画面规格。", { exact: false }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "提交图片任务", exact: true }),
+  ).toBeDisabled();
+  await page.getByLabel("画面规格", { exact: true }).click();
+  await expect(
+    page
+      .locator(".ant-select-dropdown:visible")
+      .getByText("竖版 3:4 · 768 × 1024", { exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.unroute(usageRoute);
+  await expect(
+    page.getByRole("button", { name: "提交图片任务", exact: true }),
+  ).toBeEnabled();
   await page
     .getByLabel("创作需求", { exact: true })
     .fill("Synthetic service selection");

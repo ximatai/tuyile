@@ -1,3 +1,10 @@
+import { ImageControls, ReferenceAttachments } from "./image-controls";
+import {
+  initialSettings,
+  selectedCapability,
+  settingsIssues,
+  type ImageSettings,
+} from "./image-settings";
 import { useEffect, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import {
@@ -12,7 +19,6 @@ import {
   type PlanningUsage,
   type SkillView,
   type UserModelPools,
-  type ModelChoice,
 } from "@tuyile/contracts";
 import {
   Button,
@@ -24,7 +30,6 @@ import {
   Input,
   Notice,
   Select,
-  Upload,
   useConfirm,
 } from "@tuyile/ui";
 import { HelpPopover, Excerpt } from "./interface-help";
@@ -60,7 +65,14 @@ export function AgentPanel({
     api = client(state.session.csrfToken);
   const [prompt, setPrompt] = useState(""),
     [skillId, setSkillId] = useState(""),
-    [model, setModel] = useState(""),
+    [settings, setSettings] = useState<ImageSettings>({
+      modelKey: "",
+      width: 1024,
+      height: 1024,
+      quality: "medium",
+      format: "png",
+      count: 1,
+    }),
     [conversationModel, setConversationModel] = useState(""),
     [current, setCurrent] = useState(""),
     [busy, setBusy] = useState(false),
@@ -89,10 +101,9 @@ export function AgentPanel({
   });
   useEffect(() => {
     const options = modelPools.data?.conversation ?? [];
-    setConversationModel((old) =>
-      options.some((e) => e.id === old)
-        ? old
-        : (options.find((e) => e.isDefault)?.id ?? options[0]?.id ?? ""),
+    setConversationModel(
+      (old) =>
+        old || options.find((e) => e.isDefault)?.id || options[0]?.id || "",
     );
   }, [modelPools.data]);
   const planning = useQuery({
@@ -106,20 +117,21 @@ export function AgentPanel({
     queryFn: ({ signal }) =>
       api<{ skills: SkillView[] }>("/skills", undefined, signal),
   });
+  const initialized = useRef(false);
   useEffect(() => {
-    if (usage)
-      setModel((old) =>
-        usage.modelOptions
-          ? usage.modelOptions.some((e) => e.id === old)
-            ? old
-            : (usage.modelOptions.find((e) => e.isDefault)?.id ??
-              usage.modelOptions[0]?.id ??
-              "")
-          : usage.models.includes(old)
-            ? old
-            : (usage.models[0] ?? ""),
-      );
+    if (usage?.models.length && !initialized.current) {
+      initialized.current = true;
+      setSettings(initialSettings(usage));
+    }
   }, [usage]);
+  const model = settings.modelKey;
+  const issues = usage
+    ? settingsIssues(usage, settings, references.length)
+    : [];
+  const conversationUnavailable =
+    !!conversationModel &&
+    !!modelPools.data &&
+    !modelPools.data.conversation.some((m) => m.id === conversationModel);
   const history = jobs.data?.pages.flatMap((page) => page.jobs) ?? [];
   const selected = history.find((j) => j.id === current) ?? history[0],
     plan = selected?.plans.at(-1);
@@ -140,6 +152,19 @@ export function AgentPanel({
   async function request(event: React.FormEvent) {
     event.preventDefault();
     if (submitting.current || busy) return;
+    if (!pending && (!usage || issues.length)) {
+      setError(issues.join(" ") || "请先配置图片模型。");
+      return;
+    }
+    if (
+      !pending &&
+      conversationModel &&
+      modelPools.data &&
+      !modelPools.data.conversation.some((m) => m.id === conversationModel)
+    ) {
+      setError("原对话模型已不可用，请重新选择。");
+      return;
+    }
     submitting.current = true;
     setBusy(true);
     setError("");
@@ -150,10 +175,10 @@ export function AgentPanel({
       model: usage?.modelOptions?.find((e) => e.id === model)?.modelId ?? model,
       ...(usage?.modelOptions ? { modelSelectionId: model } : {}),
       ...(conversationModel ? { conversationModelId: conversationModel } : {}),
-      width: 1024,
-      height: 1024,
-      quality: "medium" as const,
-      format: "png" as const,
+      width: settings.width,
+      height: settings.height,
+      quality: settings.quality,
+      format: settings.format,
       referenceIds: references.map((r) => r.id),
       ...(skillId ? { skillId } : {}),
       ...(plan ? { previousPlanId: plan.id } : {}),
@@ -277,8 +302,7 @@ export function AgentPanel({
             key={plan.id}
             plan={plan}
             visible={visible}
-            models={usage?.models ?? []}
-            modelOptions={usage?.modelOptions}
+            usage={usage}
             references={references}
             busy={busy}
             setBusy={setBusy}
@@ -294,6 +318,12 @@ export function AgentPanel({
             planning.error?.message ||
             skills.error?.message}
         </Notice>
+      )}
+      {!pending && issues.length > 0 && (
+        <Notice error>{issues.join(" ")}</Notice>
+      )}
+      {!pending && conversationUnavailable && (
+        <Notice error>原对话模型已不可用，请重新选择或联系管理员。</Notice>
       )}
       <form
         className="agent-compose"
@@ -314,15 +344,29 @@ export function AgentPanel({
                     <>
                       {" "}
                       <div className="agent-options">
-                        {!!modelPools.data?.conversation.length && (
+                        {(!!modelPools.data?.conversation.length ||
+                          conversationModel) && (
                           <ChoiceField
                             label="对话模型"
                             value={conversationModel}
                             onValueChange={setConversationModel}
-                            options={modelPools.data.conversation.map((m) => ({
-                              value: m.id,
-                              label: `${m.modelId} · ${m.serviceName}`,
-                            }))}
+                            options={[
+                              ...(conversationUnavailable
+                                ? [
+                                    {
+                                      value: conversationModel,
+                                      label: "原对话模型（已不可用）",
+                                      disabled: true,
+                                    },
+                                  ]
+                                : []),
+                              ...(modelPools.data?.conversation ?? []).map(
+                                (m) => ({
+                                  value: m.id,
+                                  label: `${m.modelId} · ${m.serviceName}`,
+                                }),
+                              ),
+                            ]}
                           />
                         )}
                         <ChoiceField
@@ -337,52 +381,14 @@ export function AgentPanel({
                             })),
                           ]}
                         />
-                        <ChoiceField
-                          label="Agent 图片模型"
-                          value={model}
-                          onValueChange={setModel}
-                          options={
-                            usage?.modelOptions?.map((m) => ({
-                              value: m.id,
-                              label: `${m.modelId} · ${m.serviceName}`,
-                            })) ??
-                            (usage?.models ?? []).map((m) => ({
-                              value: m,
-                              label: m,
-                            }))
-                          }
-                        />
                       </div>
-                      <div className="agent-references">
-                        <Upload
-                          accept="image/png,image/jpeg,image/webp"
-                          showUploadList={false}
-                          beforeUpload={(file) => {
-                            onUpload(file);
-                            return false;
-                          }}
-                          disabled={
-                            busy || uploadBusy || references.length >= 4
-                          }
-                        >
-                          <Button type="button">添加 Agent 参考图</Button>
-                        </Upload>
-                        {references.map((r) => (
-                          <span className="agent-reference" key={r.id}>
-                            <img
-                              src={`/api/images/assets/${r.id}/preview`}
-                              alt={r.name}
-                            />
-                            <Button
-                              type="button"
-                              aria-label={`移除 Agent 参考图 ${r.name}`}
-                              onClick={() => onRemove(r.id)}
-                            >
-                              移除
-                            </Button>
-                          </span>
-                        ))}
-                      </div>
+                      <ImageControls
+                        usage={usage}
+                        value={settings}
+                        onChange={setSettings}
+                        modelLabel="Agent 图片模型"
+                        count={false}
+                      />
                     </>
                   ),
                 },
@@ -399,11 +405,31 @@ export function AgentPanel({
                 placeholder="例如：为这款产品设计一组简洁的宣传图"
               />
             </label>
+            <div className="agent-references">
+              {visible && (
+                <ReferenceAttachments
+                  agent
+                  references={references}
+                  onRemove={onRemove}
+                  onUpload={onUpload}
+                  disabled={busy || !!pending || uploadBusy}
+                  maxReferences={
+                    usage && selectedCapability(usage, model)?.editing
+                      ? selectedCapability(usage, model)!.maxReferences
+                      : 0
+                  }
+                />
+              )}
+            </div>
           </fieldset>
         </ControlScope>
         <Button
           disabled={
-            busy || uploadBusy || !model || (!pending && !prompt.trim())
+            busy ||
+            uploadBusy ||
+            !model ||
+            (!pending &&
+              (!prompt.trim() || issues.length > 0 || conversationUnavailable))
           }
         >
           {pending ? "重试同一规划" : "发送规划需求"}
@@ -451,8 +477,7 @@ export function AgentPanel({
 function PlanCard({
   plan,
   visible,
-  models,
-  modelOptions,
+  usage,
   references,
   busy,
   setBusy,
@@ -461,8 +486,7 @@ function PlanCard({
 }: {
   plan: AgentPlanVersion;
   visible: boolean;
-  models: string[];
-  modelOptions?: ModelChoice[];
+  usage?: ImageUsage;
   references: { id: string; name: string }[];
   busy: boolean;
   setBusy: (v: boolean) => void;
@@ -553,6 +577,21 @@ function PlanCard({
     setBusy(true);
     setError("");
     try {
+      if (usage && !pending && !confirmation) {
+        const issues = document.steps.flatMap((step, index) =>
+          settingsIssues(
+            usage,
+            {
+              ...step,
+              modelKey: usage.modelOptions
+                ? (step.modelSelectionId ?? `historical:${plan.id}`)
+                : step.model,
+            },
+            step.referenceIds.length + (step.usePrevious ? 1 : 0),
+          ).map((issue) => `步骤 ${index + 1}：${issue}`),
+        );
+        if (issues.length) throw new Error(issues.join(" "));
+      }
       if (!agentPlan.safeParse(document).success)
         throw new Error("请检查计划步骤、图片总数及参考图要求。");
       const input = pending ?? { requestKey: crypto.randomUUID(), document };
@@ -583,6 +622,21 @@ function PlanCard({
     setBusy(true);
     setError("");
     try {
+      if (usage && !pending && !confirmation) {
+        const issues = document.steps.flatMap((step, index) =>
+          settingsIssues(
+            usage,
+            {
+              ...step,
+              modelKey: usage.modelOptions
+                ? (step.modelSelectionId ?? `historical:${plan.id}`)
+                : step.model,
+            },
+            step.referenceIds.length + (step.usePrevious ? 1 : 0),
+          ).map((issue) => `步骤 ${index + 1}：${issue}`),
+        );
+        if (issues.length) throw new Error(issues.join(" "));
+      }
       if (!agentPlan.safeParse(document).success)
         throw new Error(
           "请检查计划：首步不能引用上一步，总数最多 16 张，参考图最多 4 张。",
@@ -716,103 +770,47 @@ function PlanCard({
                     onChange={(e) => patch(index, { prompt: e.target.value })}
                   />
                 </label>
-                <div className="parameter-grid">
-                  <Field
-                    label={`步骤 ${index + 1} 张数`}
-                    type="number"
-                    min={1}
-                    max={16}
-                    value={step.count}
-                    required
-                    onChange={(e) =>
-                      patch(index, { count: Number(e.target.value) })
-                    }
-                  />
-                  <ChoiceField
-                    label={`步骤 ${index + 1} 模型`}
-                    value={step.modelSelectionId ?? step.model}
-                    onValueChange={(value) => {
-                      const selected = modelOptions?.find(
-                        (e) => e.id === value,
-                      );
-                      patch(index, {
-                        model: selected?.modelId ?? value,
-                        modelSelectionId: selected?.id,
-                      });
-                    }}
-                    options={
-                      modelOptions
-                        ? [
-                            ...modelOptions.map((e) => ({
-                              value: e.id,
-                              label: `${e.modelId} · ${e.serviceName}`,
-                            })),
-                            ...(!modelOptions.some(
-                              (e) => e.id === step.modelSelectionId,
-                            )
-                              ? [
-                                  {
-                                    value: step.modelSelectionId ?? step.model,
-                                    label: `${step.model}（原选择）`,
-                                  },
-                                ]
-                              : []),
-                          ]
-                        : [...new Set([...models, step.model])].map((m) => ({
-                            value: m,
-                            label: m,
-                          }))
-                    }
-                  />
-                  <Field
-                    label={`步骤 ${index + 1} 宽度`}
-                    type="number"
-                    min={256}
-                    max={8192}
-                    step={16}
-                    value={step.width}
-                    required
-                    onChange={(e) =>
-                      patch(index, { width: Number(e.target.value) })
-                    }
-                  />
-                  <Field
-                    label={`步骤 ${index + 1} 高度`}
-                    type="number"
-                    min={256}
-                    max={8192}
-                    step={16}
-                    value={step.height}
-                    required
-                    onChange={(e) =>
-                      patch(index, { height: Number(e.target.value) })
-                    }
-                  />
-                  <ChoiceField
-                    label={`步骤 ${index + 1} 质量`}
-                    value={step.quality}
-                    onValueChange={(quality) =>
-                      patch(index, { quality: quality as AgentStep["quality"] })
-                    }
-                    options={[
-                      { value: "low", label: "低" },
-                      { value: "medium", label: "中" },
-                      { value: "high", label: "高" },
-                    ]}
-                  />
-                  <ChoiceField
-                    label={`步骤 ${index + 1} 格式`}
-                    value={step.format}
-                    onValueChange={(format) =>
-                      patch(index, { format: format as AgentStep["format"] })
-                    }
-                    options={[
-                      { value: "png", label: "PNG" },
-                      { value: "jpeg", label: "JPEG" },
-                      { value: "webp", label: "WebP" },
-                    ]}
-                  />
-                </div>
+                <ImageControls
+                  usage={usage}
+                  labelPrefix={`步骤 ${index + 1}`}
+                  modelLabel="模型"
+                  value={{
+                    ...step,
+                    modelKey: usage?.modelOptions
+                      ? (step.modelSelectionId ?? `historical:${plan.id}`)
+                      : step.model,
+                  }}
+                  onChange={(value) => {
+                    const selected = usage?.modelOptions?.find(
+                      (m) => m.id === value.modelKey,
+                    );
+                    patch(index, {
+                      width: value.width,
+                      height: value.height,
+                      quality: value.quality,
+                      format: value.format,
+                      count: value.count,
+                      model: selected?.modelId ?? value.modelKey,
+                      modelSelectionId: selected?.id,
+                    });
+                  }}
+                />
+                {!confirmed &&
+                  usage &&
+                  settingsIssues(
+                    usage,
+                    {
+                      ...step,
+                      modelKey: usage.modelOptions
+                        ? (step.modelSelectionId ?? `historical:${plan.id}`)
+                        : step.model,
+                    },
+                    step.referenceIds.length + (step.usePrevious ? 1 : 0),
+                  ).map((issue) => (
+                    <Notice key={issue} error>
+                      {issue}
+                    </Notice>
+                  ))}
                 <label className="field">
                   <span>步骤 {index + 1} 参考图</span>
                   <Select

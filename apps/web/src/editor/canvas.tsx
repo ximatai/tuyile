@@ -36,18 +36,41 @@ import {
   Ungroup,
   AlignStartVertical,
 } from "lucide-react";
-import { Button, Notice, Tooltip, useConfirm } from "@tuyile/ui";
+import {
+  Button,
+  Dropdown,
+  Image,
+  Notice,
+  Tooltip,
+  useConfirm,
+} from "@tuyile/ui";
 import { useNavigate } from "react-router-dom";
 import { EditorStore } from "./store";
 import { useSessionState } from "../session-state";
 import { client, ApiError } from "../api";
 type ImageNode = Node<
-  { label: string; assetId?: string; reference?: (id: string) => void },
+  {
+    label: string;
+    assetId?: string;
+    reference?: (id: string) => void;
+    reuse?: () => void;
+  },
   "image"
 >;
 function ImageCard({ data, selected }: NodeProps<ImageNode>) {
+  const [preview, setPreview] = useState(false);
   return (
-    <div className="canvas-image">
+    <div
+      className="canvas-image"
+      onDoubleClick={(event) => {
+        event.stopPropagation();
+        setPreview(true);
+      }}
+    >
+      <Image.PreviewGroup
+        items={[`/api/images/assets/${data.assetId}/original`]}
+        preview={{ open: preview, onOpenChange: setPreview, motionName: "" }}
+      />
       <NodeResizer
         isVisible={selected}
         minWidth={80}
@@ -71,6 +94,23 @@ function ImageCard({ data, selected }: NodeProps<ImageNode>) {
         >
           下载原图
         </a>
+        {selected && (
+          <Dropdown
+            trigger={["click"]}
+            menu={{
+              items: [
+                { key: "preview", label: "查看原图" },
+                ...(data.reuse ? [{ key: "reuse", label: "复用设置" }] : []),
+              ],
+              onClick: ({ key }) =>
+                key === "preview" ? setPreview(true) : data.reuse?.(),
+            }}
+          >
+            <Button type="button" className="nodrag" aria-label="图片操作">
+              ···
+            </Button>
+          </Dropdown>
+        )}
         {selected && (
           <Button
             className="nodrag"
@@ -104,11 +144,13 @@ const nodeTypes = { image: ImageCard, group: GroupCard, task: TaskCard };
 export function CanvasEditor({
   projectId,
   onReference,
+  onReuse,
   tasks,
 }: {
   tasks: ImageTask[];
   projectId: string;
   onReference: (id: string) => void;
+  onReuse?: (task: ImageTask) => void;
 }) {
   const state = useSessionState();
   const api = client(state.session.csrfToken);
@@ -138,6 +180,7 @@ export function CanvasEditor({
       tasks={tasks}
       projectId={projectId}
       onReference={onReference}
+      onReuse={onReuse}
     />
   ) : (
     <p role="status">正在打开画布…</p>
@@ -147,12 +190,14 @@ function CanvasView({
   store,
   projectId,
   onReference,
+  onReuse,
   tasks,
 }: {
   tasks: ImageTask[];
   store: EditorStore;
   projectId: string;
   onReference: (id: string) => void;
+  onReuse?: (task: ImageTask) => void;
 }) {
   const state = useSessionState(),
     snap = useSyncExternalStore(store.subscribe, store.get),
@@ -211,10 +256,28 @@ function CanvasView({
               label: n.label,
               assetId: n.assetId,
               reference: onReference,
+              reuse:
+                onReuse &&
+                tasks.some(
+                  (t) =>
+                    !t.pendingReview &&
+                    !["queued", "running"].includes(t.state) &&
+                    t.settings &&
+                    t.outputs.some((a) => a.id === n.assetId),
+                )
+                  ? () => {
+                      const task = tasks.find(
+                        (t) =>
+                          t.settings &&
+                          t.outputs.some((a) => a.id === n.assetId),
+                      );
+                      if (task) onReuse(task);
+                    }
+                  : undefined,
             },
           };
         }),
-    [snap.document, snap.selected, onReference],
+    [snap.document, snap.selected, onReference, onReuse, tasks],
   );
   const [nodes, setNodes] = useState<Node[]>(display);
   useEffect(

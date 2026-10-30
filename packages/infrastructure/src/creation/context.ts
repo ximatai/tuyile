@@ -119,6 +119,7 @@ export class PgCreationContext {
     c: pg.PoolClient,
     r: TaskRow,
     loadedOutputs?: OutputRow[],
+    loadedSources?: string[],
   ): Promise<ImageTask> {
     const outputs =
       loadedOutputs ??
@@ -128,6 +129,18 @@ export class PgCreationContext {
           [r.id],
         )
       ).rows;
+    // Dependent Agent steps append their predecessor at execution time. The
+    // immutable output lineage retains that input after transient pins release.
+    const sources =
+      loadedSources ??
+      (r.depends_on && outputs.length
+        ? (
+            await c.query<{ asset_id: string }>(
+              "SELECT DISTINCT s.asset_id FROM image_output_sources s JOIN image_outputs o ON o.workspace_id=s.workspace_id AND o.id=s.output_id WHERE o.workspace_id=$1 AND o.task_id=$2 ORDER BY s.asset_id",
+              [r.workspace_id, r.id],
+            )
+          ).rows.map((row) => row.asset_id)
+        : []);
     return {
       id: r.id,
       projectId: r.project_id,
@@ -136,6 +149,16 @@ export class PgCreationContext {
       prompt: r.input.prompt,
       model: r.input.model,
       count: r.input.count,
+      settings: {
+        width: r.input.width,
+        height: r.input.height,
+        quality: r.input.quality,
+        format: r.input.format,
+        referenceIds: [...new Set([...r.input.referenceIds, ...sources])],
+        ...(r.input.modelSelectionId
+          ? { modelSelectionId: r.input.modelSelectionId }
+          : {}),
+      },
       used: r.used,
       held: r.held,
       pendingReview: r.pending_review,

@@ -2313,3 +2313,85 @@ h3 {
 .help-content {
   font-size: var(--text-body);
 }
+
+/* Creation controls follow the same compact scale as the rest of the workspace. */
+.image-controls {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.image-controls .field {
+  margin-bottom: 0;
+}
+.image-controls .ant-collapse-content-box {
+  padding: 4px 0 8px !important;
+}
+.image-controls .ant-collapse-header {
+  padding: 4px 0 !important;
+}
+.reference-attachments {
+  margin: 10px 0;
+  min-width: 0;
+}
+.attachment-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.attachment-heading .button,
+.attachment .button {
+  height: 28px;
+  min-height: 28px;
+  padding-inline: 8px;
+  font-size: 12px;
+}
+.attachment-list {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+  max-height: 176px;
+  overflow: auto;
+  margin-top: 8px;
+  scrollbar-gutter: stable;
+}
+.attachment {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+  background: #f5f7fb;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  min-width: 0;
+}
+.attachment .ant-image {
+  flex: 0 0 48px;
+}
+.attachment img {
+  object-fit: cover;
+  border-radius: 4px;
+}
+.attachment-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.output-grid .ant-image {
+  width: 100%;
+}
+.agent-compose .image-controls {
+  margin-top: 10px;
+}
+.agent-compose .reference-attachments {
+  margin: 6px 0 0;
+}
+
+.direct-creation fieldset {
+  align-content: start;
+}

@@ -1,3 +1,11 @@
+import { ImageControls, ReferenceAttachments } from "./image-controls";
+import {
+  initialSettings,
+  selectedCapability,
+  settingsIssues,
+  taskSettings,
+  type ImageSettings,
+} from "./image-settings";
 import { AgentPanel } from "./agent-panel";
 import { Link } from "react-router-dom";
 import { lazy, Suspense, useCallback } from "react";
@@ -13,12 +21,10 @@ import {
   Collapse,
   Popover,
   Button,
-  Field,
   Notice,
   useConfirm,
-  ChoiceField,
-  Upload,
   Input,
+  Image,
   ControlScope,
 } from "@tuyile/ui";
 import { client, ApiError } from "./api";
@@ -34,10 +40,14 @@ export function TaskResults({
   tasks,
   csrfToken,
   refresh,
+  onReuse,
+  onReference,
 }: {
   tasks: ImageTask[];
   csrfToken: string;
   refresh: () => void;
+  onReuse?: (task: ImageTask) => void;
+  onReference?: (id: string) => void;
 }) {
   const confirm = useConfirm();
   const [error, setError] = useState(""),
@@ -108,6 +118,17 @@ export function TaskResults({
                 : `任务未全部完成（${t.errorCode}）。已保存的图片会保留。`}
             </Notice>
           )}
+          {t.settings && onReuse && t.outputs.length > 0 && (
+            <Button
+              type="button"
+              disabled={
+                t.pendingReview || ["queued", "running"].includes(t.state)
+              }
+              onClick={() => onReuse(t)}
+            >
+              复用设置
+            </Button>
+          )}
           <div className="output-grid">
             {t.outputs.map((a) => (
               <figure key={a.id}>
@@ -115,23 +136,26 @@ export function TaskResults({
                   <p>原图已删除</p>
                 ) : (
                   <>
-                    <a
-                      href={`/api/images/assets/${a.id}/original`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      <img
-                        src={`/api/images/assets/${a.id}/preview`}
-                        alt={`已保存图片，${a.width} × ${a.height}`}
-                        loading="lazy"
-                      />
-                    </a>
+                    <Image
+                      src={`/api/images/assets/${a.id}/preview`}
+                      alt={`已保存图片，${a.width} × ${a.height}`}
+                      loading="lazy"
+                      preview={{
+                        src: `/api/images/assets/${a.id}/original`,
+                        motionName: "",
+                      }}
+                    />
                     <figcaption>
                       {a.width} × {a.height}
                       <a href={`/api/images/assets/${a.id}/download`}>
                         下载原图
                       </a>
                     </figcaption>
+                    {onReference && (
+                      <Button type="button" onClick={() => onReference(a.id)}>
+                        继续修改
+                      </Button>
+                    )}
                     <Button disabled={busy} onClick={() => void remove(a.id)}>
                       删除原图
                     </Button>
@@ -194,11 +218,19 @@ export function CreationPage({
   const sessionState = useSessionState();
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
-    [model, setModel] = useState(""),
+    [settings, setSettings] = useState<ImageSettings>({
+      modelKey: "",
+      width: 1024,
+      height: 1024,
+      quality: "medium",
+      format: "png",
+      count: 1,
+    }),
     [prompt, setPrompt] = useState(""),
     [references, setReferences] = useState<{ id: string; name: string }[]>([]),
     [pending, setPending] = useState<ImageInput | null>(null),
     [mobile, setMobile] = useState("create");
+  const confirmDraft = useConfirm();
   const transferredDraft = useRef(sessionState.creationDrafts.get(projectId));
   useEffect(() => {
     const draft = transferredDraft.current;
@@ -211,13 +243,19 @@ export function CreationPage({
     sessionState.creationDrafts.delete(projectId);
   }, [projectId, sessionState]);
   const chooseReference = useCallback(
-    (id: string) =>
+    (id: string) => {
+      if (busy || pending) {
+        setError("请先确认当前提交结果，再修改草稿。");
+        return;
+      }
       setReferences((v) =>
         v.some((r) => r.id === id) || v.length >= 4
           ? v
           : [...v, { id, name: "画布参考图" }],
-      ),
-    [],
+      );
+      setMobile("create");
+    },
+    [busy, pending],
   );
   const [mode, setMode] = useState("direct");
   const [quotaOpen, setQuotaOpen] = useState(false);
@@ -240,24 +278,55 @@ export function CreationPage({
   });
   const usage = usageQuery.data,
     tasks = taskQuery.data?.tasks ?? [];
+  const initialized = useRef(false);
   useEffect(() => {
-    if (usage)
-      setModel((m) => {
-        const options = usage.modelOptions;
-        return options
-          ? options.some((e) => e.id === m)
-            ? m
-            : (options.find((e) => e.isDefault)?.id ?? options[0]?.id ?? "")
-          : usage.models.includes(m)
-            ? m
-            : (usage.models[0] ?? "");
-      });
+    if (usage && usage.models.length && !initialized.current) {
+      initialized.current = true;
+      setSettings(initialSettings(usage));
+    }
   }, [usage]);
+  const issues = usage
+    ? settingsIssues(usage, settings, references.length)
+    : [];
+  async function reuse(task: ImageTask) {
+    if (["queued", "running"].includes(task.state)) {
+      setError("请等待这次任务结束后再复用设置。");
+      return;
+    }
+    if (task.pendingReview) {
+      setError("请先核验这次任务的执行结果，再复用设置。");
+      return;
+    }
+    if (!usage || busy || pending) {
+      setError("请先确认当前提交结果，再复用设置。");
+      return;
+    }
+    const next = taskSettings(task, usage);
+    if (!next) return;
+    if (
+      (prompt.trim() || references.length) &&
+      !(await confirmDraft("用这次任务的提示词、参数和参考图替换当前草稿？"))
+    )
+      return;
+    initialized.current = true;
+    setSettings(next);
+    setPrompt(task.prompt);
+    setReferences(
+      task.settings!.referenceIds.map((id) => ({ id, name: "任务参考图" })),
+    );
+    setError("");
+    setMode("direct");
+    setMobile("create");
+    requestAnimationFrame(() =>
+      formRef.current?.querySelector<HTMLTextAreaElement>("textarea")?.focus(),
+    );
+  }
   async function refresh() {
     await Promise.all([usageQuery.refetch(), taskQuery.refetch()]);
   }
   async function upload(file: File | undefined) {
-    if (!file) return;
+    if (!file || active.current || busy || pending || references.length >= 4)
+      return;
     if (file.size > 20 * 1024 * 1024) {
       setError("参考图不能超过 20 MiB。");
       return;
@@ -276,7 +345,11 @@ export function CreationPage({
         throw new ApiError(body.error.code);
       }
       const asset = await response.json();
-      setReferences((v) => [...v, { id: asset.id, name: file.name }]);
+      setReferences((v) =>
+        v.length >= 4 || v.some((r) => r.id === asset.id)
+          ? v
+          : [...v, { id: asset.id, name: file.name }],
+      );
       await refresh();
     } catch (e) {
       setError((e as Error).message);
@@ -314,18 +387,23 @@ export function CreationPage({
       void send(pending);
       return;
     }
-    const f = new FormData(e.currentTarget);
+    if (!usage || issues.length) {
+      setError(issues.join(" "));
+      return;
+    }
     void send({
       projectId,
       requestKey: crypto.randomUUID(),
-      prompt: String(f.get("prompt")),
-      model: usage?.modelOptions?.find((e) => e.id === model)?.modelId ?? model,
-      ...(usage?.modelOptions ? { modelSelectionId: model } : {}),
-      width: Number(f.get("width")),
-      height: Number(f.get("height")),
-      quality: f.get("quality") as ImageInput["quality"],
-      format: f.get("format") as ImageInput["format"],
-      count: Number(f.get("count")),
+      prompt,
+      model:
+        usage.modelOptions?.find((m) => m.id === settings.modelKey)?.modelId ??
+        settings.modelKey,
+      ...(usage.modelOptions ? { modelSelectionId: settings.modelKey } : {}),
+      width: settings.width,
+      height: settings.height,
+      quality: settings.quality,
+      format: settings.format,
+      count: settings.count,
       referenceIds: references.map((r) => r.id),
     });
   }
@@ -368,6 +446,7 @@ export function CreationPage({
               tasks={tasks}
               projectId={projectId}
               onReference={chooseReference}
+              onReuse={(task) => void reuse(task)}
             />
           </Suspense>
           <Collapse
@@ -382,6 +461,16 @@ export function CreationPage({
                     tasks={tasks}
                     csrfToken={csrfToken}
                     refresh={() => void refresh()}
+                    onReuse={(task) => void reuse(task)}
+                    onReference={(id) => {
+                      chooseReference(id);
+                      setMode("direct");
+                      requestAnimationFrame(() =>
+                        formRef.current
+                          ?.querySelector<HTMLTextAreaElement>("textarea")
+                          ?.focus(),
+                      );
+                    }}
                   />
                 ),
               },
@@ -432,111 +521,53 @@ export function CreationPage({
                       placeholder="描述画面、主体、风格和文字要求"
                     />
                   </label>
-                  <ChoiceField
-                    label="图片模型"
-                    value={model}
-                    onValueChange={setModel}
-                    options={
-                      usage?.modelOptions?.map((m) => ({
-                        value: m.id,
-                        label: `${m.modelId} · ${m.serviceName}`,
-                      })) ??
-                      (usage?.models ?? []).map((m) => ({ value: m, label: m }))
-                    }
+                  {mode === "direct" && (
+                    <ReferenceAttachments
+                      references={references}
+                      onRemove={(id) =>
+                        setReferences((v) => v.filter((r) => r.id !== id))
+                      }
+                      onUpload={(file) => void upload(file)}
+                      disabled={busy || !!pending}
+                      maxReferences={
+                        usage
+                          ? selectedCapability(usage, settings.modelKey)
+                              ?.editing
+                            ? selectedCapability(usage, settings.modelKey)!
+                                .maxReferences
+                            : 0
+                          : 0
+                      }
+                    />
+                  )}
+                  <ImageControls
+                    usage={usage}
+                    value={settings}
+                    onChange={setSettings}
                   />
-                  <div className="parameter-grid">
-                    <Field
-                      label="宽度"
-                      name="width"
-                      type="number"
-                      defaultValue={1024}
-                      min={256}
-                      max={usage?.policy.maxEdge ?? 2048}
-                      step={16}
-                      required
-                    />
-                    <Field
-                      label="高度"
-                      name="height"
-                      type="number"
-                      defaultValue={1024}
-                      min={256}
-                      max={usage?.policy.maxEdge ?? 2048}
-                      step={16}
-                      required
-                    />
-                    <ChoiceField
-                      label="质量"
-                      name="quality"
-                      defaultValue="medium"
-                      options={[
-                        { value: "low", label: "低" },
-                        { value: "medium", label: "中" },
-                        { value: "high", label: "高" },
-                      ]}
-                    />
-                    <ChoiceField
-                      label="格式"
-                      name="format"
-                      defaultValue="png"
-                      options={[
-                        { value: "png", label: "PNG" },
-                        { value: "jpeg", label: "JPEG" },
-                        { value: "webp", label: "WebP" },
-                      ]}
-                    />
-                    <Field
-                      label="图片张数"
-                      name="count"
-                      type="number"
-                      min={1}
-                      max={usage?.policy.maxCount ?? 4}
-                      defaultValue={1}
-                      required
-                    />
-                  </div>
-                  <div className="field" data-testid="reference-upload">
-                    <span>参考图</span>
-                    <Upload
-                      accept="image/png,image/jpeg,image/webp"
-                      showUploadList={false}
-                      disabled={busy || references.length >= 4}
-                      beforeUpload={(file) => {
-                        void upload(file);
-                        return false;
-                      }}
-                    >
-                      <Button type="button">选择参考图</Button>
-                    </Upload>
-                  </div>
-                  {references.map((r) => (
-                    <div className="reference-row" key={r.id}>
-                      <img
-                        src={`/api/images/assets/${r.id}/preview`}
-                        alt="参考图"
-                      />
-                      <span>{r.name}</span>
-                      <Button
-                        type="button"
-                        onClick={() =>
-                          setReferences((v) => v.filter((a) => a.id !== r.id))
-                        }
-                      >
-                        移除引用
-                      </Button>
-                    </div>
-                  ))}
                 </fieldset>
               </ControlScope>
+              {issues.length > 0 && !pending && (
+                <Notice error>{issues.join(" ")}</Notice>
+              )}
               {error && <Notice error>{error}</Notice>}
               <p className="hint">
                 关页不影响后台执行。取消可能仍计费，中断不自动续跑。
               </p>
               <Button
                 className="primary"
-                disabled={busy || !usage?.models.length}
+                aria-label={pending ? "重试同一提交" : "提交图片任务"}
+                disabled={
+                  busy ||
+                  !usage?.models.length ||
+                  (!pending && issues.length > 0)
+                }
               >
-                {busy ? "正在提交…" : pending ? "重试同一提交" : "提交图片任务"}
+                {busy
+                  ? "正在提交…"
+                  : pending
+                    ? "重试同一提交"
+                    : `生成 ${settings.count} 张`}
               </Button>
               {pending && (
                 <Button
@@ -585,7 +616,7 @@ export function CreationPage({
                 setReferences((old) => old.filter((r) => r.id !== id))
               }
               onUpload={(file) => void upload(file)}
-              uploadBusy={busy}
+              uploadBusy={busy || !!pending}
             />
           </div>
         </aside>

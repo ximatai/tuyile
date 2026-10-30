@@ -73,6 +73,21 @@ try {
       `http://127.0.0.1:8792/api/images/tasks?projectId=${projectId}`,
     )
   ).json();
+  // Exercise the mature image overlay under the built application's strict CSP.
+  await page.locator(".canvas-task-history .ant-collapse-header").click();
+  await page.locator(".output-grid .ant-image").first().click();
+  await page.locator(".ant-image-preview").waitFor();
+  await page.keyboard.press("Escape");
+  await page.locator(".ant-image-preview").waitFor({ state: "hidden" });
+  await page
+    .getByRole("button", { name: "复用设置", exact: true })
+    .first()
+    .click();
+  assert(
+    (await page.getByLabel("创作需求", { exact: true }).inputValue()).length >
+      0,
+  );
+  await page.locator(".canvas-task-history .ant-collapse-header").click();
   const referenceId = assets.tasks.flatMap((task: any) => task.outputs)[0].id;
   const spec = {
     prompt: "Synthetic product composition",

@@ -92,7 +92,26 @@ export class PgTasksRepository extends PgCreationContext {
       group.push(output);
       byTask.set(output.task_id, group);
     }
-    return Promise.all(rows.map((r) => this.dto(c, r, byTask.get(r.id) ?? [])));
+    const dependentIds = rows.filter((r) => r.depends_on).map((r) => r.id);
+    const sources = dependentIds.length
+      ? (
+          await c.query<{ task_id: string; asset_id: string }>(
+            "SELECT DISTINCT o.task_id,s.asset_id FROM image_outputs o JOIN image_output_sources s ON s.workspace_id=o.workspace_id AND s.output_id=o.id WHERE o.workspace_id=$1 AND o.task_id=ANY($2::uuid[]) ORDER BY o.task_id,s.asset_id",
+            [p.workspaceId, dependentIds],
+          )
+        ).rows
+      : [];
+    const sourcesByTask = new Map<string, string[]>();
+    for (const source of sources) {
+      const group = sourcesByTask.get(source.task_id) ?? [];
+      group.push(source.asset_id);
+      sourcesByTask.set(source.task_id, group);
+    }
+    return Promise.all(
+      rows.map((r) =>
+        this.dto(c, r, byTask.get(r.id) ?? [], sourcesByTask.get(r.id) ?? []),
+      ),
+    );
   }
   async task(p: Principal, id: string) {
     const c = this.c;

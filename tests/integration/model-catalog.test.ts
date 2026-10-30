@@ -125,6 +125,15 @@ it("keeps same-named models from different services distinct and pins accepted w
       f.principal,
       f.input({ model: ea.modelId, modelSelectionId: ea.id }),
     );
+    expect(accepted.settings).toEqual({
+      width: 256,
+      height: 256,
+      quality: "medium",
+      format: "png",
+      referenceIds: [],
+      modelSelectionId: ea.id,
+    });
+    expect(JSON.stringify(accepted)).not.toContain("baseUrl");
     const old = (
       await f.pool.query("SELECT provider_id FROM image_tasks WHERE id=$1", [
         accepted.id,

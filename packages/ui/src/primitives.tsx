@@ -158,7 +158,7 @@ export function ChoiceField({
   name?: string;
   value?: string;
   defaultValue?: string;
-  options: { value: string; label: string }[];
+  options: { value: string; label: string; disabled?: boolean }[];
   onValueChange?: (value: string) => void;
   disabled?: boolean;
   hideLabel?: boolean;
@@ -187,6 +187,7 @@ export function ChoiceField({
 }
 export {
   Collapse,
+  Image,
   Upload,
   Checkbox,
   Table,
