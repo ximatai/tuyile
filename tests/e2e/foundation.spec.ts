@@ -41,9 +41,18 @@ test("desktop and mobile: persistent projects, activation, account boundaries an
     page.getByRole("heading", { name: "品牌视觉方案" }),
   ).toBeVisible();
   await page.getByRole("link", { name: "用户管理", exact: true }).click();
-  await page.getByLabel("新账号").fill("designer01");
-  await page.getByRole("button", { name: "创建账号", exact: true }).click();
-  await expect(page.getByLabel("新账号")).toHaveValue("");
+  await page.getByRole("button", { name: "新增用户", exact: true }).click();
+  const createUserDialog = page.getByRole("dialog", {
+    name: "新增用户",
+    exact: true,
+  });
+  await createUserDialog
+    .getByLabel("用户名", { exact: true })
+    .fill("designer01");
+  await createUserDialog
+    .getByRole("button", { name: "新增用户", exact: true })
+    .click();
+  await expect(createUserDialog).toBeHidden();
   const activation = await page.getByLabel("复制交付链接").inputValue();
   await page
     .getByRole("row")
@@ -250,8 +259,18 @@ test("administrator resets a password and user must replace the temporary passwo
 }) => {
   await login(page);
   await page.getByRole("link", { name: "用户管理", exact: true }).click();
-  await page.getByLabel("新账号").fill("hashuser02");
-  await page.getByRole("button", { name: "创建账号", exact: true }).click();
+  await page.getByRole("button", { name: "新增用户", exact: true }).click();
+  const createUserDialog = page.getByRole("dialog", {
+    name: "新增用户",
+    exact: true,
+  });
+  await createUserDialog
+    .getByLabel("用户名", { exact: true })
+    .fill("hashuser02");
+  await createUserDialog
+    .getByRole("button", { name: "新增用户", exact: true })
+    .click();
+  await expect(createUserDialog).toBeHidden();
   const activation = await page.getByLabel("复制交付链接").inputValue();
   const context = await browser.newContext();
   const member = await context.newPage();

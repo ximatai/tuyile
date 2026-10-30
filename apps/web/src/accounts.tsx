@@ -16,9 +16,10 @@ import {
   Modal,
   Drawer,
   Dropdown,
+  Input,
 } from "@tuyile/ui";
 import { client, notifySessionChange } from "./api";
-import { Ellipsis } from "lucide-react";
+import { Ellipsis, Plus, Search } from "lucide-react";
 import { UserPolicyEditor } from "./user-policy-editor";
 export function AdminPage({
   csrfToken,
@@ -34,7 +35,7 @@ export function AdminPage({
   const [search, setSearch] = useState("");
   const [policyBusy, setPolicyBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
-  const [createVersion, setCreateVersion] = useState(0);
+  const [createOpen, setCreateOpen] = useState(false);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [link, setLink] = useState<LinkResult | null>(null),
@@ -109,12 +110,13 @@ export function AdminPage({
   }
   function create(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (busy) return;
     const f = e.currentTarget;
     void action(async () => {
       const v = await api<LinkResult>("/admin/users", {
         username: new FormData(f).get("username"),
       });
-      setCreateVersion((v) => v + 1);
+      setCreateOpen(false);
       return v;
     });
   }
@@ -159,35 +161,78 @@ export function AdminPage({
     <section>
       <p className="eyebrow">管理</p>
       <h1>用户管理</h1>
-      <form
-        key={createVersion}
-        onSubmit={create}
-        className="create-project"
-        aria-label="创建账号"
-      >
-        <Field
-          label="新账号"
-          name="username"
-          placeholder="3–64 位小写字母、数字或 . _ -"
-          required
-          pattern="[a-z0-9][a-z0-9_.-]{2,63}"
-          minLength={3}
-          maxLength={64}
+      <div className="users-toolbar">
+        <Input
+          className="users-search"
+          aria-label="搜索用户"
+          placeholder="搜索用户名"
+          prefix={<Search size={16} />}
+          allowClear
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
         />
-        <Button className="primary" disabled={busy}>
-          {busy ? "正在处理…" : "创建账号"}
+        <Button
+          type="button"
+          className="primary"
+          disabled={busy}
+          onClick={() => {
+            setError("");
+            setCreateOpen(true);
+          }}
+        >
+          <Plus size={16} />
+          新增用户
         </Button>
-      </form>
-      {(error || query.error) && (
-        <Notice error>{error || query.error?.message}</Notice>
+      </div>
+      <Modal
+        title="新增用户"
+        open={createOpen}
+        width={400}
+        footer={null}
+        destroyOnHidden
+        mask={{ closable: false }}
+        keyboard={!busy}
+        closable={!busy}
+        onCancel={() => {
+          setCreateOpen(false);
+          setError("");
+        }}
+      >
+        <form aria-label="新增用户" onSubmit={create}>
+          <Field
+            label="用户名"
+            name="username"
+            placeholder="3–64 位小写字母、数字或 . _ -"
+            required
+            pattern="[a-z0-9][a-z0-9_.-]{2,63}"
+            minLength={3}
+            maxLength={64}
+            autoFocus
+            disabled={busy}
+            autoComplete="off"
+          />
+          {error && <Notice error>{error}</Notice>}
+          <div className="actions users-create-actions">
+            <Button
+              type="button"
+              disabled={busy}
+              onClick={() => {
+                setCreateOpen(false);
+                setError("");
+              }}
+            >
+              取消
+            </Button>
+            <Button className="primary" disabled={busy} loading={busy}>
+              新增用户
+            </Button>
+          </div>
+        </form>
+      </Modal>
+      {((!createOpen && error) || query.error) && (
+        <Notice error>{(!createOpen && error) || query.error?.message}</Notice>
       )}
       {!selectedUser && linkResult}
-      <Field
-        label="搜索用户"
-        placeholder="用户名"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-      />
       {loading ? (
         <p role="status">正在加载账号…</p>
       ) : (

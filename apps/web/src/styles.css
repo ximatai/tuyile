@@ -3234,3 +3234,22 @@ h3 {
 .user-settings-drawer .user-policy-editor > h3 {
   margin-top: 0;
 }
+
+.users-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.users-toolbar .users-search {
+  width: 320px;
+  max-width: 100%;
+}
+.users-toolbar > button {
+  flex-shrink: 0;
+}
+.users-create-actions {
+  justify-content: flex-end;
+  margin-top: 8px;
+}
