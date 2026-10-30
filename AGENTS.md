@@ -14,3 +14,5 @@ Read docs/README.md, docs/product-baseline.md, docs/architecture.md and docs/del
 - Use mature mainstream UI components for standard controls and interactions. Ant Design owns inputs, selects, tables, upload triggers, alerts and confirmation dialogs; shared wrappers provide product tokens and layout, not replacement widget implementations. Custom components are for domain behavior and the canvas.
 
 - UI targets medium and large desktop screens. Follow the approved A mockup and B collapsed rail described in docs/ui-direction.md. Do not add small-screen-specific work or substitute a new layout direction.
+
+- Original contributions are Apache-2.0; preserve upstream MIT and all dependency notices. Run check:release and redacted Gitleaks checks for publication changes. Do not rewrite Git history, publish a remote repository/image, or treat ignored working files as safe to upload without the corresponding authorization.

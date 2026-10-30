@@ -6,13 +6,13 @@
 
 依赖和隔离地址见 [本地开发](development.md)。当前程序要求 schema 1—13；迁移由 migrator 显式执行，API/Worker 只检查兼容性，运行身份不能修改 schema。普通停止用 `docker compose ... stop api worker`，保留数据库与图片卷；不要用删除卷解决启动问题。
 
-本地 Docker 使用 `.env.docker`、项目 `tuyile-docker`、数据库 `tuyile_docker`/55441 和应用8792。专用自动测试只使用 `tuyile_test`/55440。旧项目、旧 LaunchAgent 和它的数据不参与新工程运行或构建。
+本地 Docker 使用 `.env.docker`、项目 `tuyile-docker`、数据库 `tuyile_docker`/55441 和应用8792。专用自动测试只使用 `tuyile_test`/55440。其他实例的数据、凭据与后台服务不参与本实例运行或构建。
 
 后台 Worker 持有执行。关闭页面和普通注销不会取消任务；Worker 中断后不承诺续跑。重启后已保存输出仍可读取，未知结果保留待核验，不重发。不要启动第二个 Worker，也不要把健康 Worker 的数据库状态手工改回 queued。
 
 ## HTTPS 配置材料
 
-[生产配置覆盖文件](../compose.production.yaml)将 API/Worker 设为 production，要求明确的 HTTPS origin；基础 Compose 的 API 和数据库端口仍只绑定 loopback。正式证书、域名、主机及外部流量不在本轮执行范围。
+[生产配置覆盖文件](../compose.production.yaml)将 API/Worker 设为 production，要求明确的 HTTPS origin；基础 Compose 的 API 和数据库端口仍只绑定 loopback。正式部署需配置对应的证书、域名、主机和外部流量入口。
 
 只检查配置、不启动服务：
 
@@ -63,3 +63,7 @@ corepack pnpm test:recovery
 `RECOVERY_TEST_ABORT_AFTER_CLONE=1 corepack pnpm test:recovery` 是有意中断反例，预期退出非零；正常SIGINT/SIGTERM会等待清理临时容器/卷并恢复原测试实例，失败或中断不会写入成功报告。SIGKILL或宿主机故障无法保证执行清理：先确认测试进程已结束，依据该次忽略目录的 `run.json` 精确识别随机恢复项目、Nginx容器及本次API进程。核对PID仍对应本次8795端口的编译API后再结束它，仅清理本次代理和恢复项目，再启动原 `tuyile-test` PostgreSQL。不要盲目按PID终止进程、按前缀批量删除卷，或把原项目当恢复项目清理。
 
 本地演练通过不表示生产已部署。历史验收证据与当前交付状态见[交付状态](delivery-roadmap.md)。
+
+## 公开分发
+
+构建镜像不等于公开发布。分发源码或镜像前检查[发布指南](releasing.md)中的暂存区、Git历史、原生依赖许可和隐私要求；不把运行卷、Key或本地验收数据放入镜像。

@@ -21,7 +21,8 @@
     "admin:recover": "node --env-file=.env --import tsx scripts/admin-recover.ts",
     "test:recovery": "node --env-file=.env.test scripts/run-db-tests.mjs recovery",
     "test:runtime": "node --env-file=.env.test scripts/run-db-tests.mjs runtime",
-    "test:docker": "node --env-file=.env.docker --import tsx scripts/docker-smoke.ts && node --import tsx scripts/docker-browser-smoke.ts"
+    "test:docker": "node --env-file=.env.docker --import tsx scripts/docker-smoke.ts && node --import tsx scripts/docker-browser-smoke.ts",
+    "check:release": "node scripts/check-release.mjs"
   },
   "dependencies": {
     "@tuyile/contracts": "workspace:*",
@@ -50,5 +51,6 @@
     "patchedDependencies": {
       "@rc-component/util@1.14.0": "patches/@rc-component__util@1.14.0.patch"
     }
-  }
+  },
+  "license": "Apache-2.0"
 }

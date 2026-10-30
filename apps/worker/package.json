@@ -9,5 +9,6 @@
     "@tuyile/infrastructure": "workspace:*",
     "@tuyile/contracts": "workspace:*"
   },
-  "devDependencies": {}
+  "devDependencies": {},
+  "license": "Apache-2.0"
 }

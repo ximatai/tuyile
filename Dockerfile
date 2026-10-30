@@ -16,7 +16,7 @@ COPY packages ./packages
 COPY scripts ./scripts
 COPY migrations ./migrations
 COPY licenses ./licenses
-COPY tsconfig.json LICENSE THIRD_PARTY_NOTICES.md ./
+COPY tsconfig.json LICENSE NOTICE THIRD_PARTY_NOTICES.md ./
 RUN --mount=type=cache,id=tuyile-corepack,target=/root/.cache/node/corepack pnpm build
 ENV NODE_ENV=production
 RUN mkdir -p /app/storage && chown node:node /app/storage && chmod 700 /app/storage

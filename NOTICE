@@ -1,0 +1,13 @@
+Tuyile
+Copyright 2026 Tuyile contributors
+
+Tuyile's original contributions are licensed under the Apache License, Version 2.0.
+
+This product includes adaptations of visual tokens, layout conventions,
+prompt starters, style directions and image-size presets from GPT Image Canvas:
+https://github.com/aruis/gpt-image-canvas
+Copyright (c) 2026 GPT Image Canvas contributors
+These portions retain their MIT terms; see licenses/gpt-image-canvas-MIT.txt.
+
+Third-party dependencies retain their respective licenses, including native
+libraries used by sharp. See THIRD_PARTY_NOTICES.md and the licenses directory.

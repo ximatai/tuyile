@@ -28,3 +28,22 @@ test-results/
 *.sqlite3-*
 *.db
 *.db-*
+
+# Private key material, database exports and local release bundles
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.dump
+*.sql.gz
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+.ssh/
+.aws/
+.kube/
+id_rsa*
+id_ed25519*

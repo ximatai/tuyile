@@ -1,0 +1,9 @@
+title = "Tuyile secret scanning"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Literal APP_MASTER_KEY placeholder in .env.example; never a usable key"
+regexTarget = "secret"
+regexes = ['''^replace-with-generated-64-hex-characters$''']

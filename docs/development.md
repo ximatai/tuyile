@@ -1,6 +1,6 @@
 # 本地开发与验证
 
-工程约束见[仓库说明](../AGENTS.md)，产品与技术边界分别见[产品基线](product-baseline.md)和[架构设计](architecture.md)。本文只保留当前操作方法，阶段过程与验收证据见[归档](archive/README.md)。
+贡献方式见[贡献指南](../CONTRIBUTING.md)，产品与技术边界分别见[产品基线](product-baseline.md)和[架构设计](architecture.md)。本文只保留当前操作方法，版本能力与验证边界见[当前能力](delivery-roadmap.md)。
 
 ## 环境与启动
 
@@ -26,11 +26,11 @@ corepack pnpm dev
 | 编译产物验证   | API8794            | loopback55440 / tuyile_test   |
 | Docker验收     | API与静态Web8792   | loopback55441 / tuyile_docker |
 
-使用配置中的`APP_ORIGIN`，不混用localhost与127.0.0.1。所有本地服务只绑定loopback。`api:dev`、`web:dev`、`worker:dev`可分别启动；避免同时运行两份Worker或占用相同端口。Ctrl-C只关闭本次启动的进程，不操作旧项目LaunchAgent。
+使用配置中的`APP_ORIGIN`，不混用localhost与127.0.0.1。所有本地服务只绑定loopback。`api:dev`、`web:dev`、`worker:dev`可分别启动；避免同时运行两份Worker或占用相同端口。Ctrl-C只关闭本次启动的进程，不操作其他实例的后台服务。
 
 开发通常使用Vite。需要编译版时运行`corepack pnpm build`，再分别运行`corepack pnpm start`和`corepack pnpm worker:start`；直接访问API静态站点时，`APP_ORIGIN`必须与该浏览器入口一致。已有静态站点正在服务时，先隔离构建并验证，再更新入口、保留旧hash资源，避免构建清空正在使用的dist。
 
-原工程只作参考，禁止在其目录构建或复制其.env、数据、dist、node_modules。不得以尚未上线为由清空开发库、删除运行卷或改写已应用迁移。
+各实例独立构建和运行，不复制其他实例的.env、数据、dist或node_modules。不得以早期版本为由清空开发库、删除运行卷或改写已应用迁移。
 
 ## 账号与密钥
 
@@ -98,3 +98,7 @@ Docker使用独立库、图片卷和合成账号；验收脚本不清空已有�
 标准控件由Ant Design提供，动态样式传递页面nonce，CSP不放开任意内联脚本。[补丁说明](../patches/README.md)记录底层滚动条/弹窗样式nonce修正；改动相关组件时要验证构建版CSP、滚动锁、关闭动画及焦点，而不只验证Vite。
 
 CI复用这些合成验证，不执行公开部署。远程CI是否通过以其实际记录为准；本地通过不等于远程已运行。日志、截图、备份、凭据和生成素材留在忽略目录或运行卷，不进入Git。
+
+## 公开提交与发布
+
+提交前运行`corepack pnpm check:release`检查Git暂存区，再按[发布指南](releasing.md)扫描历史与源码包。`private: true`防止工作区包误发布到npm；项目许可见[LICENSE](../LICENSE)，第三方依赖保留各自条款。

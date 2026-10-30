@@ -11,5 +11,6 @@
   "devDependencies": {
     "@types/react": "19.3.0"
   },
-  "exports": "./src/index.ts"
+  "exports": "./src/index.ts",
+  "license": "Apache-2.0"
 }
