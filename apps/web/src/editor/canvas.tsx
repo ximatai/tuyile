@@ -8,6 +8,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import {
   ReactFlow,
+  useKeyPress,
   Background,
   Controls,
   NodeResizer,
@@ -28,6 +29,8 @@ import type {
   Project,
 } from "@tuyile/contracts";
 import {
+  Hand,
+  MousePointer2,
   Undo2,
   Redo2,
   Copy,
@@ -247,6 +250,9 @@ function CanvasView({
       ).values(),
     ]);
   }, [snap.document, snap.selected, onSelectionChange]);
+  const [handMode, setHandMode] = useState(false);
+  const spacePressed = useKeyPress("Space");
+  const panning = handMode || spacePressed;
   const [operationError, setOperationError] = useState("");
   const [copyMessage, setCopyMessage] = useState("");
   const [copyBusy, setCopyBusy] = useState(false);
@@ -505,7 +511,10 @@ function CanvasView({
   }
 
   return (
-    <section className="canvas-surface" aria-label="项目画布">
+    <section
+      className={`canvas-surface${panning ? " is-panning" : ""}`}
+      aria-label="项目画布"
+    >
       <div className="canvas-status" role="status">
         {snap.saving ? "正在保存…" : snap.dirty ? "有未保存修改" : "画布已保存"}{" "}
         · v{snap.revision}
@@ -552,8 +561,12 @@ function CanvasView({
         deleteKeyCode={null}
         minZoom={0.1}
         maxZoom={4}
-        selectionOnDrag
-        panOnDrag={[1, 2]}
+        nodesDraggable={!panning}
+        elementsSelectable={!panning}
+        selectionOnDrag={false}
+        selectionKeyCode={panning ? null : "Shift"}
+        panActivationKeyCode="Space"
+        panOnDrag={[0, 1, 2]}
         onPaneClick={() => store.select([])}
         onKeyDown={(e) => {
           if ((e.target as HTMLElement).closest("input,textarea,button"))
@@ -579,6 +592,30 @@ function CanvasView({
         </div>
       )}
       <div className="canvas-toolbar" role="toolbar" aria-label="画布操作">
+        <Tooltip title="选择 · Shift 框选" trigger={["hover", "focus"]}>
+          <Button
+            type="button"
+            aria-label="选择工具"
+            aria-pressed={!handMode}
+            onClick={() => setHandMode(false)}
+          >
+            <MousePointer2 size={16} />
+          </Button>
+        </Tooltip>
+        <Tooltip title="小手 · 空格键临时平移" trigger={["hover", "focus"]}>
+          <Button
+            type="button"
+            aria-label="小手工具"
+            aria-pressed={handMode}
+            onClick={() => {
+              store.select([]);
+              setHandMode(true);
+            }}
+          >
+            <Hand size={16} />
+          </Button>
+        </Tooltip>
+
         <Tooltip title="撤销" trigger={["hover", "focus"]}>
           <Button
             aria-label="撤销"

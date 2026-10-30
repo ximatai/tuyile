@@ -2080,7 +2080,10 @@ form {
   flex-shrink: 0;
   border-radius: 0;
 }
-.canvas-task-history .ant-collapse-content-box {
+.canvas-task-history
+  > .ant-collapse-item
+  > .ant-collapse-content
+  > .ant-collapse-content-box {
   padding: 0 !important;
 }
 .canvas-task-history .task-list {
@@ -2702,4 +2705,122 @@ h3 {
 .field-heading .size-pixels {
   flex-shrink: 0;
   white-space: nowrap;
+}
+
+/* Canvas navigation uses React Flow's native drag and keyboard handling. */
+.canvas-toolbar .button[aria-pressed="true"] {
+  color: var(--brand-blue);
+  background: #eaf4ff;
+  border-color: #b7d9f4;
+}
+.canvas-surface.is-panning .react-flow__node {
+  cursor: grab;
+}
+.canvas-surface.is-panning:active .react-flow__node {
+  cursor: grabbing;
+}
+/* Each task remains a complete card; the drawer scrolls as one region. */
+.canvas-task-history .task-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
+  align-items: start;
+  gap: 12px;
+  padding: 12px 16px;
+  max-height: min(360px, 40dvh);
+  background: var(--paper);
+}
+.canvas-task-history .task-result {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+  padding: 12px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.canvas-task-history .task-result .page-heading {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin: 0;
+}
+.canvas-task-history .task-result h2 {
+  margin: 0;
+  font-size: 14px;
+}
+.canvas-task-history .task-prompt {
+  margin: 0;
+  max-height: none;
+  overflow: visible;
+  font-size: 13px;
+}
+.canvas-task-history .task-prompt .ant-typography {
+  margin: 0;
+}
+.canvas-task-history .task-result > .hint {
+  overflow-wrap: anywhere;
+}
+.canvas-task-history .output-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(130px, 100%), 1fr));
+  gap: 10px;
+  margin: 0;
+}
+.canvas-task-history .output-grid figure {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper);
+}
+.canvas-task-history .output-grid .ant-image,
+.canvas-task-history .output-grid figcaption {
+  flex-basis: 100%;
+}
+.canvas-task-history .output-grid .button {
+  height: 28px;
+  min-height: 28px;
+  padding-inline: 8px;
+  font-size: 12px;
+}
+.canvas-task-history .output-grid img {
+  height: 104px;
+  object-fit: contain;
+}
+.canvas-task-history .task-result > .button {
+  align-self: flex-start;
+}
+.canvas-task-history .task-result .ant-collapse-content-box p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.canvas-task-history .task-list > .product-notice,
+.canvas-task-history .task-list > .empty {
+  grid-column: 1 / -1;
+}
+
+.canvas-task-history .task-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.canvas-task-history .task-meta .hint {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.canvas-task-history .task-meta .button {
+  flex-shrink: 0;
+  height: 28px;
+  min-height: 28px;
+  padding-inline: 8px;
+  font-size: 12px;
+}
+.canvas-task-history .task-result .ant-collapse-header {
+  padding: 4px 0 !important;
+  font-size: 12px;
 }

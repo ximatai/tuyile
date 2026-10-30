@@ -1,3 +1,4 @@
+import { Excerpt } from "./interface-help";
 import { composeCreativePrompt, type CreationStyle } from "@tuyile/contracts";
 import { HelpPopover } from "./interface-help";
 import { PromptComposer } from "./prompt-composer";
@@ -97,7 +98,11 @@ export function TaskResults({
         </div>
       )}
       {tasks.map((t) => (
-        <article className="task-result" key={t.id}>
+        <article
+          className="task-result"
+          key={t.id}
+          aria-label={`图片任务 · ${states[t.state]}`}
+        >
           <div className="page-heading">
             <h2>
               {states[t.state]}
@@ -107,7 +112,9 @@ export function TaskResults({
               {t.used} / {t.count} 张{t.held ? ` · ${t.held} 张预留` : ""}
             </span>
           </div>
-          <p className="task-prompt">{t.prompt}</p>
+          <div className="task-prompt">
+            <Excerpt rows={2}>{t.prompt}</Excerpt>
+          </div>
           {t.settings?.style && (
             <Collapse
               ghost
@@ -127,8 +134,24 @@ export function TaskResults({
               ]}
             />
           )}
-          <div className="hint">
-            {t.model} · {new Date(t.createdAt).toLocaleString("zh-CN")}
+          <div className="task-meta">
+            <div
+              className="hint"
+              title={`${t.model} · ${new Date(t.createdAt).toLocaleString("zh-CN")}`}
+            >
+              {t.model} · {new Date(t.createdAt).toLocaleString("zh-CN")}
+            </div>
+            {t.settings && onReuse && t.outputs.length > 0 && (
+              <Button
+                type="button"
+                disabled={
+                  t.pendingReview || ["queued", "running"].includes(t.state)
+                }
+                onClick={() => onReuse(t)}
+              >
+                复用设置
+              </Button>
+            )}
           </div>
           {t.pendingReview && (
             <Notice>
@@ -141,17 +164,6 @@ export function TaskResults({
                 ? "后台执行中断，已保存图片仍可查看。"
                 : `任务未全部完成（${t.errorCode}）。已保存的图片会保留。`}
             </Notice>
-          )}
-          {t.settings && onReuse && t.outputs.length > 0 && (
-            <Button
-              type="button"
-              disabled={
-                t.pendingReview || ["queued", "running"].includes(t.state)
-              }
-              onClick={() => onReuse(t)}
-            >
-              复用设置
-            </Button>
           )}
           <div className="output-grid">
             {t.outputs.map((a) => (

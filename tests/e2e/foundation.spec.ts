@@ -630,6 +630,23 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   expect(submitBox).not.toBeNull();
   expect(quotaBox).not.toBeNull();
   expect(submitBox!.y + submitBox!.height).toBeLessThanOrEqual(quotaBox!.y);
+  const taskCards = reopened.locator(".canvas-task-history .task-result");
+  const cardLayout = await taskCards.evaluateAll((cards) =>
+    cards.map((card) => {
+      const r = card.getBoundingClientRect();
+      return {
+        x: r.x,
+        y: r.y,
+        width: r.width,
+        overflow: card.scrollWidth > card.clientWidth,
+      };
+    }),
+  );
+  expect(cardLayout.length).toBe(3);
+  expect(cardLayout.every((card) => !card.overflow)).toBe(true);
+  expect(cardLayout[0]!.width).toBeLessThan(500);
+  expect(Math.abs(cardLayout[0]!.y - cardLayout[1]!.y)).toBeLessThan(2);
+  expect(cardLayout[1]!.x).toBeGreaterThan(cardLayout[0]!.x);
   const quotaTrigger = reopened.locator(".quota-details button");
   await quotaTrigger.focus();
   await reopened.keyboard.press("Enter");
@@ -828,6 +845,45 @@ test("desktop canvas saves geometry, handles conflicts and never replaces remove
   const first = await (
     await page.request.get(`/api/projects/${projectId}/canvas`)
   ).json();
+  const pane = (await page.locator(".react-flow__pane").boundingBox())!;
+  async function savedCanvas() {
+    return (await page.request.get(`/api/projects/${projectId}/canvas`)).json();
+  }
+  async function dragAt(x: number, y: number) {
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + 50, y + 30, { steps: 10 });
+    await page.mouse.up();
+  }
+  await dragAt(pane.x + pane.width - 120, pane.y + 90);
+  await expect
+    .poll(async () => (await savedCanvas()).document.viewport.x)
+    .not.toBe(first.document.viewport.x);
+  const afterBlank = await savedCanvas();
+  expect(afterBlank.document.nodes).toEqual(first.document.nodes);
+  await page.getByRole("button", { name: "小手工具", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "小手工具", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  const handNode = (await node.boundingBox())!;
+  await dragAt(handNode.x + 70, handNode.y + 70);
+  await expect
+    .poll(async () => (await savedCanvas()).document.viewport.x)
+    .not.toBe(afterBlank.document.viewport.x);
+  const afterHand = await savedCanvas();
+  expect(afterHand.document.nodes).toEqual(first.document.nodes);
+  await page.getByRole("button", { name: "选择工具", exact: true }).click();
+  await page
+    .locator(".react-flow__pane")
+    .click({ position: { x: pane.width - 120, y: 90 } });
+  await page.keyboard.down("Space");
+  const spaceNode = (await node.boundingBox())!;
+  await dragAt(spaceNode.x + 70, spaceNode.y + 70);
+  await page.keyboard.up("Space");
+  await expect
+    .poll(async () => (await savedCanvas()).document.viewport.x)
+    .not.toBe(afterHand.document.viewport.x);
+  expect((await savedCanvas()).document.nodes).toEqual(first.document.nodes);
   const box = (await node.boundingBox())!;
   await page.mouse.move(box.x + 70, box.y + 70);
   await page.mouse.down();
