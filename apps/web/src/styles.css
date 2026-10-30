@@ -218,6 +218,9 @@ form {
   min-width: 0;
 }
 .main-column header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   height: 72px;
   border-bottom: 1px solid var(--line);
   background: var(--surface);

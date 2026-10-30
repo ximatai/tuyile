@@ -526,6 +526,35 @@ test("desktop administration publishes service model pools and preserves version
   await page.goto("/admin/images");
   await page.getByRole("button", { name: "接入现有配置", exact: true }).click();
   await page.getByRole("button", { name: "获取模型", exact: true }).click();
+  // A long administration page must scroll underneath the shared navigation.
+  await page.getByRole("tab", { name: "运行与核验", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "保存规划策略" }),
+  ).toBeAttached();
+  for (const width of [1440, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const collapsed of [false, true]) {
+      if (collapsed)
+        await page.getByRole("button", { name: "收起导航" }).click();
+      await page.evaluate(() => window.scrollTo(0, 0));
+      const header = page.locator(".main-column > header");
+      const before = await header.boundingBox();
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await expect
+        .poll(() => page.evaluate(() => window.scrollY))
+        .toBeGreaterThan(100);
+      const after = await header.boundingBox();
+      expect(after!.y).toBe(before!.y);
+      await expect(
+        header.getByRole("button", { name: "退出登录" }),
+      ).toBeInViewport();
+      await page.evaluate(() => window.scrollTo(0, 0));
+      if (collapsed)
+        await page.getByRole("button", { name: "展开导航" }).click();
+    }
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.getByRole("tab", { name: "模型服务", exact: true }).click();
   await page
     .getByRole("button", { name: "将 test-planner 加入对话池", exact: true })
     .click();
