@@ -49,3 +49,38 @@ it("retains partial success and unknown calls when cancellation races a result",
     completedTaskState({ count: 2, used: 2, unknownHeld: 0, cancelled: true }),
   ).toBe("succeeded");
 });
+
+it("unlimited image quotas still enforce storage, queue and submission limits", () => {
+  const budget = {
+    count: 4,
+    policy: { ...defaultImagePolicy, imageLimit: -1 },
+    queued: 0,
+    ownQueued: 0,
+    queueLimit: 64,
+    recentSubmissions: 0,
+    used: 100000,
+    held: 100000,
+    storageUsed: 0,
+    storageReserved: 0,
+    requiredStorage: 42,
+  };
+  expect(() => checkAdmissionBudget(budget)).not.toThrow();
+  expect(() =>
+    checkAdmissionBudget({
+      ...budget,
+      policy: { ...budget.policy, imageLimit: 0 },
+    }),
+  ).toThrow("IMAGE_QUOTA");
+  expect(() =>
+    checkAdmissionBudget({
+      ...budget,
+      storageUsed: defaultImagePolicy.storageLimit,
+    }),
+  ).toThrow("STORAGE_QUOTA");
+  expect(() => checkAdmissionBudget({ ...budget, queued: 64 })).toThrow(
+    "QUEUE_FULL",
+  );
+  expect(() =>
+    checkAdmissionBudget({ ...budget, recentSubmissions: 6 }),
+  ).toThrow("SUBMISSION_RATE");
+});

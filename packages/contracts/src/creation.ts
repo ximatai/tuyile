@@ -41,7 +41,7 @@ export const imageInput = z.object({
 });
 export type ImageInput = z.infer<typeof imageInput>;
 export const policyInput = z.object({
-  imageLimit: z.number().int().min(0).max(10000),
+  imageLimit: z.number().int().min(-1).max(10000),
   attemptsLimit: z.number().int().min(0).max(10000),
   storageLimit: z.number().int().min(0).max(1099511627776),
   concurrency: z.number().int().min(1).max(8),
@@ -109,7 +109,7 @@ export interface ImageUsage {
   day: string;
   used: number;
   held: number;
-  available: number;
+  available: number | null;
   attempts: number;
   earlierHeld: number;
   storageUsed: number;

@@ -5,7 +5,7 @@ import type { AdmissionSnapshot, OutputSettlement } from "@tuyile/core";
 import {
   AppError,
   ASSET_RESERVE,
-  defaultImagePolicy,
+  imagePolicyDefaults,
   shanghaiDay,
 } from "@tuyile/core";
 import type {
@@ -110,9 +110,7 @@ export class PgQuotaRepository extends PgCreationContext {
       limits = (
         await c.query("SELECT * FROM image_policies WHERE user_id=$1", [p.id])
       ).rows[0],
-      rules = limits
-        ? policy(limits)
-        : { ...defaultImagePolicy, allowedModels: [] },
+      rules = limits ? policy(limits) : imagePolicyDefaults(p.role),
       daily = (
         await c.query("SELECT * FROM image_days WHERE user_id=$1 AND day=$2", [
           p.id,
@@ -140,7 +138,10 @@ export class PgQuotaRepository extends PgCreationContext {
       ...(pools ? { modelOptions: pools.image } : {}),
       used: daily.used,
       held: daily.held,
-      available: Math.max(0, rules.imageLimit - daily.used - daily.held),
+      available:
+        rules.imageLimit === -1
+          ? null
+          : Math.max(0, rules.imageLimit - daily.used - daily.held),
       attempts: daily.attempts,
       earlierHeld: Number(
         (
@@ -183,12 +184,13 @@ export class PgQuotaRepository extends PgCreationContext {
     const c = this.c;
 
     await this.auth(c, p, true, false);
-    if (!(await c.query("SELECT id FROM users WHERE id=$1", [id])).rowCount)
-      throw new AppError("NOT_FOUND", 404);
+    const user = (await c.query("SELECT role FROM users WHERE id=$1", [id]))
+      .rows[0];
+    if (!user) throw new AppError("NOT_FOUND", 404);
     const row = (
       await c.query("SELECT * FROM image_policies WHERE user_id=$1", [id])
     ).rows[0];
-    return row ? policy(row) : { ...defaultImagePolicy, allowedModels: [] };
+    return row ? policy(row) : imagePolicyDefaults(user.role);
   }
   async setPolicy(p: Principal, id: string, input: ImagePolicy) {
     const c = this.c;

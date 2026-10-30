@@ -11,7 +11,10 @@ export function UsageSummary({ usage }: { usage: ImageUsage }) {
           预留 <strong>{usage.held}</strong>
         </span>
         <span>
-          可用 <strong>{usage.available}</strong>
+          可用{" "}
+          <strong>
+            {usage.available === null ? "不限额" : usage.available}
+          </strong>
         </span>
       </div>
       {usage.earlierHeld > 0 && (

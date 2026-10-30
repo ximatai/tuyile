@@ -13,8 +13,8 @@ import type { ImageExecutionConfig } from "./provider-config.js";
 import type { ImageInput, ImagePolicy, Principal } from "@tuyile/contracts";
 export const ASSET_RESERVE = 21 * 1024 * 1024;
 export const defaultImagePolicy: ImagePolicy = {
-  imageLimit: 20,
-  attemptsLimit: 60,
+  imageLimit: 100,
+  attemptsLimit: 300,
   storageLimit: 2147483648,
   concurrency: 1,
   queueLimit: 10,
@@ -24,6 +24,13 @@ export const defaultImagePolicy: ImagePolicy = {
   maxQuality: "high",
   allowedModels: [],
 };
+export function imagePolicyDefaults(role: Principal["role"]): ImagePolicy {
+  return {
+    ...defaultImagePolicy,
+    imageLimit: role === "admin" ? -1 : 100,
+    allowedModels: [],
+  };
+}
 export function shanghaiDay(now = new Date()) {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Shanghai",

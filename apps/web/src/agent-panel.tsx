@@ -472,7 +472,11 @@ export function AgentPanel({
         {plan && !plan.confirmed && plan.document.steps.length > 0 ? (
           <>
             <strong>本计划预留 {total} 张图片</strong>
-            <span className="hint">可用 {usage?.available ?? "—"} 张</span>
+            <span className="hint">
+              {usage?.available === null
+                ? "图片不限额"
+                : `可用 ${usage?.available ?? "—"} 张`}
+            </span>
             <Button
               className="primary"
               type="submit"

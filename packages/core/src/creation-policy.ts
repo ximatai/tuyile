@@ -20,7 +20,10 @@ export function checkAdmissionBudget(input: {
   )
     throw new AppError("QUEUE_FULL", 429);
   if (input.recentSubmissions >= 6) throw new AppError("SUBMISSION_RATE", 429);
-  if (input.used + input.held + input.count > input.policy.imageLimit)
+  if (
+    input.policy.imageLimit !== -1 &&
+    input.used + input.held + input.count > input.policy.imageLimit
+  )
     throw new AppError("IMAGE_QUOTA", 409);
   if (
     input.storageUsed + input.storageReserved + input.requiredStorage >

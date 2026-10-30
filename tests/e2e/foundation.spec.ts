@@ -53,6 +53,7 @@ test("desktop and mobile: persistent projects, activation, account boundaries an
   const drawer = page.getByRole("dialog", { name: "designer01" });
   const quota = drawer.getByLabel("每日图片额度", { exact: true });
   await expect(quota).toBeVisible();
+  await expect(quota).toHaveValue("100");
   const originalQuota = await quota.inputValue();
   const storage = drawer.getByLabel("存储上限（GB）", { exact: true });
   const originalStorage = await storage.inputValue();
@@ -86,6 +87,25 @@ test("desktop and mobile: persistent projects, activation, account boundaries an
     .click();
   await expect(quota).toHaveValue("7");
   await expect(storage).toHaveValue("1.5");
+  await drawer.getByRole("checkbox", { name: "不限额", exact: true }).check();
+  await expect(quota).toBeDisabled();
+  await drawer
+    .getByRole("button", { name: "保存用户配置", exact: true })
+    .click();
+  await expect(drawer.getByText("已保存。", { exact: true })).toBeVisible();
+  await drawer.getByRole("button", { name: "关闭", exact: true }).click();
+  await expect(drawer).toBeHidden();
+  await page
+    .getByRole("row")
+    .filter({ hasText: "designer01" })
+    .getByRole("button", { name: "管理", exact: true })
+    .click();
+  await expect(
+    drawer.getByRole("checkbox", { name: "不限额", exact: true }),
+  ).toBeChecked();
+  await expect(quota).toBeDisabled();
+  await drawer.getByRole("checkbox", { name: "不限额", exact: true }).uncheck();
+
   await storage.fill(originalStorage);
   await quota.fill(originalQuota);
   await drawer

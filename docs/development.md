@@ -46,7 +46,7 @@ corepack pnpm dev
 
 ## 数据库与配置
 
-PostgreSQL初始化分别建立migrator和runtime角色：前者拥有tuyile schema，后者只有schema usage和业务表DML，不能改schema或迁移记录。迁移显式执行并校验checksum；API/Worker只检查schema兼容性和运行身份，发现缺失、不兼容或过度授权即拒绝启动。当前迁移1—14，实际版本以[migrations](../migrations)和启动校验为准。
+PostgreSQL初始化分别建立migrator和runtime角色：前者拥有tuyile schema，后者只有schema usage和业务表DML，不能改schema或迁移记录。迁移显式执行并校验checksum；API/Worker只检查schema兼容性和运行身份，发现缺失、不兼容或过度授权即拒绝启动。当前迁移1—15，实际版本以[migrations](../migrations)和启动校验为准。
 
 模型服务通过命名连接管理Base URL和加密Key，从GET /models取得候选，也可手动登记；对话/图片分别发布开放池并指定默认项。目录刷新不自动改动开放范围，能力由管理员声明，已接受任务绑定不可变版本。普通用户只收到允许模型与能力，不收到地址或Key；个人策略按池条目ID与全局开放池取交集。
 
@@ -102,3 +102,5 @@ CI复用这些合成验证，不执行公开部署。远程CI是否通过以其�
 ## 公开提交与发布
 
 提交前运行`corepack pnpm check:release`检查Git暂存区，再按[发布指南](releasing.md)扫描历史与源码包。`private: true`防止工作区包误发布到npm；项目许可见[LICENSE](../LICENSE)，第三方依赖保留各自条款。
+
+每日图片额度默认用户100张、管理员不限额；API/数据库以imageLimit=-1表示不限，usage.available=null，界面只展示“不限额”。用户管理可显式改为有限额度，角色仅决定初始默认值，不跳过其他保护。默认模型调用上限300次；存储、并发、队列、单次张数及模型能力仍独立执行。0015迁移将原20张和60次的默认值升级，其余已配置值保留。

@@ -45,6 +45,60 @@ afterEach(async () => {
     await f?.cleanup();
   }
 });
+it("applies role defaults consistently before and after policy creation and allows explicit finite admin limits", async () => {
+  expect(await f.repo.getPolicy(f.principal, f.principal.id)).toMatchObject({
+    imageLimit: -1,
+    attemptsLimit: 300,
+  });
+  expect(await f.repo.usage(f.principal)).toMatchObject({
+    available: null,
+    policy: { imageLimit: -1 },
+  });
+  const link = await f.service.createUser(f.principal, "quota_member");
+  expect(await f.repo.getPolicy(f.principal, link.user.id)).toMatchObject({
+    imageLimit: 100,
+    attemptsLimit: 300,
+  });
+  await f.service.redeem(link.token, testPassword, "activate");
+  const session = await f.service.login("quota_member", testPassword);
+  const member = (await f.service.authenticate(session.token)).user;
+  expect(await f.repo.usage(member)).toMatchObject({
+    available: 100,
+    policy: { imageLimit: 100 },
+  });
+  const normal = await f.repo.getPolicy(f.principal, member.id);
+  await f.repo.setPolicy(f.principal, member.id, { ...normal, imageLimit: -1 });
+  expect(await f.repo.usage(member)).toMatchObject({ available: null });
+  await f.creation.submit(f.principal, f.input());
+  expect(await f.repo.getPolicy(f.principal, f.principal.id)).toMatchObject({
+    imageLimit: -1,
+  });
+  expect(await f.repo.usage(f.principal)).toMatchObject({
+    available: null,
+    held: 1,
+  });
+  const admin = await f.repo.getPolicy(f.principal, f.principal.id);
+  await f.repo.setPolicy(f.principal, f.principal.id, {
+    ...admin,
+    imageLimit: 1,
+  });
+  expect(await f.repo.usage(f.principal)).toMatchObject({
+    available: 0,
+    held: 1,
+  });
+  await expect(f.creation.submit(f.principal, f.input())).rejects.toMatchObject(
+    { code: "IMAGE_QUOTA" },
+  );
+  await f.repo.setPolicy(f.principal, f.principal.id, {
+    ...admin,
+    imageLimit: -1,
+  });
+  await f.creation.submit(f.principal, f.input());
+  expect(await f.repo.usage(f.principal)).toMatchObject({
+    available: null,
+    held: 2,
+  });
+});
 it("serializes full-order admission and idempotent retries across concurrent submissions", async () => {
   const p = await f.repo.getPolicy(f.principal, f.principal.id);
   await f.repo.setPolicy(f.principal, f.principal.id, { ...p, imageLimit: 2 });
@@ -460,7 +514,7 @@ it("reads fresh quota without writes while admission and user locks are held", a
     expect(results[0]).toMatchObject({
       used: 0,
       held: 0,
-      available: 20,
+      available: null,
       storageUsed: 0,
     });
     expect(

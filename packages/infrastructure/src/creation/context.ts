@@ -75,7 +75,7 @@ export class PgCreationContext {
     day = shanghaiDay(this.now()),
   ) {
     await c.query(
-      "INSERT INTO image_policies(user_id) VALUES($1) ON CONFLICT DO NOTHING",
+      "INSERT INTO image_policies(user_id,image_limit) SELECT id,CASE WHEN role='admin' THEN -1 ELSE 100 END FROM users WHERE id=$1 ON CONFLICT DO NOTHING",
       [userId],
     );
     await c.query(

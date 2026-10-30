@@ -52,7 +52,9 @@ export function HeaderUsage({ csrfToken }: { csrfToken: string }) {
         {query.error
           ? "额度暂不可用"
           : query.data
-            ? `今日可用 ${query.data.available} 张`
+            ? query.data.available === null
+              ? "每日图片不限额"
+              : `今日可用 ${query.data.available} 张`
             : "额度加载中…"}
         {!query.error && !!query.data?.held && (
           <span> · 预留 {query.data.held} 张</span>

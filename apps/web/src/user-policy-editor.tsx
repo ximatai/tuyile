@@ -9,6 +9,7 @@ import {
   Select,
   Collapse,
   Radio,
+  Checkbox,
 } from "@tuyile/ui";
 import { useSessionState } from "./session-state";
 import { client } from "./api";
@@ -35,6 +36,7 @@ export function UserPolicyEditor({
 }) {
   const state = useSessionState(),
     api = client(csrfToken);
+  const [finiteQuota, setFiniteQuota] = useState(100);
   const [modelScope, setModelScope] = useState<"all" | "custom" | null>(null);
   const [draft, setDraft] = useState<ImagePolicy | null>(null);
   const [busy, setBusy] = useState(false),
@@ -113,15 +115,31 @@ export function UserPolicyEditor({
       {current && (
         <form aria-label="保存用户配置" onSubmit={(e) => void save(e)}>
           <div className="parameter-grid">
-            <Field
-              label="每日图片额度"
-              type="number"
-              min={0}
-              max={10000}
-              required
-              value={current.imageLimit}
-              onChange={(e) => patch({ imageLimit: Number(e.target.value) })}
-            />
+            <div>
+              <Field
+                label="每日图片额度"
+                type="number"
+                min={0}
+                max={10000}
+                required={current.imageLimit !== -1}
+                disabled={current.imageLimit === -1 || busy}
+                value={current.imageLimit === -1 ? "" : current.imageLimit}
+                placeholder={current.imageLimit === -1 ? "不限额" : undefined}
+                onChange={(e) => patch({ imageLimit: Number(e.target.value) })}
+              />
+              <Checkbox
+                checked={current.imageLimit === -1}
+                disabled={busy}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    setFiniteQuota(current.imageLimit);
+                    patch({ imageLimit: -1 });
+                  } else patch({ imageLimit: finiteQuota });
+                }}
+              >
+                不限额
+              </Checkbox>
+            </div>
             <Field
               label="存储上限（GB）"
               title="1 GB 按 1024³ 字节计算"
