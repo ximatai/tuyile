@@ -2925,3 +2925,40 @@ h3 {
     transition: none;
   }
 }
+
+/* Sidebar branding shares the mark's top and bottom edges. */
+.sidebar .brand-copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 36px;
+  line-height: 20px;
+}
+.sidebar .brand-copy small {
+  line-height: 12px;
+}
+.collapsed .sidebar .brand-copy {
+  display: none;
+}
+.sidebar-bottom {
+  display: flex;
+}
+.collapsed .sidebar-bottom {
+  justify-content: center;
+}
+.sidebar .collapse-control.ant-btn {
+  width: 36px;
+  min-width: 36px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--muted);
+}
+.sidebar .collapse-control.ant-btn:not(:disabled):hover {
+  background: var(--paper);
+  color: var(--brand-blue);
+}

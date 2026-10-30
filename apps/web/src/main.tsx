@@ -218,7 +218,7 @@ function Shell() {
       <aside className="sidebar" aria-label="主导航">
         <Link className="brand" to="/projects">
           <span className="brand-mark">图</span>
-          <span className="full-label">
+          <span className="full-label brand-copy">
             图一乐<small>Tuyile</small>
           </span>
         </Link>
@@ -239,28 +239,34 @@ function Shell() {
           <ProjectNavigation />
         </Suspense>
         <div className="sidebar-bottom">
-          <Button
-            className="collapse-control"
-            aria-label={collapsed ? "展开导航" : "收起导航"}
-            onClick={() =>
-              setCollapsed((v) => {
-                try {
-                  localStorage.setItem(
-                    "tuyile.sidebar",
-                    v ? "expanded" : "collapsed",
-                  );
-                } catch {}
-                return !v;
-              })
-            }
+          <Tooltip
+            title={collapsed ? "展开导航" : "收起导航"}
+            placement="right"
+            trigger={["hover", "focus"]}
           >
-            {collapsed ? (
-              <PanelLeftOpen size={20} />
-            ) : (
-              <PanelLeftClose size={20} />
-            )}
-            <span className="full-label">收起导航</span>
-          </Button>
+            <Button
+              className="collapse-control"
+              aria-label={collapsed ? "展开导航" : "收起导航"}
+              aria-expanded={!collapsed}
+              onClick={() =>
+                setCollapsed((v) => {
+                  try {
+                    localStorage.setItem(
+                      "tuyile.sidebar",
+                      v ? "expanded" : "collapsed",
+                    );
+                  } catch {}
+                  return !v;
+                })
+              }
+            >
+              {collapsed ? (
+                <PanelLeftOpen size={20} />
+              ) : (
+                <PanelLeftClose size={20} />
+              )}
+            </Button>
+          </Tooltip>
         </div>
       </aside>
       <div className="main-column">
