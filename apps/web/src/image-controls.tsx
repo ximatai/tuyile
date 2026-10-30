@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import { useState } from "react";
 import type { ImageUsage } from "@tuyile/contracts";
 import {
@@ -257,7 +258,12 @@ export function ReferenceAttachments({
       data-testid={agent ? "agent-reference-upload" : "reference-upload"}
     >
       <div className="attachment-heading">
-        <span>参考图{references.length ? ` · ${references.length}` : ""}</span>
+        <span className="editor-field-label">
+          参考图
+          {references.length > 0 && (
+            <span className="reference-count"> · {references.length}</span>
+          )}
+        </span>
         <div className="attachment-actions">
           {selected.length > 0 && onUseSelected && (
             <Tooltip
@@ -309,7 +315,7 @@ export function ReferenceAttachments({
               type="button"
               disabled={disabled || references.length >= maxReferences}
             >
-              {agent ? "添加 Agent 参考图" : "选择参考图"}
+              上传参考图
             </Button>
           </Upload>
         </div>
@@ -317,10 +323,10 @@ export function ReferenceAttachments({
       {!!references.length && (
         <div className="attachment-list">
           {references.map((r) => (
-            <div className="attachment" key={r.id}>
+            <div className="attachment" key={r.id} title={r.name}>
               <Image
-                width={48}
-                height={48}
+                width={64}
+                height={64}
                 src={`/api/images/assets/${r.id}/preview`}
                 alt={r.name}
                 preview={{
@@ -328,19 +334,18 @@ export function ReferenceAttachments({
                   motionName: "",
                 }}
               />
-              <span className="attachment-name" title={r.name}>
-                {r.name}
-              </span>
-              <Button
-                type="button"
-                disabled={disabled}
-                aria-label={
-                  agent ? `移除 Agent 参考图 ${r.name}` : `移除引用 ${r.name}`
-                }
-                onClick={() => onRemove(r.id)}
-              >
-                移除
-              </Button>
+              <Tooltip title="移除">
+                <Button
+                  type="button"
+                  disabled={disabled}
+                  aria-label={
+                    agent ? `移除 Agent 参考图 ${r.name}` : `移除引用 ${r.name}`
+                  }
+                  onClick={() => onRemove(r.id)}
+                >
+                  <X size={14} aria-hidden="true" />
+                </Button>
+              </Tooltip>
             </div>
           ))}
         </div>

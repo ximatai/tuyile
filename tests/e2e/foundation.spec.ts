@@ -512,7 +512,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   await expect(
     reopened
       .getByTestId("reference-upload")
-      .getByText("画布参考图", { exact: true }),
+      .getByRole("img", { name: "画布参考图", exact: true }),
   ).toBeVisible();
   await reopened
     .getByRole("button", { name: "移除引用 画布参考图", exact: true })
@@ -631,8 +631,46 @@ test("background creation survives refresh, page closure and ordinary logout, wi
       buffer: bytes,
     });
   await expect(
-    reopened.getByTestId("reference-upload").getByText("synthetic.png"),
+    reopened
+      .getByTestId("reference-upload")
+      .getByRole("img", { name: "synthetic.png", exact: true }),
   ).toBeVisible();
+  await expect(
+    reopened.getByRole("button", { name: "上传参考图", exact: true }),
+  ).toBeVisible();
+  await reopened.locator(".task-tile-images figure").first().hover();
+  await reopened
+    .getByRole("button", { name: "继续修改", exact: true })
+    .first()
+    .click();
+  const referenceItems = reopened
+    .getByTestId("reference-upload")
+    .locator(".attachment");
+  await expect(referenceItems).toHaveCount(2);
+  const referenceBoxes = await referenceItems.evaluateAll((items) =>
+    items.map((item) => {
+      const box = item.getBoundingClientRect();
+      return { x: box.x, y: box.y, height: box.height };
+    }),
+  );
+  expect(referenceBoxes[0]!.y).toBeCloseTo(referenceBoxes[1]!.y, 0);
+  expect(referenceBoxes[1]!.x).toBeGreaterThan(referenceBoxes[0]!.x);
+  expect(referenceBoxes[0]!.height).toBe(64);
+  const referenceFonts = await reopened
+    .locator(
+      ".direct-creation .editor-field-label, .direct-creation .image-controls > .field > label",
+    )
+    .evaluateAll((labels) =>
+      labels.map((label) => {
+        const style = getComputedStyle(label);
+        return `${style.fontSize}/${style.fontWeight}/${style.color}`;
+      }),
+    );
+  expect(new Set(referenceFonts).size).toBe(1);
+  await reopened
+    .getByRole("button", { name: "移除引用 画布参考图", exact: true })
+    .click();
+  await expect(referenceItems).toHaveCount(1);
   await reopened.getByLabel("创作需求").fill("合成测试：参考图");
   await reopened
     .getByRole("button", { name: "提交图片任务", exact: true })
@@ -929,7 +967,7 @@ test("desktop canvas saves geometry, handles conflicts and never replaces remove
   await expect(
     page
       .getByTestId("reference-upload")
-      .getByText("画布参考图", { exact: true }),
+      .getByRole("img", { name: "画布参考图", exact: true }),
   ).toBeVisible();
   await page
     .getByRole("button", { name: "移除引用 画布参考图", exact: true })
@@ -1003,7 +1041,7 @@ test("desktop canvas saves geometry, handles conflicts and never replaces remove
   await expect(
     page
       .getByTestId("reference-upload")
-      .getByText("画布参考图", { exact: true }),
+      .getByRole("img", { name: "画布参考图", exact: true }),
   ).toBeVisible();
   await page
     .getByRole("button", { name: "移除引用 画布参考图", exact: true })

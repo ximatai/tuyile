@@ -2349,37 +2349,59 @@ h3 {
   font-size: 12px;
 }
 .attachment-list {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 6px;
-  max-height: 176px;
-  overflow: auto;
-  margin-top: 8px;
-  scrollbar-gutter: stable;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 2px;
+  margin-top: 4px;
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
 }
 .attachment {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px;
-  background: #f5f7fb;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  min-width: 0;
+  position: relative;
+  flex: 0 0 64px;
+  width: 64px;
+  height: 64px;
+  background: var(--paper);
+  border-radius: 5px;
 }
 .attachment .ant-image {
-  flex: 0 0 48px;
+  display: block;
 }
 .attachment img {
-  object-fit: cover;
-  border-radius: 4px;
+  object-fit: contain;
+  border-radius: 5px;
 }
-.attachment-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.attachment .button {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+  min-height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px #172f4b1a;
+  color: var(--muted);
+}
+.creation-panel .field > label,
+.creation-panel .field-heading > label,
+.creation-panel label.field > span:not(.sr-only),
+.creation-panel .editor-field-label {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--ink);
+}
+.reference-count {
+  font-weight: 400;
+  color: var(--muted);
   font-size: 12px;
 }
 .output-grid .ant-image {
