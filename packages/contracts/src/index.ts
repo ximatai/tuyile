@@ -28,6 +28,12 @@ export interface UserView {
   role: "admin" | "member";
   enabled: boolean;
   activated: boolean;
+  mustChangePassword?: boolean;
+}
+export interface PasswordResetResult {
+  user: UserView;
+  temporaryPassword: string;
+  expiresAt: string;
 }
 export interface Principal extends UserView {
   workspaceId: string;

@@ -36,7 +36,7 @@ corepack pnpm dev
 
 没有默认账号、默认密码或匿名初始化接口。仅首次初始化，通过终端静默输入或密码管理器注入`ADMIN_USERNAME`、`ADMIN_PASSWORD`，运行`corepack pnpm admin:init`；密码12–128字符。已有账号时拒绝重复初始化。不要把密码放入命令历史、共享日志或Git，使用后清除临时环境变量。
 
-管理员在页面创建member并通过自己的渠道交付一次性激活链接；激活链接24小时、重置链接1小时。token位于fragment，页面读取后从地址栏清除，仅服务端摘要持久化。重新生成链接使旧链接和旧密码失效，使用后返回登录。
+管理员在页面创建member并通过自己的渠道交付一次性激活链接，24小时有效。重置他人密码生成24小时有效的随机临时密码，只展示本次且仅保存哈希；旧密码、旧链接及全部会话失效。临时密码登录后只能改密或退出，必须换成不同的新密码并重新登录后才能访问业务。管理员不能通过管理接口重置自己，正常修改密码仍在账户菜单中。激活与部署侧恢复链接的token位于fragment，页面读取后从地址栏清除，仅保存摘要。
 
 管理员恢复：注入`ADMIN_USERNAME`与新的`ADMIN_RECOVERY_FILE`路径，运行`corepack pnpm admin:recover`。命令只恢复已启用管理员，撤销旧会话/执行授权，将一小时链接写入新建的0600文件，既有文件不覆盖；使用后清理。普通成员通过管理员页面重置。
 
@@ -46,7 +46,7 @@ corepack pnpm dev
 
 ## 数据库与配置
 
-PostgreSQL初始化分别建立migrator和runtime角色：前者拥有tuyile schema，后者只有schema usage和业务表DML，不能改schema或迁移记录。迁移显式执行并校验checksum；API/Worker只检查schema兼容性和运行身份，发现缺失、不兼容或过度授权即拒绝启动。当前迁移1—13，实际版本以[migrations](../migrations)和启动校验为准。
+PostgreSQL初始化分别建立migrator和runtime角色：前者拥有tuyile schema，后者只有schema usage和业务表DML，不能改schema或迁移记录。迁移显式执行并校验checksum；API/Worker只检查schema兼容性和运行身份，发现缺失、不兼容或过度授权即拒绝启动。当前迁移1—14，实际版本以[migrations](../migrations)和启动校验为准。
 
 模型服务通过命名连接管理Base URL和加密Key，从GET /models取得候选，也可手动登记；对话/图片分别发布开放池并指定默认项。目录刷新不自动改动开放范围，能力由管理员声明，已接受任务绑定不可变版本。普通用户只收到允许模型与能力，不收到地址或Key；个人策略按池条目ID与全局开放池取交集。
 

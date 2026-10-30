@@ -118,11 +118,105 @@ export function AuthPage() {
           {redeem ? (
             <a href="/login">返回登录</a>
           ) : (
-            "账号激活或忘记密码，请联系管理员获取链接。"
+            "账号激活或忘记密码，请联系管理员。"
           )}
         </p>
       </section>
       <footer>私人项目 · 独立创作</footer>
+    </main>
+  );
+}
+
+export function RequiredPasswordPage({
+  session,
+}: {
+  session: import("@tuyile/contracts").SessionView;
+}) {
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  async function submit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const data = new FormData(e.currentTarget);
+    if (data.get("password") !== data.get("confirm")) {
+      setError("两次输入的密码不一致。");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    try {
+      await client(session.csrfToken)("/auth/password", {
+        currentPassword: data.get("currentPassword"),
+        password: data.get("password"),
+      });
+      notifySessionChange();
+      location.assign("/login");
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy(false);
+    }
+  }
+  return (
+    <main className="auth-page">
+      <section className="auth-form">
+        <h1>设置自己的密码</h1>
+        <p className="muted">
+          {session.user.username}，你正在使用临时密码，请修改后继续。
+        </p>
+        <form aria-label="设置自己的密码" onSubmit={submit}>
+          <Field
+            label="临时密码"
+            name="currentPassword"
+            type="password"
+            autoComplete="current-password"
+            required
+            maxLength={128}
+            disabled={busy}
+          />
+          <Field
+            label="新密码"
+            name="password"
+            type="password"
+            autoComplete="new-password"
+            required
+            minLength={12}
+            maxLength={128}
+            disabled={busy}
+          />
+          <Field
+            label="确认新密码"
+            name="confirm"
+            type="password"
+            autoComplete="new-password"
+            required
+            minLength={12}
+            maxLength={128}
+            disabled={busy}
+          />
+          <p className="hint">密码为 12–128 个字符，不能与临时密码相同。</p>
+          {error && <Notice error>{error}</Notice>}
+          <Button className="primary" disabled={busy}>
+            保存并重新登录
+          </Button>
+          <Button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              setBusy(true);
+              void client(session.csrfToken)("/auth/logout", {})
+                .then(() => {
+                  notifySessionChange();
+                  location.assign("/login");
+                })
+                .catch((e) => {
+                  setError(e.message);
+                  setBusy(false);
+                });
+            }}
+          >
+            退出登录
+          </Button>
+        </form>
+      </section>
     </main>
   );
 }

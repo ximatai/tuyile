@@ -168,6 +168,13 @@ export function createApp(
       !equal(c.req.header("X-CSRF-Token") ?? "", session.csrfToken)
     )
       throw new AppError("INVALID_CSRF", 403);
+    if (
+      session.user.mustChangePassword &&
+      !["/api/auth/me", "/api/auth/password", "/api/auth/logout"].includes(
+        c.req.path,
+      )
+    )
+      throw new AppError("PASSWORD_CHANGE_REQUIRED", 403);
     await next();
   });
   app.get("/api/auth/me", (c) => c.json(c.get("session")));

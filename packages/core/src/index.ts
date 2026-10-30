@@ -3,6 +3,7 @@ import type {
   Project,
   UserView,
   LinkResult,
+  PasswordResetResult,
 } from "@tuyile/contracts";
 export class AppError extends Error {
   constructor(
@@ -14,6 +15,8 @@ export class AppError extends Error {
 }
 export interface UserRecord extends UserView {
   passwordHash: string | null;
+  mustChangePassword: boolean;
+  temporaryPasswordExpiresAt: Date | null;
   executionVersion: number;
 }
 export interface SessionRecord {
@@ -37,7 +40,11 @@ export interface Repository {
     role: "admin" | "member",
     passwordHash: string | null,
   ): Promise<UserRecord>;
-  setPassword(id: string, hash: string | null): Promise<void>;
+  setPassword(
+    id: string,
+    hash: string | null,
+    temporaryUntil?: Date,
+  ): Promise<void>;
   setEnabled(id: string, enabled: boolean): Promise<void>;
   revokeUser(id: string): Promise<void>;
   listUsers(offset?: number): Promise<UserView[]>;
@@ -77,10 +84,17 @@ export class Workbench {
   private expiry(hours: number) {
     return new Date(this.now().getTime() + hours * 3600000);
   }
-  private async actor(r: Repository, p: Principal, admin = false) {
+  private async actor(
+    r: Repository,
+    p: Principal,
+    admin = false,
+    allowTemporary = false,
+  ) {
     const u = await r.userById(p.id, true);
     if (!u || !u.enabled || u.executionVersion !== p.executionVersion)
       throw new AppError("UNAUTHENTICATED", 401);
+    if (u.mustChangePassword && !allowTemporary)
+      throw new AppError("PASSWORD_CHANGE_REQUIRED", 403);
     if (admin && u.role !== "admin") throw new AppError("FORBIDDEN", 403);
     return u;
   }
@@ -109,12 +123,17 @@ export class Workbench {
         !u ||
         !u.enabled ||
         !u.activated ||
-        u.passwordHash !== candidate.passwordHash
+        u.passwordHash !== candidate.passwordHash ||
+        (u.mustChangePassword &&
+          (!u.temporaryPasswordExpiresAt ||
+            u.temporaryPasswordExpiresAt <= this.now()))
       )
         throw new AppError("INVALID_CREDENTIALS", 401);
       const token = this.security.random(),
         csrfToken = this.security.random(),
-        expiresAt = this.expiry(24 * 7);
+        expiresAt = u.mustChangePassword
+          ? u.temporaryPasswordExpiresAt!
+          : this.expiry(24 * 7);
       await r.createSession({
         tokenHash: this.security.digest(token),
         userId: u.id,
@@ -158,7 +177,12 @@ export class Workbench {
       expiresAt = this.expiry(kind === "activate" ? 24 : 1);
     await r.deleteTokens(u.id);
     await r.createToken(u.id, kind, this.security.digest(token), expiresAt);
-    const { passwordHash: _, executionVersion: __, ...user } = u;
+    const {
+      passwordHash: _,
+      executionVersion: __,
+      temporaryPasswordExpiresAt: ___,
+      ...user
+    } = u;
     return { user, token, kind, expiresAt: expiresAt.toISOString() };
   }
   async createUser(p: Principal, name: string) {
@@ -167,22 +191,34 @@ export class Workbench {
       return this.link(r, await r.createUser(name, "member", null), "activate");
     });
   }
-  async reset(p: Principal, userId: string) {
+  async reset(p: Principal, userId: string): Promise<PasswordResetResult> {
+    const temporaryPassword = this.security.random().slice(0, 24);
+    const hash = await this.security.hashPassword(temporaryPassword);
     return this.store.transaction(async (r) => {
-      await r.bootstrapLock(); // Serializes multi-user admin mutations with one consistent lock order.
+      await r.bootstrapLock();
       for (const id of [...new Set([p.id, userId])].sort())
         await r.userById(id, true);
       await this.actor(r, p, true);
+      if (p.id === userId) throw new AppError("CANNOT_RESET_SELF", 409);
       const u = await r.userById(userId, true);
       if (!u) throw new AppError("NOT_FOUND", 404);
       if (!u.enabled) throw new AppError("ACCOUNT_DISABLED", 409);
-      await r.setPassword(userId, null);
+      const expiresAt = this.expiry(24);
+      await r.setPassword(userId, hash, expiresAt);
       await r.revokeUser(userId);
-      return this.link(
-        r,
-        { ...u, passwordHash: null, activated: false },
-        "reset",
-      );
+      await r.deleteTokens(userId);
+      return {
+        user: {
+          id: u.id,
+          username: u.username,
+          role: u.role,
+          enabled: u.enabled,
+          activated: true,
+          mustChangePassword: true,
+        },
+        temporaryPassword,
+        expiresAt: expiresAt.toISOString(),
+      };
     });
   }
   // Deployment-side recovery only; no HTTP adapter exposes this use case.
@@ -198,7 +234,13 @@ export class Workbench {
       await r.revokeUser(u.id);
       return this.link(
         r,
-        { ...u, passwordHash: null, activated: false },
+        {
+          ...u,
+          passwordHash: null,
+          activated: false,
+          mustChangePassword: false,
+          temporaryPasswordExpiresAt: null,
+        },
         "reset",
       );
     });
@@ -249,7 +291,17 @@ export class Workbench {
       throw new AppError("INVALID_CREDENTIALS", 401);
     const hash = await this.security.hashPassword(password);
     return this.store.transaction(async (r) => {
-      const latest = await this.actor(r, p);
+      const latest = await this.actor(r, p, false, true);
+      if (
+        latest.mustChangePassword &&
+        (password === current ||
+          !latest.temporaryPasswordExpiresAt ||
+          latest.temporaryPasswordExpiresAt <= this.now())
+      )
+        throw new AppError(
+          password === current ? "PASSWORD_UNCHANGED" : "UNAUTHENTICATED",
+          password === current ? 400 : 401,
+        );
       if (latest.passwordHash !== u?.passwordHash)
         throw new AppError("UNAUTHENTICATED", 401);
       await r.setPassword(p.id, hash);
@@ -291,4 +343,4 @@ export * from "./agent.js";
 export * from "./planning-executor.js";
 export * from "./library.js";
 export * from "./administration.js";
-export * from './model-catalog.js';
+export * from "./model-catalog.js";

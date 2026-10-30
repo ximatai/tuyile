@@ -90,7 +90,7 @@ describe("real PostgreSQL identity and HTTP boundaries", () => {
       await unlink(file).catch(() => {});
     }
   });
-  it("allows only one concurrent redemption; expired/replaced links fail", async () => {
+  it("allows only one activation redemption; replaced or expired temporary passwords fail", async () => {
     const a = await login();
     const link = await db.service.createUser(a.view.user, "alice");
     const results = await Promise.allSettled([
@@ -100,21 +100,103 @@ describe("real PostgreSQL identity and HTTP boundaries", () => {
     expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
     const old = await db.service.reset(a.view.user, link.user.id);
     const latest = await db.service.reset(a.view.user, link.user.id);
+    expect(latest.temporaryPassword).not.toBe(old.temporaryPassword);
     await expect(
-      db.service.redeem(old.token, testPassword, "reset"),
-    ).rejects.toMatchObject({ code: "INVALID_LINK" });
+      db.service.login("alice", old.temporaryPassword),
+    ).rejects.toMatchObject({ code: "INVALID_CREDENTIALS" });
     const { pool } = createDatabase(testUrls().owner);
     try {
       await pool.query(
-        "UPDATE tuyile.password_tokens SET expires_at=now()-interval '1 second' WHERE user_id=$1",
+        "UPDATE tuyile.users SET temporary_password_expires_at=now()-interval '1 second' WHERE id=$1",
         [link.user.id],
       );
     } finally {
       await pool.end();
     }
     await expect(
-      db.service.redeem(latest.token, testPassword, "reset"),
-    ).rejects.toMatchObject({ code: "INVALID_LINK" });
+      db.service.login("alice", latest.temporaryPassword),
+    ).rejects.toMatchObject({ code: "INVALID_CREDENTIALS" });
+  });
+  it("restricts temporary-password sessions, blocks self-reset and clears the restriction after changing password", async () => {
+    const admin = await login();
+    const alice = await member(admin.view.user, "alice");
+    await expect(
+      db.service.reset(admin.view.user, admin.view.user.id),
+    ).rejects.toMatchObject({ code: "CANNOT_RESET_SELF" });
+    expect(
+      (await db.service.authenticate(admin.token)).user.mustChangePassword,
+    ).toBe(false);
+    const reset = await db.service.reset(admin.view.user, alice.view.user.id);
+    expect(reset.temporaryPassword).toMatch(/^[a-f0-9]{24}$/);
+    const stored = (
+      await db.pool.query(
+        "SELECT password_hash,must_change_password FROM users WHERE id=$1",
+        [alice.view.user.id],
+      )
+    ).rows[0];
+    expect(stored.password_hash).not.toContain(reset.temporaryPassword);
+    expect(stored.must_change_password).toBe(true);
+    const session = await db.service.login("alice", reset.temporaryPassword);
+    const view = await db.service.authenticate(session.token);
+    const app = createApp(
+      db.service,
+      db.store,
+      { origin, production: false },
+      async () => {},
+    );
+    const headers = {
+      Cookie: `tuyile_session=${session.token}`,
+      Origin: origin,
+      "Content-Type": "application/json",
+      "X-CSRF-Token": session.csrfToken,
+    };
+    for (const path of [
+      "/api/projects",
+      "/api/admin/users",
+      "/api/images/tasks",
+      "/api/library/assets",
+    ]) {
+      const response = await app.request(path, { headers });
+      expect(response.status).toBe(403);
+      expect((await response.json()).error.code).toBe(
+        "PASSWORD_CHANGE_REQUIRED",
+      );
+    }
+    expect((await app.request("/api/auth/me", { headers })).status).toBe(200);
+    await expect(db.service.projects(view.user)).rejects.toMatchObject({
+      code: "PASSWORD_CHANGE_REQUIRED",
+    });
+    await expect(
+      db.service.changePassword(
+        view.user,
+        reset.temporaryPassword,
+        reset.temporaryPassword,
+      ),
+    ).rejects.toMatchObject({ code: "PASSWORD_UNCHANGED" });
+    const response = await app.request("/api/auth/password", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        currentPassword: reset.temporaryPassword,
+        password: testPassword,
+      }),
+    });
+    expect(response.status).toBe(200);
+    await expect(db.service.authenticate(session.token)).rejects.toMatchObject({
+      code: "UNAUTHENTICATED",
+    });
+    await expect(
+      db.service.login("alice", reset.temporaryPassword),
+    ).rejects.toMatchObject({ code: "INVALID_CREDENTIALS" });
+    expect((await login("alice")).view.user.mustChangePassword).toBe(false);
+    expect(
+      (
+        await db.pool.query(
+          "SELECT temporary_password_expires_at FROM users WHERE id=$1",
+          [alice.view.user.id],
+        )
+      ).rows[0].temporary_password_expires_at,
+    ).toBeNull();
   });
   it("logs out only current device; reset/disable/password change revoke all and do not reactivate old sessions", async () => {
     const a = await login(),
@@ -145,7 +227,14 @@ describe("real PostgreSQL identity and HTTP boundaries", () => {
     await expect(db.service.login("alice", testPassword)).rejects.toMatchObject(
       { code: "INVALID_CREDENTIALS" },
     );
-    await db.service.redeem(reset.token, testPassword, "reset");
+    const temporary = await db.service.login("alice", reset.temporaryPassword);
+    const temporaryView = await db.service.authenticate(temporary.token);
+    expect(temporaryView.user.mustChangePassword).toBe(true);
+    await db.service.changePassword(
+      temporaryView.user,
+      reset.temporaryPassword,
+      testPassword,
+    );
     const fresh = await login("alice");
     await db.service.changePassword(
       fresh.view.user,

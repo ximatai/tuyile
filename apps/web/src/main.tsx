@@ -60,6 +60,9 @@ const AdminPage = lazy(() =>
 const PasswordDialog = lazy(() =>
   import("./accounts").then((m) => ({ default: m.PasswordDialog })),
 );
+const RequiredPasswordPage = lazy(() =>
+  import("./auth").then((m) => ({ default: m.RequiredPasswordPage })),
+);
 function App() {
   const path = useLocation().pathname;
   const [session, setSession] = useState<SessionView | null>(null),
@@ -122,6 +125,8 @@ function App() {
         <Link to="/login">前往登录</Link>
       </main>
     );
+  if (session.user.mustChangePassword)
+    return <RequiredPasswordPage session={session} />;
   return (
     <SessionProvider
       key={`${session.user.id}:${session.user.executionVersion}`}

@@ -60,6 +60,9 @@ const messages: Record<string, string> = {
   RESOLUTION_CONFLICT: "此任务已按其他结果核验，请刷新后检查。",
   INVALID_RESOLUTION: "核验数量或任务状态不正确。",
 
+  CANNOT_RESET_SELF: "不能重置自己的密码，请在账户菜单中修改密码。",
+  PASSWORD_CHANGE_REQUIRED: "请先修改临时密码。",
+  PASSWORD_UNCHANGED: "新密码不能与临时密码相同。",
   INVALID_CREDENTIALS: "账号或密码不正确，或账号暂不可用。",
   UNAUTHENTICATED: "登录已失效，请重新登录。",
   FORBIDDEN: "你没有执行此操作的权限。",
@@ -108,6 +111,8 @@ export function client(csrfToken = "") {
       const body = (await response
         .json()
         .catch(() => null)) as ErrorResponse | null;
+      if (body?.error.code === "PASSWORD_CHANGE_REQUIRED")
+        location.assign("/change-password");
       if (
         body?.error.code === "UNAUTHENTICATED" &&
         location.pathname !== "/login" &&

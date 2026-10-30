@@ -27,6 +27,8 @@ const user = (row: any): UserRecord => ({
   enabled: row.enabled,
   activated: !!row.password_hash,
   passwordHash: row.password_hash,
+  mustChangePassword: row.must_change_password,
+  temporaryPasswordExpiresAt: row.temporary_password_expires_at,
   executionVersion: row.execution_version,
 });
 const project = (row: any): Project => ({
@@ -81,11 +83,11 @@ class PgRepository implements Repository {
     );
     return u;
   }
-  async setPassword(id: string, hash: string | null) {
-    await this.c.query("UPDATE users SET password_hash=$2 WHERE id=$1", [
-      id,
-      hash,
-    ]);
+  async setPassword(id: string, hash: string | null, temporaryUntil?: Date) {
+    await this.c.query(
+      "UPDATE users SET password_hash=$2, must_change_password=$3, temporary_password_expires_at=$4 WHERE id=$1",
+      [id, hash, !!temporaryUntil, temporaryUntil ?? null],
+    );
   }
   async setEnabled(id: string, enabled: boolean) {
     await this.c.query("UPDATE users SET enabled=$2 WHERE id=$1", [
@@ -103,7 +105,7 @@ class PgRepository implements Repository {
   async listUsers(offset = 0): Promise<UserView[]> {
     return (
       await this.c.query(
-        "SELECT id,username,role,enabled,password_hash IS NOT NULL AS activated FROM users ORDER BY created_at DESC,id LIMIT 51 OFFSET $1",
+        `SELECT id,username,role,enabled,password_hash IS NOT NULL AS activated, must_change_password AS "mustChangePassword" FROM users ORDER BY created_at DESC,id LIMIT 51 OFFSET $1`,
         [offset],
       )
     ).rows;
@@ -151,7 +153,7 @@ class PgRepository implements Repository {
       )
     ).rows[0];
     if (!r) return null;
-    const { passwordHash: _, ...u } = user(r);
+    const { passwordHash: _, temporaryPasswordExpiresAt: __, ...u } = user(r);
     return {
       principal: { ...u, workspaceId: r.workspace_id } as Principal,
       session: {
@@ -225,7 +227,7 @@ export async function assertSchema(pool: pg.Pool) {
     "SELECT version FROM schema_migrations ORDER BY version",
   );
   if (
-    result.rows.length !== 13 ||
+    result.rows.length !== 14 ||
     result.rows[0].version !== 1 ||
     result.rows[1].version !== 2 ||
     result.rows[2].version !== 3 ||
@@ -238,7 +240,8 @@ export async function assertSchema(pool: pg.Pool) {
     result.rows[9].version !== 10 ||
     result.rows[10].version !== 11 ||
     result.rows[11].version !== 12 ||
-    result.rows[12].version !== 13
+    result.rows[12].version !== 13 ||
+    result.rows[13].version !== 14
   )
     throw new Error("SCHEMA_VERSION_MISMATCH_RUN_MIGRATIONS");
   const r = await pool.query(
