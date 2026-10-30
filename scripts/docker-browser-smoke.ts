@@ -226,7 +226,7 @@ try {
     .getByRole("button", { name: "收藏提示词", exact: true })
     .click();
   await page.getByLabel("收藏标题", { exact: true }).waitFor();
-  await page.getByRole("link", { name: "图片服务", exact: true }).click();
+  await page.getByRole("link", { name: "模型服务", exact: true }).click();
   await page.getByRole("tab", { name: "运行与核验", exact: true }).click();
   await page
     .getByRole("heading", { name: "运行概览与规划策略", exact: true })

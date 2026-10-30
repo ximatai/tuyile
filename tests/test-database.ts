@@ -22,6 +22,10 @@ export async function resetDatabase() {
   await migrate(urls.owner);
   const { pool: owner } = createDatabase(urls.owner);
   try {
+    await owner.query("TRUNCATE tuyile.model_services CASCADE");
+    await owner.query(
+      "UPDATE tuyile.model_catalog_state SET managed=false,revision=0 WHERE id=1",
+    );
     await owner.query(
       "TRUNCATE tuyile.sessions,tuyile.password_tokens,tuyile.workspace_members,tuyile.projects,tuyile.workspaces,tuyile.users,tuyile.login_limits,tuyile.image_provider_versions,tuyile.planning_provider_versions,tuyile.skill_versions,tuyile.tool_controls CASCADE",
     );

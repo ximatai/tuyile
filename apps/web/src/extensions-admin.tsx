@@ -18,7 +18,13 @@ import {
   useConfirm,
 } from "@tuyile/ui";
 import { client } from "./api";
-export function ExtensionsAdmin({ csrfToken }: { csrfToken: string }) {
+export function ExtensionsAdmin({
+  csrfToken,
+  hidePlanning = false,
+}: {
+  csrfToken: string;
+  hidePlanning?: boolean;
+}) {
   const [mode, setMode] = useState("openai"),
     [error, setError] = useState(""),
     [message, setMessage] = useState(""),
@@ -139,123 +145,131 @@ export function ExtensionsAdmin({ csrfToken }: { csrfToken: string }) {
         </Notice>
       )}
       {message && <Notice>{message}</Notice>}
-      <section className="settings-section">
-        <h2>规划服务</h2>
-        <p className="hint">
-          规划与图片服务分别保存。保存配置不发起模型调用；每类只有一个当前版本。
-        </p>
-        <form
-          key={`planning-${formKey}`}
-          onSubmit={planning}
-          aria-label="保存规划服务"
-        >
-          <ChoiceField
-            label="规划服务类型"
-            value={mode}
-            onValueChange={setMode}
-            options={[
-              { value: "openai", label: "OpenAI 兼容 Chat Completions" },
-              { value: "fake", label: "本地测试规划（不调用真实模型）" },
-            ]}
-          />
-          {mode === "openai" && (
-            <>
+      {!hidePlanning && (
+        <>
+          <section className="settings-section">
+            <h2>规划服务</h2>
+            <p className="hint">
+              规划与图片服务分别保存。保存配置不发起模型调用；每类只有一个当前版本。
+            </p>
+            <form
+              key={`planning-${formKey}`}
+              onSubmit={planning}
+              aria-label="保存规划服务"
+            >
+              <ChoiceField
+                label="规划服务类型"
+                value={mode}
+                onValueChange={setMode}
+                options={[
+                  { value: "openai", label: "OpenAI 兼容 Chat Completions" },
+                  { value: "fake", label: "本地测试规划（不调用真实模型）" },
+                ]}
+              />
+              {mode === "openai" && (
+                <>
+                  <Field
+                    label="规划服务地址"
+                    name="baseUrl"
+                    type="url"
+                    required
+                    placeholder="https://api.openai.com/v1"
+                  />
+                  <Field
+                    label="规划 API Key"
+                    name="apiKey"
+                    type="password"
+                    autoComplete="new-password"
+                  />
+                  <Checkbox name="supportsImages">
+                    规划模型支持参考图视觉输入
+                  </Checkbox>
+                  <Checkbox name="preserveKey">
+                    显式沿用当前规划 Key（仅同地址）
+                  </Checkbox>
+                </>
+              )}
               <Field
-                label="规划服务地址"
-                name="baseUrl"
-                type="url"
+                label="规划模型 ID"
+                name="model"
                 required
-                placeholder="https://api.openai.com/v1"
+                placeholder={mode === "fake" ? "test-planner" : "模型 ID"}
+              />
+              <ChoiceField
+                label="结构化输出模式"
+                name="responseMode"
+                options={[
+                  { value: "json_object", label: "JSON 模式" },
+                  { value: "text", label: "文本输出后由服务端校验" },
+                ]}
               />
               <Field
-                label="规划 API Key"
-                name="apiKey"
-                type="password"
-                autoComplete="new-password"
+                label="单次规划总输出 token 预算"
+                name="maxOutputTokens"
+                type="number"
+                min={256}
+                max={8192}
+                defaultValue={4096}
+                required
               />
-              <Checkbox name="supportsImages">
-                规划模型支持参考图视觉输入
-              </Checkbox>
-              <Checkbox name="preserveKey">
-                显式沿用当前规划 Key（仅同地址）
-              </Checkbox>
-            </>
-          )}
-          <Field
-            label="规划模型 ID"
-            name="model"
-            required
-            placeholder={mode === "fake" ? "test-planner" : "模型 ID"}
-          />
-          <ChoiceField
-            label="结构化输出模式"
-            name="responseMode"
-            options={[
-              { value: "json_object", label: "JSON 模式" },
-              { value: "text", label: "文本输出后由服务端校验" },
-            ]}
-          />
-          <Field
-            label="单次规划总输出 token 预算"
-            name="maxOutputTokens"
-            type="number"
-            min={256}
-            max={8192}
-            defaultValue={4096}
-            required
-          />
-          <Field
-            label="规划输入字符上限"
-            name="maxInputCharacters"
-            type="number"
-            min={1000}
-            max={64000}
-            defaultValue={32000}
-            required
-          />
-          <Button disabled={busy} className="primary">
-            保存规划服务
-          </Button>
-        </form>
-        <ul className="provider-versions">
-          {providers.map((p) => (
-            <li key={p.id}>
-              <div>
-                <strong>{p.model}</strong>{" "}
-                <Tag>
-                  {p.revoked ? "已撤销" : p.active ? "当前版本" : "历史版本"}
-                </Tag>
-                <p className="hint">
-                  {p.mode === "fake" ? "本地测试" : p.baseUrl} · 输出预算{" "}
-                  {p.maxOutputTokens} ·{" "}
-                  {p.supportsImages ? "支持参考图" : "仅文本"}
-                </p>
-              </div>
-              <Button
-                type="button"
-                disabled={busy || p.revoked}
-                onClick={() =>
-                  void (async () => {
-                    if (
-                      await confirm(
-                        "紧急撤销此规划配置？已开始的调用只能尽力取消，后续调用将停止。",
-                      )
-                    )
-                      await run(() =>
-                        request(
-                          `/image-admin/planning-providers/${p.id}/revoke`,
-                          {},
-                        ),
-                      );
-                  })()
-                }
-              >
-                紧急停用
+              <Field
+                label="规划输入字符上限"
+                name="maxInputCharacters"
+                type="number"
+                min={1000}
+                max={64000}
+                defaultValue={32000}
+                required
+              />
+              <Button disabled={busy} className="primary">
+                保存规划服务
               </Button>
-            </li>
-          ))}
-        </ul>
-      </section>
+            </form>
+            <ul className="provider-versions">
+              {providers.map((p) => (
+                <li key={p.id}>
+                  <div>
+                    <strong>{p.model}</strong>{" "}
+                    <Tag>
+                      {p.revoked
+                        ? "已撤销"
+                        : p.active
+                          ? "当前版本"
+                          : "历史版本"}
+                    </Tag>
+                    <p className="hint">
+                      {p.mode === "fake" ? "本地测试" : p.baseUrl} · 输出预算{" "}
+                      {p.maxOutputTokens} ·{" "}
+                      {p.supportsImages ? "支持参考图" : "仅文本"}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    disabled={busy || p.revoked}
+                    onClick={() =>
+                      void (async () => {
+                        if (
+                          await confirm(
+                            "紧急撤销此规划配置？已开始的调用只能尽力取消，后续调用将停止。",
+                          )
+                        )
+                          await run(() =>
+                            request(
+                              `/image-admin/planning-providers/${p.id}/revoke`,
+                              {},
+                            ),
+                          );
+                      })()
+                    }
+                  >
+                    紧急停用
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        </>
+      )}
       <section className="settings-section">
         <h2>创作技能</h2>
         <p className="hint">

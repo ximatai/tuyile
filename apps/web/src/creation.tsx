@@ -239,7 +239,16 @@ export function CreationPage({
     tasks = taskQuery.data?.tasks ?? [];
   useEffect(() => {
     if (usage)
-      setModel((m) => (usage.models.includes(m) ? m : (usage.models[0] ?? "")));
+      setModel((m) => {
+        const options = usage.modelOptions;
+        return options
+          ? options.some((e) => e.id === m)
+            ? m
+            : (options.find((e) => e.isDefault)?.id ?? options[0]?.id ?? "")
+          : usage.models.includes(m)
+            ? m
+            : (usage.models[0] ?? "");
+      });
   }, [usage]);
   async function refresh() {
     await Promise.all([usageQuery.refetch(), taskQuery.refetch()]);
@@ -307,7 +316,8 @@ export function CreationPage({
       projectId,
       requestKey: crypto.randomUUID(),
       prompt: String(f.get("prompt")),
-      model,
+      model: usage?.modelOptions?.find((e) => e.id === model)?.modelId ?? model,
+      ...(usage?.modelOptions ? { modelSelectionId: model } : {}),
       width: Number(f.get("width")),
       height: Number(f.get("height")),
       quality: f.get("quality") as ImageInput["quality"],
@@ -411,10 +421,13 @@ export function CreationPage({
                     label="图片模型"
                     value={model}
                     onValueChange={setModel}
-                    options={(usage?.models ?? []).map((m) => ({
-                      value: m,
-                      label: m,
-                    }))}
+                    options={
+                      usage?.modelOptions?.map((m) => ({
+                        value: m.id,
+                        label: `${m.modelId} · ${m.serviceName}`,
+                      })) ??
+                      (usage?.models ?? []).map((m) => ({ value: m, label: m }))
+                    }
                   />
                   <div className="parameter-grid">
                     <Field

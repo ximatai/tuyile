@@ -223,7 +223,7 @@ function Shell() {
           {session.user.role === "admin" && (
             <>
               {nav("/admin/users", "账号管理", <Users size={20} />)}
-              {nav("/admin/images", "图片服务", <ImagePlus size={20} />)}
+              {nav("/admin/images", "模型服务", <ImagePlus size={20} />)}
             </>
           )}
           {nav("/account", "账户安全", <ShieldCheck size={20} />)}
@@ -271,7 +271,7 @@ function Shell() {
                   "/favorites": "收藏",
                   "/usage": "额度与任务",
                   "/admin/users": "账号管理",
-                  "/admin/images": "图片服务",
+                  "/admin/images": "模型服务",
                   "/account": "账户安全",
                 } as Record<string, string>
               )[path] ?? "项目空间"}

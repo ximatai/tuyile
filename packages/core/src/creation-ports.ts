@@ -97,10 +97,11 @@ export interface QuotaRepository {
   ): Promise<void>;
 }
 export interface ProvidersRepository {
-  current(): Promise<{
+  current(input?: Pick<ImageInput, "model" | "modelSelectionId">): Promise<{
     id: string;
     models: string[];
     capabilities: ImageCapability[];
+    selectionId?: string;
   }>;
   saveProvider(p: Principal, input: ProviderInput): Promise<ProviderView>;
   providers(p: Principal): Promise<ProviderView[]>;
@@ -130,6 +131,7 @@ export interface ExecutionRepository {
   ): Promise<void>;
 }
 export interface CreationUnitOfWork {
+  catalog: import("./model-catalog.js").ModelCatalogRepository;
   agent: AgentRepository;
   extensions: ExtensionsRepository;
   outputs: OutputsRepository;
@@ -144,6 +146,7 @@ export type CreationLock = {
   queue?: boolean;
   planning?: boolean;
   extensions?: boolean;
+  catalog?: boolean;
   taskId?: string;
   attemptId?: string;
   taskState?: "queued" | "running" | "unfinished";

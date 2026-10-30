@@ -1,3 +1,4 @@
+import { PgModelCatalogRepository } from "./creation/model-catalog.js";
 import { PgAgentRepository } from "./creation/agent.js";
 import { PgExtensionsRepository } from "./creation/extensions.js";
 import { PgOutputsRepository } from "./creation/outputs.js";
@@ -27,6 +28,12 @@ export class PgCreationStore implements CreationStore {
   }
   private scope(c: pg.PoolClient): CreationUnitOfWork {
     return {
+      catalog: new PgModelCatalogRepository(
+        c,
+        this.masterKey,
+        this.fakeAllowed,
+        this.now,
+      ),
       agent: new PgAgentRepository(
         c,
         this.masterKey,
@@ -83,6 +90,8 @@ export class PgCreationStore implements CreationStore {
   write<T>(lock: CreationLock, run: (r: CreationUnitOfWork) => Promise<T>) {
     return this.transactions.write(
       async (c) => {
+        if (lock.catalog)
+          await c.query("SELECT pg_advisory_xact_lock(72110407)");
         if (lock.extensions)
           await c.query("SELECT pg_advisory_xact_lock(72110406)");
         return run(this.scope(c));

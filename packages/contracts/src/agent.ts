@@ -42,6 +42,7 @@ export const planningRequest = imageInput
   .omit({ count: true })
   .extend({
     skillId: z.uuid().optional(),
+    conversationModelId: z.uuid().optional(),
     previousPlanId: z.uuid().optional(),
   })
   .strict();
@@ -74,6 +75,7 @@ export interface PlanningJob {
 }
 export const planningPolicyInput = z
   .object({
+    allowedModels: z.array(z.uuid()).max(60).optional(),
     queueLimit: z.number().int().min(1).max(100).default(10),
     dailyLimit: z.number().int().min(0).max(10000),
     concurrency: z.number().int().min(1).max(8),

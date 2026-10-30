@@ -33,9 +33,18 @@ export class ImageOperations {
       if (existing) return existing;
       await r.extensions.registerTools(this.registry.list());
       await r.extensions.requireTool(tool);
-      const provider = await r.providers.current();
+      const provider = await r.providers.current(input);
       const snapshot = await r.quota.admission(p, input);
-      checkImageSpec(input, snapshot.budget.policy, provider.models);
+      checkImageSpec(
+        {
+          ...input,
+          ...(provider.selectionId
+            ? { modelSelectionId: provider.selectionId }
+            : {}),
+        },
+        snapshot.budget.policy,
+        provider.models,
+      );
       checkImageCapability(input, provider.capabilities);
       checkAdmissionBudget(snapshot.budget);
       const task = await r.tasks.insert(p, input, snapshot, provider.id, tool);

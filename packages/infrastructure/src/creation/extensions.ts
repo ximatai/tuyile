@@ -34,7 +34,7 @@ const planningView = (r: PlanningRow): PlanningProviderView => ({
   mode: r.mode,
   baseUrl: r.base_url,
   model: r.model,
-  supportsImages: r.mode === "fake" || r.supports_images,
+  supportsImages: r.supports_images,
   responseMode: r.response_mode,
   maxOutputTokens: r.max_output_tokens,
   maxInputCharacters: r.max_input_characters,
@@ -53,6 +53,12 @@ export class PgExtensionsRepository extends PgCreationContext {
   }
   async savePlanning(p: Principal, input: PlanningProviderInput) {
     await this.auth(this.c, p, true);
+    await this.c.query("SELECT pg_advisory_xact_lock(72110407)");
+    if (
+      (await this.c.query("SELECT managed FROM model_catalog_state WHERE id=1"))
+        .rows[0].managed
+    )
+      throw new AppError("MODEL_CATALOG_MANAGED", 409);
     await this.c.query("SELECT pg_advisory_xact_lock(72110406)");
     if (input.mode === "fake" && !this.fakeAllowed)
       throw new AppError("FAKE_PROVIDER_DISABLED", 403);
@@ -120,6 +126,12 @@ export class PgExtensionsRepository extends PgCreationContext {
   }
   async revokePlanning(p: Principal, id: string) {
     await this.auth(this.c, p, true);
+    await this.c.query("SELECT pg_advisory_xact_lock(72110407)");
+    if (
+      (await this.c.query("SELECT managed FROM model_catalog_state WHERE id=1"))
+        .rows[0].managed
+    )
+      throw new AppError("MODEL_CATALOG_MANAGED", 409);
     if (
       !(
         await this.c.query(
@@ -144,13 +156,39 @@ export class PgExtensionsRepository extends PgCreationContext {
       baseUrl: r.base_url,
       model: r.model,
       apiKey: this.decrypt(r.secret_cipher),
-      supportsImages: r.mode === "fake" || r.supports_images,
+      supportsImages: r.supports_images,
       responseMode: r.response_mode,
       maxOutputTokens: r.max_output_tokens,
       maxInputCharacters: r.max_input_characters,
     };
   }
-  async currentPlanning() {
+  async currentPlanning(p?: Principal, selectionId?: string) {
+    if (
+      (await this.c.query("SELECT managed FROM model_catalog_state WHERE id=1"))
+        .rows[0].managed
+    ) {
+      const r = (
+        await this.c.query(
+          "SELECT v.*,e.id AS selection_id FROM model_pool_entries e JOIN model_services s ON s.id=e.service_id JOIN planning_provider_versions v ON v.id=e.planning_provider_id WHERE e.kind='conversation' AND e.enabled AND s.enabled AND NOT s.revoked AND NOT v.revoked AND (($1::uuid IS NOT NULL AND e.id=$1) OR ($1::uuid IS NULL AND e.is_default))",
+          [selectionId ?? null],
+        )
+      ).rows[0];
+      if (!r) throw new AppError("PLANNING_MODEL_NOT_ALLOWED", 409);
+      if (p) {
+        const allowed =
+          (
+            await this.c.query(
+              "SELECT allowed_models FROM planning_policies WHERE user_id=$1",
+              [p.id],
+            )
+          ).rows[0]?.allowed_models ?? [];
+        if (allowed.length && !allowed.includes(r.selection_id))
+          throw new AppError("PLANNING_MODEL_NOT_ALLOWED", 409);
+      }
+      return planningView(r);
+    }
+    if (selectionId) throw new AppError("PLANNING_MODEL_NOT_ALLOWED", 409);
+
     const r = (
       await this.c.query<PlanningRow>(
         "SELECT * FROM planning_provider_versions WHERE active AND NOT revoked",

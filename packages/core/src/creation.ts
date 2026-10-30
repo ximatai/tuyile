@@ -47,7 +47,8 @@ export function checkImageSpec(
     throw new AppError("SPEC_LIMIT", 409);
   if (
     !models.includes(input.model) ||
-    (policy.allowedModels.length && !policy.allowedModels.includes(input.model))
+    (policy.allowedModels.length &&
+      !policy.allowedModels.includes(input.modelSelectionId ?? input.model))
   )
     throw new AppError("MODEL_NOT_ALLOWED", 409);
 }

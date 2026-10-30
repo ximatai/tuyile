@@ -1,3 +1,4 @@
+import { PgModelCatalogRepository } from "./model-catalog.js";
 import type { TaskRow } from "./rows.js";
 import type { AdmissionSnapshot, OutputSettlement } from "@tuyile/core";
 
@@ -123,8 +124,20 @@ export class PgQuotaRepository extends PgCreationContext {
           "SELECT mode,models,capabilities FROM image_provider_versions WHERE active AND NOT revoked",
         )
       ).rows[0];
+    const managed = (
+      await c.query("SELECT managed FROM model_catalog_state WHERE id=1")
+    ).rows[0].managed;
+    const pools = managed
+      ? await new PgModelCatalogRepository(
+          c,
+          this.masterKey,
+          this.fakeAllowed,
+          this.now,
+        ).userPools(p)
+      : undefined;
     return {
       day,
+      ...(pools ? { modelOptions: pools.image } : {}),
       used: daily.used,
       held: daily.held,
       available: Math.max(0, rules.imageLimit - daily.used - daily.held),
@@ -140,15 +153,30 @@ export class PgQuotaRepository extends PgCreationContext {
       storageUsed: Number(limits?.storage_used ?? 0),
       storageReserved: Number(limits?.storage_reserved ?? 0),
       policy: rules,
-      models: (prov?.models ?? []).filter(
-        (m: string) =>
-          !rules.allowedModels.length || rules.allowedModels.includes(m),
-      ),
-      providerMode: prov?.mode ?? null,
-      capabilities: (prov?.capabilities ?? []).filter(
-        (c: { model: string }) =>
-          !rules.allowedModels.length || rules.allowedModels.includes(c.model),
-      ),
+      models: pools
+        ? [...new Set(pools.image.map((e) => e.modelId))]
+        : (prov?.models ?? []).filter(
+            (m: string) =>
+              !rules.allowedModels.length || rules.allowedModels.includes(m),
+          ),
+      providerMode: pools
+        ? !pools.image.length
+          ? null
+          : (
+                await c.query(
+                  "SELECT bool_and(v.mode='fake') AS fake FROM model_pool_entries e JOIN model_services s ON s.id=e.service_id JOIN image_provider_versions v ON v.id=e.image_provider_id WHERE e.kind='image' AND e.enabled AND s.enabled AND NOT s.revoked",
+                )
+              ).rows[0].fake
+            ? "fake"
+            : "openai"
+        : (prov?.mode ?? null),
+      capabilities: pools
+        ? pools.image.map((e) => e.image!)
+        : (prov?.capabilities ?? []).filter(
+            (c: { model: string }) =>
+              !rules.allowedModels.length ||
+              rules.allowedModels.includes(c.model),
+          ),
     };
   }
   async getPolicy(p: Principal, id: string) {

@@ -282,9 +282,9 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   await expect(
     reopened.getByRole("heading", { name: "上传的参考图" }),
   ).toBeVisible();
-  await reopened.getByRole("link", { name: "图片服务", exact: true }).click();
+  await reopened.getByRole("link", { name: "模型服务", exact: true }).click();
   await expect(
-    reopened.getByRole("heading", { name: "图片服务" }),
+    reopened.getByRole("heading", { name: "模型服务" }),
   ).toBeVisible();
   expect(
     await reopened.evaluate(
@@ -297,20 +297,41 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   });
 });
 
-test("desktop administration saves independent planning configuration and versioned skills", async ({
+test("desktop administration publishes service model pools and preserves versioned skills", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await login(page);
   await page.goto("/admin/images");
-  await page.getByRole("tab", { name: "规划与技能", exact: true }).click();
-  await page.getByLabel("规划服务类型", { exact: true }).click();
+  await page.getByRole("button", { name: "接入现有配置", exact: true }).click();
+  await page.getByRole("button", { name: "获取模型", exact: true }).click();
   await page
-    .getByText("本地测试规划（不调用真实模型）", { exact: true })
+    .getByRole("button", { name: "将 test-planner 加入对话池", exact: true })
     .click();
-  await page.getByLabel("规划模型 ID").fill("test-planner");
-  await page.getByRole("button", { name: "保存规划服务", exact: true }).click();
-  await expect(page.getByText("test-planner", { exact: true })).toBeVisible();
+  const chatPool = page.getByRole("region", {
+    name: "对话模型池",
+    exact: true,
+  });
+  await chatPool.getByRole("button", { name: "能力设置", exact: true }).click();
+  await page.getByLabel("支持参考图理解", { exact: true }).check();
+  await page
+    .getByRole("button", { name: "应用到待发布配置", exact: true })
+    .click();
+  const imagePool = page.getByRole("region", {
+    name: "图像生成模型池",
+    exact: true,
+  });
+  await imagePool
+    .getByRole("button", { name: "能力设置", exact: true })
+    .click();
+  await page.getByLabel("模型最大边长", { exact: true }).fill("2048");
+  const sizes = page.getByLabel(/^限定尺寸/);
+  await sizes.pressSequentially("1024x1024,512x512");
+  await expect(sizes).toHaveValue("1024x1024,512x512");
+  await page
+    .getByRole("button", { name: "应用到待发布配置", exact: true })
+    .click();
+  await page.getByRole("tab", { name: "技能与工具", exact: true }).click();
   await page.getByLabel("技能标识").fill("synthetic-photo");
   await page.getByLabel("技能名称").fill("合成商品图");
   await page.getByLabel("技能说明").fill("只用于合成验收");
@@ -331,31 +352,25 @@ test("desktop administration saves independent planning configuration and versio
   await page.getByRole("button", { name: "保存并启用新技能版本" }).click();
   await expect(page.getByText("合成商品图 v2", { exact: true })).toBeVisible();
   await expect(row.getByText("已停用", { exact: true })).toBeVisible();
-  await page.getByRole("tab", { name: "图片服务", exact: true }).click();
-  await page.getByLabel("允许的模型（英文逗号分隔）").fill("test-image");
-  await page.getByText("test-image 的能力声明", { exact: true }).click();
-  await expect(page.getByLabel("模型最大边长", { exact: true })).toBeVisible();
-  await page.getByLabel("模型最大边长", { exact: true }).fill("2048");
-  const sizes = page.getByLabel(/^限定尺寸/);
-  await sizes.pressSequentially("1024x1024,512x512");
-  await expect(sizes).toHaveValue("1024x1024,512x512");
-  await page.getByRole("tab", { name: "规划与技能", exact: true }).click();
+
   await page.getByLabel("技能名称").fill("待保存的技能");
-  await page.getByRole("tab", { name: "图片服务", exact: true }).click();
-  await expect(sizes).toHaveValue("1024x1024,512x512");
-  await page.getByRole("tab", { name: "规划与技能", exact: true }).click();
+  await page.getByRole("tab", { name: "模型服务", exact: true }).click();
+  await expect(
+    chatPool.getByText("test-planner", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "保存开放配置", exact: true }).click();
+  await expect(
+    page.getByText("模型开放配置已保存，新的创作可以使用。", { exact: true }),
+  ).toBeVisible();
+  const catalog = await (
+    await page.request.get("/api/model-admin/catalog")
+  ).json();
+  expect(
+    catalog.entries.find((e: any) => e.kind === "image").image.sizes,
+  ).toEqual(["1024x1024", "512x512"]);
+  await page.getByRole("tab", { name: "技能与工具", exact: true }).click();
   await expect(page.getByLabel("技能名称")).toHaveValue("待保存的技能");
-  await page.getByRole("tab", { name: "图片服务", exact: true }).click();
-  await page.getByLabel("服务类型", { exact: true }).click();
-  await page
-    .getByText("本地测试服务（不调用真实模型）", { exact: true })
-    .click();
-  await page.getByRole("button", { name: "保存图片服务", exact: true }).click();
-  await expect(page.getByText("已保存。", { exact: true })).toBeVisible();
-  const providerResponse = await page.request.get("/api/image-admin/providers");
-  expect(providerResponse.ok()).toBe(true);
-  const { providers } = await providerResponse.json();
-  expect(providers[0].capabilities[0].sizes).toEqual(["1024x1024", "512x512"]);
+  await page.getByRole("tab", { name: "模型服务", exact: true }).click();
   await expect(page.getByRole("alert")).toHaveCount(0);
   expect(
     await page.evaluate(
@@ -363,7 +378,7 @@ test("desktop administration saves independent planning configuration and versio
     ),
   ).toBe(true);
   await page.screenshot({
-    path: ".codex-temp/m3-step2-admin-1440.png",
+    path: ".codex-temp/model-pools-admin-1440.png",
     fullPage: true,
   });
 });
@@ -540,17 +555,6 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page);
-  await page.goto("/admin/images");
-  await page.getByRole("tab", { name: "规划与技能", exact: true }).click();
-  await page.getByLabel("规划服务类型", { exact: true }).click();
-  await page
-    .getByText("本地测试规划（不调用真实模型）", { exact: true })
-    .click();
-  await page.getByLabel("规划模型 ID").fill("synthetic-planner-e2e");
-  await page.getByRole("button", { name: "保存规划服务", exact: true }).click();
-  await expect(
-    page.getByText("synthetic-planner-e2e", { exact: true }),
-  ).toBeVisible();
   await page.getByRole("link", { name: "项目", exact: true }).click();
   await page.getByLabel("项目名称").fill("Agent 顺序创作");
   await page.getByRole("button", { name: "创建项目", exact: true }).click();
@@ -931,4 +935,105 @@ test("administration saves bounded execution policies and clearing ended Agent h
     (await (await page.request.get("/api/images/usage")).json()).used,
   ).toBe(imagesBefore.used);
   await expect(page.locator(".react-flow__node-image")).toHaveCount(3);
+  await page
+    .context()
+    .storageState({ path: ".codex-temp/model-pools-admin-session.json" });
+});
+
+test("administrators add a service and users select same-named models from the correct service", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  const savedSession = JSON.parse(
+    await readFile(".codex-temp/model-pools-admin-session.json", "utf8"),
+  );
+  await page.context().addCookies(savedSession.cookies);
+  await page.goto("/projects");
+  await page.goto("/admin/images");
+  await page.getByRole("button", { name: "新增服务", exact: true }).click();
+  await page.getByLabel("服务名称", { exact: true }).fill("备用测试服务");
+  await page.getByLabel("接入协议", { exact: true }).click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("本地合成测试（不调用模型）", { exact: true })
+    .click();
+  await page.getByRole("button", { name: "保存服务", exact: true }).click();
+  await expect(
+    page.getByText("服务已保存，可以获取模型列表。", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "获取模型", exact: true }).click();
+  await page.getByRole("button", { name: "手动登记模型", exact: true }).click();
+  await page.getByLabel("模型 ID", { exact: true }).fill("invalid model");
+  await page.getByRole("button", { name: "登记候选模型", exact: true }).click();
+  await expect(page.getByRole("dialog").getByRole("alert")).toBeVisible();
+  await page.getByLabel("模型 ID", { exact: true }).fill("manual-candidate");
+  await page.getByRole("button", { name: "登记候选模型", exact: true }).click();
+  await expect(page.getByRole("dialog")).toBeHidden();
+  await page
+    .getByRole("button", { name: "将 test-image 加入图像生成池", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "将 test-planner 加入对话池", exact: true })
+    .click();
+  await page.getByRole("button", { name: "保存开放配置", exact: true }).click();
+  await expect(
+    page.getByText("模型开放配置已保存，新的创作可以使用。", { exact: true }),
+  ).toBeVisible();
+  const catalog = await (
+    await page.request.get("/api/model-admin/catalog")
+  ).json();
+  const service = catalog.services.find((s: any) => s.name === "备用测试服务");
+  const entry = catalog.entries.find(
+    (e: any) => e.serviceId === service.id && e.kind === "image",
+  );
+  expect(entry.isDefault).toBe(false);
+  await page.getByRole("link", { name: "项目", exact: true }).click();
+  await page.getByLabel("项目名称", { exact: true }).fill("多服务选择验收");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "多服务选择验收" })
+    .click();
+  await page.getByLabel("图片模型", { exact: true }).click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("test-image · 备用测试服务", { exact: true })
+    .click();
+  await page
+    .getByLabel("创作需求", { exact: true })
+    .fill("Synthetic service selection");
+  const imageRequest = page.waitForRequest(
+    (r) =>
+      r.method() === "POST" &&
+      new URL(r.url()).pathname === "/api/images/tasks",
+  );
+  await page.getByRole("button", { name: "提交图片任务", exact: true }).click();
+  expect((await imageRequest).postDataJSON().modelSelectionId).toBe(entry.id);
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(1, {
+    timeout: 20000,
+  });
+  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await page
+    .getByText("创作设置 · 通用创作 · test-image", { exact: true })
+    .click();
+  await page.getByLabel("对话模型", { exact: true }).click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("test-planner · 备用测试服务", { exact: true })
+    .click();
+  await page
+    .getByLabel("告诉 Agent 你的想法", { exact: true })
+    .fill("Synthetic plan using selected service");
+  const planningRequest = page.waitForRequest(
+    (r) =>
+      r.method() === "POST" &&
+      new URL(r.url()).pathname === "/api/agent/planning",
+  );
+  await page.getByRole("button", { name: "发送规划需求", exact: true }).click();
+  await expect(page.getByLabel("计划步骤摘要")).toBeVisible({ timeout: 15000 });
+  expect((await planningRequest).postDataJSON().conversationModelId).toBe(
+    catalog.entries.find(
+      (e: any) => e.serviceId === service.id && e.kind === "conversation",
+    ).id,
+  );
 });

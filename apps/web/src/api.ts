@@ -7,6 +7,20 @@ const messages: Record<string, string> = {
   PLANNING_REFERENCE_LIMIT:
     "一次连续规划最多使用 4 张参考图，请新建规划或减少参考图。",
   PLANNING_QUOTA: "今日规划次数不足，请稍后再试。",
+  MODEL_SERVICE_CONFLICT: "服务已被修改，请刷新后重试。",
+  MODEL_SERVICE_NAME_TAKEN: "已有同名服务，请使用其他名称。",
+  MODEL_SERVICE_UNAVAILABLE: "服务已停用或撤销。",
+  MODEL_POOL_CONFLICT: "模型池已被其他页面修改，请放弃草稿并重新加载后编辑。",
+  MODEL_DIRECTORY_UNAVAILABLE:
+    "无法获取模型列表，请检查服务地址和网络；现有配置已保留。",
+  MODEL_DIRECTORY_REJECTED:
+    "服务拒绝获取模型列表，请检查Key权限或手动登记模型。",
+  MODEL_DIRECTORY_INVALID: "服务返回的模型列表不符合兼容协议；现有配置已保留。",
+  MODEL_DIRECTORY_LIMIT: "服务模型列表超过读取上限，请缩小服务可见范围。",
+  MODEL_NOT_DISCOVERED: "该模型还未登记到这个服务中。",
+  PLANNING_MODEL_NOT_ALLOWED:
+    "当前对话模型不可用或不在账号开放范围内，请重新选择。",
+  MODEL_CATALOG_MANAGED: "该配置已由模型服务统一管理，请到模型池调整。",
   PLANNING_QUEUE_FULL: "规划排队已满，请稍后再试。",
   PLANNING_BUDGET_EXCEEDED: "规划超出本次输入或输出预算，请精简需求。",
   PLANNING_FORMAT_INVALID: "规划结果格式未能修复，请调整需求后重新规划。",

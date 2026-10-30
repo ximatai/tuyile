@@ -1,0 +1,889 @@
+import { useState, type FormEvent } from "react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  type ModelCatalogSnapshot,
+  type ModelServiceView,
+  type ModelServiceInput,
+  type PoolEntryInput,
+  type ModelKind,
+  poolEntryInput,
+} from "@tuyile/contracts";
+import {
+  Button,
+  ChoiceField,
+  Field,
+  Checkbox,
+  Notice,
+  Table,
+  Drawer,
+  Tag,
+  Radio,
+  Input,
+  Select,
+  ControlScope,
+  useConfirm,
+} from "@tuyile/ui";
+import { useSessionState } from "./session-state";
+import { client } from "./api";
+export function ModelServicesAdmin() {
+  const state = useSessionState(),
+    api = client(state.session.csrfToken),
+    confirm = useConfirm();
+  const query = useQuery({
+    queryKey: state.key("model-catalog"),
+    queryFn: ({ signal }) =>
+      api<ModelCatalogSnapshot>("/model-admin/catalog", undefined, signal),
+  });
+  const [selected, setSelected] = useState(""),
+    [search, setSearch] = useState(""),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState(""),
+    [message, setMessage] = useState("");
+  const [draft, setDraft] = useState<{
+      revision: number;
+      entries: PoolEntryInput[];
+    } | null>(null),
+    [editor, setEditor] = useState<Partial<ModelServiceInput> | null>(null),
+    [advanced, setAdvanced] = useState<PoolEntryInput | null>(null),
+    [sizes, setSizes] = useState(""),
+    [manual, setManual] = useState(false),
+    [manualId, setManualId] = useState("");
+  const data = query.data,
+    entries = draft?.entries ?? data?.entries ?? [],
+    services = data?.services ?? [],
+    service =
+      services.find((s) => s.id === selected) ??
+      services.find((s) => !s.revoked) ??
+      services[0];
+  async function refresh() {
+    await Promise.all([
+      query.refetch({ throwOnError: true }),
+      ...[
+        "usage",
+        "model-pools",
+        "planning-usage",
+        "image-providers",
+        "planning-providers",
+      ].map((key) =>
+        state.queries.invalidateQueries({ queryKey: state.key(key) }),
+      ),
+    ]);
+  }
+  async function run(work: () => Promise<void>) {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      await work();
+      await refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  function change(next: PoolEntryInput[]) {
+    setDraft({ revision: draft?.revision ?? data!.revision, entries: next });
+    setMessage("");
+  }
+  function add(model: string, kind: ModelKind) {
+    if (!service) return;
+    const exists = entries.find(
+      (e) =>
+        e.serviceId === service.id && e.modelId === model && e.kind === kind,
+    );
+    if (exists) return;
+    change([
+      ...entries,
+      {
+        id: crypto.randomUUID(),
+        serviceId: service.id,
+        modelId: model,
+        kind,
+        enabled: true,
+        isDefault: !entries.some((e) => e.kind === kind && e.enabled),
+        ...(kind === "image"
+          ? {
+              image: {
+                model,
+                generation: true,
+                editing: false,
+                maxReferences: 0,
+                maxEdge: 1024,
+                maxPixels: 1048576,
+                sizes: ["1024x1024"],
+                qualities: ["medium"],
+                formats: ["png"],
+              },
+            }
+          : {
+              conversation: {
+                supportsImages: false,
+                responseMode: "json_object" as const,
+                maxOutputTokens: 4096,
+                maxInputCharacters: 32000,
+              },
+            }),
+      },
+    ]);
+  }
+  function editEntry(id: string, patch: Partial<PoolEntryInput>) {
+    change(entries.map((e) => (e.id === id ? { ...e, ...patch } : e)));
+  }
+  async function publish() {
+    await run(async () => {
+      for (const kind of ["image", "conversation"] as const) {
+        const list = entries.filter((e) => e.kind === kind && e.enabled);
+        if (list.length && list.filter((e) => e.isDefault).length !== 1)
+          throw Error(
+            `请为${kind === "image" ? "图像生成" : "对话"}模型池指定一个默认模型。`,
+          );
+      }
+      await api("/model-admin/pools", { revision: draft!.revision, entries });
+      setDraft(null);
+      setMessage("模型开放配置已保存，新的创作可以使用。");
+    });
+  }
+  function editService(s?: ModelServiceView) {
+    setError("");
+    setEditor(
+      s
+        ? {
+            id: s.id,
+            revision: s.revision,
+            name: s.name,
+            mode: s.mode,
+            baseUrl: s.baseUrl,
+            preserveKey: true,
+          }
+        : {
+            name: "",
+            mode: "openai",
+            baseUrl: "https://api.openai.com/v1",
+            preserveKey: false,
+          },
+    );
+  }
+  async function saveService(e: FormEvent) {
+    e.preventDefault();
+    if (!editor) return;
+    await run(async () => {
+      const saved = await api<ModelServiceView>(
+        "/model-admin/services",
+        editor,
+      );
+      setSelected(saved.id);
+      setEditor(null);
+      setMessage("服务已保存，可以获取模型列表。");
+    });
+  }
+  async function toggleService(
+    s: ModelServiceView,
+    enabled: boolean,
+    revoke = false,
+  ) {
+    if (
+      revoke &&
+      !(await confirm(
+        "紧急撤销此服务？该服务尚未发出的调用将停止，在途请求可能仍计费。此撤销不可恢复。",
+      ))
+    )
+      return;
+    await run(async () => {
+      await api(`/model-admin/services/${s.id}/state`, {
+        revision: s.revision,
+        enabled,
+        revoke,
+      });
+      setMessage(
+        revoke
+          ? "服务已撤销。"
+          : enabled
+            ? "服务已启用，请检查并开放需要的模型。"
+            : "服务已停用，已接受任务仍按绑定版本处理。",
+      );
+    });
+  }
+  const candidates = (data?.models ?? []).filter(
+    (m) =>
+      m.serviceId === service?.id &&
+      m.modelId.toLowerCase().includes(search.toLowerCase()),
+  );
+  if (query.isPending) return <p role="status">正在读取模型服务…</p>;
+  return (
+    <ControlScope componentDisabled={busy}>
+      <div className="model-services-admin">
+        {(error || query.error) && (
+          <Notice error>{error || query.error?.message}</Notice>
+        )}
+        {message && <Notice>{message}</Notice>}
+        {!data?.managed && (
+          <Notice>
+            现有服务仍在正常工作。
+            <Button
+              disabled={busy}
+              onClick={() =>
+                void run(async () => {
+                  await api("/model-admin/bootstrap", {});
+                  setMessage("现有服务和开放模型已接入。");
+                })
+              }
+            >
+              接入现有配置
+            </Button>
+          </Notice>
+        )}
+        <section className="model-service-bar" aria-label="服务接入">
+          <ChoiceField
+            label="模型服务"
+            value={service?.id ?? ""}
+            onValueChange={setSelected}
+            options={services.map((s) => ({
+              value: s.id,
+              label: `${s.name}${s.revoked ? "（已撤销）" : !s.enabled ? "（已停用）" : ""}`,
+            }))}
+          />
+          <div className="model-service-summary">
+            {service ? (
+              <>
+                <strong>{service.name}</strong>
+                <span>
+                  {service.mode === "fake" ? "本地合成测试" : service.baseUrl}
+                </span>
+                <Tag>
+                  {service.revoked
+                    ? "已撤销"
+                    : service.enabled
+                      ? "已配置"
+                      : "已停用"}
+                </Tag>
+              </>
+            ) : (
+              <span>接入一个服务后，获取它提供的模型。</span>
+            )}
+          </div>
+          <div className="actions">
+            <Button
+              type="button"
+              disabled={busy || !!draft}
+              onClick={() => editService()}
+            >
+              新增服务
+            </Button>
+            <Button
+              type="button"
+              disabled={busy || !!draft || !service || service.revoked}
+              onClick={() => editService(service)}
+            >
+              编辑服务
+            </Button>
+            <Button
+              className="primary"
+              type="button"
+              disabled={busy || !service || !service.enabled || service.revoked}
+              onClick={() =>
+                void run(async () => {
+                  await api(`/model-admin/services/${service!.id}/refresh`, {});
+                  setMessage("模型列表已更新，开放范围保持不变。");
+                })
+              }
+            >
+              {busy ? "正在处理…" : "获取模型"}
+            </Button>
+          </div>
+        </section>
+        {!!draft && (
+          <p className="hint">
+            有未保存的模型池修改；服务编辑和停用将在保存或放弃修改后可用。
+          </p>
+        )}
+        <div className="model-catalog-grid">
+          <section className="model-catalog-candidates" aria-label="可用模型">
+            <div className="model-pool-heading">
+              <h2>可用模型</h2>
+              <span>{service ? candidates.length : 0} 个</span>
+            </div>
+            <p className="hint">
+              获取后进入候选列表，加入右侧模型池并保存才会向用户开放。
+            </p>
+            <Input
+              aria-label="筛选服务模型"
+              placeholder="按模型名称筛选"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              allowClear
+            />
+            <Table
+              rowKey="modelId"
+              size="small"
+              dataSource={candidates}
+              pagination={{ pageSize: 8, showSizeChanger: false }}
+              columns={[
+                {
+                  title: "模型",
+                  dataIndex: "modelId",
+                  render: (_: unknown, m: (typeof candidates)[number]) => (
+                    <div className="model-identifier">
+                      <strong>{m.modelId}</strong>
+                      {!m.present && <small>最近未发现</small>}
+                      {m.manual && <small>已手动登记</small>}
+                    </div>
+                  ),
+                },
+                {
+                  title: "加入",
+                  width: 110,
+                  render: (_: unknown, m: (typeof candidates)[number]) => (
+                    <div className="model-add-actions">
+                      {(["conversation", "image"] as const).map((kind) => (
+                        <Button
+                          type="button"
+                          key={kind}
+                          aria-label={`将 ${m.modelId} 加入${kind === "image" ? "图像生成" : "对话"}池`}
+                          disabled={
+                            busy ||
+                            !service?.enabled ||
+                            service.revoked ||
+                            entries.some(
+                              (e) =>
+                                e.serviceId === service.id &&
+                                e.modelId === m.modelId &&
+                                e.kind === kind,
+                            )
+                          }
+                          onClick={() => add(m.modelId, kind)}
+                        >
+                          {kind === "image" ? "图像生成" : "对话"}
+                        </Button>
+                      ))}
+                    </div>
+                  ),
+                },
+              ]}
+            />
+            <Button
+              type="button"
+              disabled={busy || !service || service.revoked}
+              onClick={() => {
+                setError("");
+                setManualId("");
+                setManual(true);
+              }}
+            >
+              手动登记模型
+            </Button>
+            <p className="hint">
+              列表不代表调用能力。加入后请在能力设置中核对；获取列表不执行生图或对话。
+            </p>
+            {service && (
+              <details className="model-service-actions">
+                <summary>服务状态与版本</summary>
+                <p className="hint">
+                  版本 {service.revision} ·{" "}
+                  {service.catalogUpdatedAt
+                    ? `最近获取 ${new Date(service.catalogUpdatedAt).toLocaleString("zh-CN")}`
+                    : "尚未获取模型"}
+                </p>
+                <div className="actions">
+                  <Button
+                    disabled={busy || !!draft || service.revoked}
+                    onClick={() =>
+                      void toggleService(service, !service.enabled)
+                    }
+                  >
+                    {service.enabled ? "停用服务" : "启用服务"}
+                  </Button>
+                  <Button
+                    disabled={busy || !!draft || service.revoked}
+                    onClick={() => void toggleService(service, false, true)}
+                  >
+                    紧急撤销
+                  </Button>
+                </div>
+              </details>
+            )}
+          </section>
+          {(["conversation", "image"] as const).map((kind) => {
+            const list = entries.filter((e) => e.kind === kind);
+            return (
+              <section
+                className="model-pool-panel"
+                aria-label={kind === "image" ? "图像生成模型池" : "对话模型池"}
+                key={kind}
+              >
+                <div className="model-pool-heading">
+                  <h2>{kind === "image" ? "图像生成模型池" : "对话模型池"}</h2>
+                  <Tag color="blue">
+                    开放 {list.filter((e) => e.enabled).length}
+                  </Tag>
+                </div>
+                <p className="hint">
+                  {kind === "image"
+                    ? "用于直接创作和计划中的图片步骤。"
+                    : "用于现有 Agent 的对话与创作规划。"}
+                </p>
+                <Radio.Group
+                  aria-label={`${kind === "image" ? "图像生成" : "对话"}默认模型`}
+                  value={list.find((e) => e.isDefault)?.id}
+                  onChange={(event) =>
+                    change(
+                      entries.map((e) =>
+                        e.kind === kind
+                          ? { ...e, isDefault: e.id === event.target.value }
+                          : e,
+                      ),
+                    )
+                  }
+                >
+                  {list.map((e) => (
+                    <article key={e.id} className="model-pool-entry">
+                      <div className="model-pool-entry-title">
+                        <strong>{e.modelId}</strong>
+                        <Checkbox
+                          aria-label={`开放 ${kind} ${e.id}`}
+                          checked={e.enabled}
+                          disabled={
+                            busy ||
+                            services.find((s) => s.id === e.serviceId)
+                              ?.revoked ||
+                            !services.find((s) => s.id === e.serviceId)?.enabled
+                          }
+                          onChange={(ev) =>
+                            editEntry(e.id, {
+                              enabled: ev.target.checked,
+                              isDefault: ev.target.checked
+                                ? e.isDefault
+                                : false,
+                            })
+                          }
+                        >
+                          开放
+                        </Checkbox>
+                      </div>
+                      <span className="hint">
+                        {services.find((s) => s.id === e.serviceId)?.name ??
+                          "服务不可用"}
+                      </span>
+                      <div className="model-capability-tags">
+                        {kind === "conversation" ? (
+                          <Tag>
+                            {e.conversation?.supportsImages
+                              ? "支持参考图理解"
+                              : "仅文本输入"}
+                          </Tag>
+                        ) : (
+                          <>
+                            <Tag>
+                              {e.image?.generation ? "文生图" : "不支持文生图"}
+                            </Tag>
+                            <Tag>
+                              {e.image?.editing ? "参考图编辑" : "无参考图编辑"}
+                            </Tag>
+                          </>
+                        )}
+                      </div>
+                      <div className="model-entry-actions">
+                        <Radio value={e.id} disabled={busy || !e.enabled}>
+                          默认
+                        </Radio>
+                        <Button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => {
+                            setError("");
+                            setAdvanced(structuredClone(e));
+                            setSizes(e.image?.sizes.join(",") ?? "");
+                          }}
+                        >
+                          能力设置
+                        </Button>
+                        <Button
+                          type="button"
+                          disabled={busy}
+                          onClick={() =>
+                            change(entries.filter((v) => v.id !== e.id))
+                          }
+                        >
+                          移出
+                        </Button>
+                      </div>
+                    </article>
+                  ))}
+                </Radio.Group>
+                {!list.length && (
+                  <div className="model-pool-empty">从左侧选择模型加入此池</div>
+                )}
+              </section>
+            );
+          })}
+        </div>
+        <footer className="model-pool-save">
+          <span className="hint">
+            {draft
+              ? "修改尚未发布"
+              : "用户只能选择已开放并符合个人权限的模型。"}{" "}
+            · 已提交任务保留原配置绑定
+          </span>
+          <div className="actions">
+            <Button
+              type="button"
+              disabled={busy || !draft}
+              onClick={() => {
+                setDraft(null);
+                setError("");
+              }}
+            >
+              放弃修改
+            </Button>
+            <Button
+              type="button"
+              className="primary"
+              disabled={busy || !draft}
+              onClick={() => void publish()}
+            >
+              保存开放配置
+            </Button>
+          </div>
+        </footer>
+        <Drawer
+          title={editor?.id ? "编辑模型服务" : "新增模型服务"}
+          open={!!editor}
+          width={520}
+          onClose={() => {
+            if (!busy) setEditor(null);
+          }}
+          destroyOnHidden
+        >
+          {error && <Notice error>{error}</Notice>}
+          {editor && (
+            <form
+              onSubmit={(e) => void saveService(e)}
+              aria-label="模型服务接入"
+            >
+              <Field
+                label="服务名称"
+                required
+                maxLength={80}
+                value={editor.name ?? ""}
+                onChange={(e) => setEditor({ ...editor, name: e.target.value })}
+              />
+              <ChoiceField
+                label="接入协议"
+                value={editor.mode ?? "openai"}
+                onValueChange={(v) =>
+                  setEditor({ ...editor, mode: v as "openai" | "fake" })
+                }
+                options={[
+                  { value: "openai", label: "OpenAI 兼容协议" },
+                  ...(data?.testingAllowed
+                    ? [{ value: "fake", label: "本地合成测试（不调用模型）" }]
+                    : []),
+                ]}
+              />
+              {editor.mode !== "fake" && (
+                <>
+                  <Field
+                    label="Base URL"
+                    type="url"
+                    required
+                    value={editor.baseUrl ?? ""}
+                    onChange={(e) =>
+                      setEditor({ ...editor, baseUrl: e.target.value })
+                    }
+                  />
+                  <Field
+                    label="服务 API Key"
+                    type="password"
+                    autoComplete="new-password"
+                    value={editor.apiKey ?? ""}
+                    onChange={(e) =>
+                      setEditor({
+                        ...editor,
+                        apiKey: e.target.value || undefined,
+                      })
+                    }
+                  />
+                  {editor.id && (
+                    <Checkbox
+                      checked={editor.preserveKey ?? false}
+                      onChange={(e) =>
+                        setEditor({ ...editor, preserveKey: e.target.checked })
+                      }
+                    >
+                      沿用现有 Key（仅地址和协议不变时）
+                    </Checkbox>
+                  )}
+                </>
+              )}
+              <p className="hint">
+                Key只在服务端加密保存。保存服务不会执行模型调用；地址改变时需要重新填写Key。
+              </p>
+              <Button className="primary" disabled={busy}>
+                保存服务
+              </Button>
+            </form>
+          )}
+        </Drawer>
+        <Drawer
+          title="手动登记模型"
+          open={manual}
+          onClose={() => {
+            if (!busy) setManual(false);
+          }}
+          width={460}
+          destroyOnHidden
+        >
+          {error && <Notice error>{error}</Notice>}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void run(async () => {
+                await api(`/model-admin/services/${service!.id}/manual`, {
+                  modelId: manualId,
+                });
+                setManual(false);
+                setManualId("");
+                setMessage("已登记为候选模型，尚未开放。");
+              });
+            }}
+          >
+            <Field
+              label="模型 ID"
+              value={manualId}
+              required
+              maxLength={120}
+              onChange={(e) => setManualId(e.target.value)}
+            />
+            <p className="hint">
+              适用于模型目录未列出、但服务商已明确提供的模型。
+            </p>
+            <Button className="primary" disabled={busy}>
+              登记候选模型
+            </Button>
+          </form>
+        </Drawer>
+        <Drawer
+          title={`${advanced?.modelId ?? ""} · 能力设置`}
+          open={!!advanced}
+          size={560}
+          onClose={() => setAdvanced(null)}
+          destroyOnHidden
+        >
+          {error && <Notice error>{error}</Notice>}
+          {advanced && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                try {
+                  const value = poolEntryInput.parse({
+                    ...advanced,
+                    ...(advanced.image
+                      ? {
+                          image: {
+                            ...advanced.image,
+                            sizes: sizes
+                              .split(",")
+                              .map((s) => s.trim())
+                              .filter(Boolean),
+                          },
+                        }
+                      : {}),
+                  });
+                  editEntry(value.id, value);
+                  setAdvanced(null);
+                } catch {
+                  setError(
+                    "请检查模型能力：尺寸使用1024x1024格式，质量/格式至少选择一项。",
+                  );
+                }
+              }}
+            >
+              <p className="hint">
+                根据服务商文档填写。这里声明能力，不会自动测试或产生模型调用。
+              </p>
+              {advanced.conversation && (
+                <>
+                  <Checkbox
+                    checked={advanced.conversation.supportsImages}
+                    onChange={(e) =>
+                      setAdvanced({
+                        ...advanced,
+                        conversation: {
+                          ...advanced.conversation!,
+                          supportsImages: e.target.checked,
+                        },
+                      })
+                    }
+                  >
+                    支持参考图理解
+                  </Checkbox>
+                  <ChoiceField
+                    label="结构化输出方式"
+                    value={advanced.conversation.responseMode}
+                    onValueChange={(v) =>
+                      setAdvanced({
+                        ...advanced,
+                        conversation: {
+                          ...advanced.conversation!,
+                          responseMode: v as "text" | "json_object",
+                        },
+                      })
+                    }
+                    options={[
+                      { value: "json_object", label: "JSON 模式" },
+                      { value: "text", label: "文本输出后校验" },
+                    ]}
+                  />
+                  {(["maxOutputTokens", "maxInputCharacters"] as const).map(
+                    (key) => (
+                      <Field
+                        key={key}
+                        label={
+                          key === "maxOutputTokens"
+                            ? "单次规划总输出 token 预算"
+                            : "单次规划输入字符上限"
+                        }
+                        type="number"
+                        min={key === "maxOutputTokens" ? 256 : 1000}
+                        max={key === "maxOutputTokens" ? 8192 : 64000}
+                        value={advanced.conversation![key]}
+                        onChange={(e) =>
+                          setAdvanced({
+                            ...advanced,
+                            conversation: {
+                              ...advanced.conversation!,
+                              [key]: Number(e.target.value),
+                            },
+                          })
+                        }
+                      />
+                    ),
+                  )}
+                </>
+              )}
+              {advanced.image && (
+                <>
+                  <Checkbox
+                    checked={advanced.image.generation}
+                    onChange={(e) =>
+                      setAdvanced({
+                        ...advanced,
+                        image: {
+                          ...advanced.image!,
+                          generation: e.target.checked,
+                        },
+                      })
+                    }
+                  >
+                    支持无参考图生成
+                  </Checkbox>
+                  <Checkbox
+                    checked={advanced.image.editing}
+                    onChange={(e) =>
+                      setAdvanced({
+                        ...advanced,
+                        image: {
+                          ...advanced.image!,
+                          editing: e.target.checked,
+                          maxReferences: e.target.checked
+                            ? Math.max(1, advanced.image!.maxReferences)
+                            : 0,
+                        },
+                      })
+                    }
+                  >
+                    支持参考图编辑
+                  </Checkbox>
+                  <div className="parameter-grid">
+                    {(["maxEdge", "maxPixels", "maxReferences"] as const).map(
+                      (key) => (
+                        <Field
+                          key={key}
+                          label={
+                            {
+                              maxEdge: "模型最大边长",
+                              maxPixels: "模型最大像素数",
+                              maxReferences: "最多参考图",
+                            }[key]
+                          }
+                          type="number"
+                          min={
+                            key === "maxReferences"
+                              ? 0
+                              : key === "maxEdge"
+                                ? 256
+                                : 65536
+                          }
+                          max={
+                            key === "maxReferences"
+                              ? 4
+                              : key === "maxEdge"
+                                ? 8192
+                                : 32000000
+                          }
+                          value={advanced.image![key]}
+                          onChange={(e) =>
+                            setAdvanced({
+                              ...advanced,
+                              image: {
+                                ...advanced.image!,
+                                [key]: Number(e.target.value),
+                              },
+                            })
+                          }
+                        />
+                      ),
+                    )}
+                  </div>
+                  <Field
+                    label="限定尺寸（英文逗号分隔，留空按上限校验）"
+                    value={sizes}
+                    onChange={(e) => setSizes(e.target.value)}
+                  />
+                  <label className="field">
+                    <span>支持质量</span>
+                    <Select
+                      aria-label="支持质量"
+                      mode="multiple"
+                      value={advanced.image.qualities}
+                      options={["low", "medium", "high"].map((value) => ({
+                        value,
+                        label: value,
+                      }))}
+                      onChange={(v) =>
+                        setAdvanced({
+                          ...advanced,
+                          image: { ...advanced.image!, qualities: v },
+                        })
+                      }
+                    />
+                  </label>
+                  <label className="field">
+                    <span>支持格式</span>
+                    <Select
+                      aria-label="支持格式"
+                      mode="multiple"
+                      value={advanced.image.formats}
+                      options={["png", "jpeg", "webp"].map((value) => ({
+                        value,
+                        label: value,
+                      }))}
+                      onChange={(v) =>
+                        setAdvanced({
+                          ...advanced,
+                          image: { ...advanced.image!, formats: v },
+                        })
+                      }
+                    />
+                  </label>
+                </>
+              )}
+              <Button className="primary">应用到待发布配置</Button>
+            </form>
+          )}
+        </Drawer>
+      </div>
+    </ControlScope>
+  );
+}

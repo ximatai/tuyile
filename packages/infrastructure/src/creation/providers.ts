@@ -3,11 +3,34 @@ import { AppError, normalizeCapabilities } from "@tuyile/core";
 import type { Principal, ProviderInput, ProviderView } from "@tuyile/contracts";
 import { PgCreationContext } from "./context.js";
 export class PgProvidersRepository extends PgCreationContext {
-  async current(): Promise<{
+  async current(input?: { model: string; modelSelectionId?: string }): Promise<{
     id: string;
     models: string[];
     capabilities: ImageCapability[];
+    selectionId?: string;
   }> {
+    if (
+      (await this.c.query("SELECT managed FROM model_catalog_state WHERE id=1"))
+        .rows[0].managed
+    ) {
+      const row = (
+        await this.c.query(
+          "SELECT e.id AS selection_id,e.model_id,v.id,v.models,v.capabilities FROM model_pool_entries e JOIN model_services s ON s.id=e.service_id JOIN image_provider_versions v ON v.id=e.image_provider_id WHERE e.kind='image' AND e.enabled AND s.enabled AND NOT s.revoked AND NOT v.revoked AND (($1::uuid IS NOT NULL AND e.id=$1) OR ($1::uuid IS NULL AND e.is_default))",
+          [input?.modelSelectionId ?? null],
+        )
+      ).rows[0];
+      if (!row || (input && row.model_id !== input.model))
+        throw new AppError("MODEL_NOT_ALLOWED", 409);
+      return {
+        id: row.id,
+        models: [row.model_id],
+        capabilities: row.capabilities.filter(
+          (c: ImageCapability) => c.model === row.model_id,
+        ),
+        selectionId: row.selection_id,
+      };
+    }
+    if (input?.modelSelectionId) throw new AppError("MODEL_NOT_ALLOWED", 409);
     const row = (
       await this.c.query(
         "SELECT id,models,capabilities FROM image_provider_versions WHERE active AND NOT revoked",
@@ -41,6 +64,12 @@ export class PgProvidersRepository extends PgCreationContext {
     const c = this.c;
 
     await this.auth(c, p, true);
+    await c.query("SELECT pg_advisory_xact_lock(72110407)");
+    if (
+      (await c.query("SELECT managed FROM model_catalog_state WHERE id=1"))
+        .rows[0].managed
+    )
+      throw new AppError("MODEL_CATALOG_MANAGED", 409);
     await c.query("SELECT pg_advisory_xact_lock(72110405)");
     if (input.mode === "fake" && !this.fakeAllowed)
       throw new AppError("FAKE_PROVIDER_DISABLED", 403);
@@ -112,6 +141,12 @@ export class PgProvidersRepository extends PgCreationContext {
     const c = this.c;
 
     await this.auth(c, p, true);
+    await this.c.query("SELECT pg_advisory_xact_lock(72110407)");
+    if (
+      (await this.c.query("SELECT managed FROM model_catalog_state WHERE id=1"))
+        .rows[0].managed
+    )
+      throw new AppError("MODEL_CATALOG_MANAGED", 409);
     if (
       !(
         await c.query(

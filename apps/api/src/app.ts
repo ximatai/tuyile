@@ -1,3 +1,4 @@
+import { modelCatalogRoutes } from "./model-catalog-routes.js";
 import { administrationRoutes } from "./administration-routes.js";
 import type { AdministrationService } from "@tuyile/core";
 import { libraryRoutes } from "./library-routes.js";
@@ -49,6 +50,7 @@ export function createApp(
   agent?: AgentService,
   library?: LibraryService,
   administration?: AdministrationService,
+  catalog?: import("@tuyile/core").ModelCatalogService,
 ) {
   const app = new Hono<ApiEnv>();
   app.use("*", async (c, next) => {
@@ -80,6 +82,7 @@ export function createApp(
   app.use("/api/*", async (c, next) =>
     bodyLimit({
       maxSize:
+        c.req.path.startsWith("/api/model-admin/") ||
         c.req.path.startsWith("/api/agent/") ||
         /^\/api\/projects\/[^/]+\/canvas/.test(c.req.path)
           ? 1024 * 1024
@@ -247,6 +250,7 @@ export function createApp(
   if (library && creation) libraryRoutes(app, library, creation);
   if (agent) agentRoutes(app, agent);
   if (canvas) canvasRoutes(app, canvas);
+  if (catalog) modelCatalogRoutes(app, catalog);
   if (extensions) extensionRoutes(app, extensions);
   app.notFound((c) =>
     c.json(

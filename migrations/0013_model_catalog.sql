@@ -1,0 +1,12 @@
+CREATE TABLE model_catalog_state(id integer PRIMARY KEY CHECK(id=1),managed boolean NOT NULL DEFAULT false,revision integer NOT NULL DEFAULT 0);
+INSERT INTO model_catalog_state(id) VALUES(1);
+CREATE TABLE model_services(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),name text NOT NULL,revision integer NOT NULL DEFAULT 1,enabled boolean NOT NULL DEFAULT true,revoked boolean NOT NULL DEFAULT false,current_version uuid, catalog_updated_at timestamptz,created_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE model_service_versions(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),service_id uuid NOT NULL REFERENCES model_services(id),mode text NOT NULL CHECK(mode IN ('openai','fake')),base_url text NOT NULL,secret_cipher text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),UNIQUE(service_id,id));
+ALTER TABLE model_services ADD FOREIGN KEY(id,current_version) REFERENCES model_service_versions(service_id,id) DEFERRABLE INITIALLY DEFERRED;
+CREATE TABLE service_model_catalog(service_id uuid NOT NULL REFERENCES model_services(id),model_id text NOT NULL,present boolean NOT NULL DEFAULT true,manual boolean NOT NULL DEFAULT false,PRIMARY KEY(service_id,model_id));
+ALTER TABLE image_provider_versions ADD COLUMN service_version_id uuid REFERENCES model_service_versions(id);
+ALTER TABLE planning_provider_versions ADD COLUMN service_version_id uuid REFERENCES model_service_versions(id);
+CREATE TABLE model_pool_entries(id uuid PRIMARY KEY,service_id uuid NOT NULL REFERENCES model_services(id),model_id text NOT NULL,kind text NOT NULL CHECK(kind IN ('image','conversation')),enabled boolean NOT NULL,is_default boolean NOT NULL,definition jsonb NOT NULL,image_provider_id uuid REFERENCES image_provider_versions(id),planning_provider_id uuid REFERENCES planning_provider_versions(id),UNIQUE(service_id,model_id,kind),CHECK(NOT is_default OR enabled),CHECK((kind='image' AND image_provider_id IS NOT NULL AND planning_provider_id IS NULL) OR (kind='conversation' AND planning_provider_id IS NOT NULL AND image_provider_id IS NULL)));
+CREATE UNIQUE INDEX model_pool_default ON model_pool_entries(kind) WHERE is_default AND enabled;
+ALTER TABLE planning_policies ADD COLUMN allowed_models jsonb NOT NULL DEFAULT '[]';
+GRANT SELECT,INSERT,UPDATE,DELETE ON model_catalog_state,model_services,model_service_versions,service_model_catalog,model_pool_entries TO tuyile_runtime;

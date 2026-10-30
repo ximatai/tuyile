@@ -69,13 +69,22 @@ class PgAdministrationRepository
       dailyLimit: row?.daily_limit ?? 50,
       concurrency: row?.concurrency ?? 1,
       queueLimit: row?.queue_limit ?? 10,
+      ...(row?.allowed_models?.length
+        ? { allowedModels: row.allowed_models }
+        : {}),
     };
   }
   async savePolicy(p: Principal, id: string, input: PlanningPolicy) {
     await this.target(p, id);
     await this.c.query(
-      "INSERT INTO planning_policies(user_id,daily_limit,concurrency,queue_limit) VALUES($1,$2,$3,$4) ON CONFLICT(user_id) DO UPDATE SET daily_limit=excluded.daily_limit,concurrency=excluded.concurrency,queue_limit=excluded.queue_limit",
-      [id, input.dailyLimit, input.concurrency, input.queueLimit],
+      "INSERT INTO planning_policies(user_id,daily_limit,concurrency,queue_limit,allowed_models) VALUES($1,$2,$3,$4,$5) ON CONFLICT(user_id) DO UPDATE SET daily_limit=excluded.daily_limit,concurrency=excluded.concurrency,queue_limit=excluded.queue_limit,allowed_models=excluded.allowed_models",
+      [
+        id,
+        input.dailyLimit,
+        input.concurrency,
+        input.queueLimit,
+        JSON.stringify(input.allowedModels ?? []),
+      ],
     );
     await this.c.query(
       "INSERT INTO administration_audit(actor_id,target_id,action,values) VALUES($1,$2,'planning-policy',$3)",

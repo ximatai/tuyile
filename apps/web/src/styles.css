@@ -1838,3 +1838,139 @@ form {
     grid-template-columns: 90px minmax(0, 1fr) 90px minmax(0, 1fr);
   }
 }
+/* Model services: connection first, then explicit candidate-to-pool publication. */
+.model-service-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  flex-wrap: wrap;
+}
+.model-service-bar > .field {
+  min-width: 220px;
+  flex: 0 1 260px;
+}
+.model-service-summary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex: 1;
+  flex-wrap: wrap;
+  min-width: 180px;
+  min-height: 44px;
+}
+.model-service-summary > span:not(.ant-tag) {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.model-catalog-grid {
+  display: grid;
+  grid-template-columns: minmax(250px, 0.95fr) repeat(2, minmax(270px, 1fr));
+  gap: 20px;
+  align-items: start;
+  margin-top: 24px;
+}
+.model-catalog-grid > section {
+  min-width: 0;
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.model-pool-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.model-pool-heading h2 {
+  margin: 0;
+}
+.model-pool-entry {
+  font-size: 14px;
+  padding: 16px 0;
+  border-bottom: 1px solid var(--line);
+}
+.model-pool-entry-title {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.model-pool-entry-title strong,
+.model-identifier strong {
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+.model-pool-entry-title > .ant-checkbox-wrapper {
+  flex-shrink: 0;
+}
+.model-capability-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 10px 0;
+}
+.model-pool-panel .ant-radio-group {
+  display: block;
+}
+.model-entry-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.model-entry-actions .button,
+.model-add-actions .button {
+  height: 30px;
+  min-height: 30px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+.model-add-actions {
+  display: grid;
+  gap: 6px;
+}
+.model-identifier small {
+  display: block;
+  color: var(--muted);
+  margin-top: 6px;
+}
+.model-catalog-candidates .ant-table-wrapper {
+  margin: 12px 0;
+}
+.model-pool-empty {
+  padding: 50px 8px;
+  text-align: center;
+  color: var(--muted);
+}
+.model-pool-save {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  margin-top: 20px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  z-index: 4;
+}
+.model-service-actions summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+}
+@media (max-width: 1300px) {
+  .model-catalog-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .model-catalog-candidates {
+    grid-column: 1/-1;
+  }
+}

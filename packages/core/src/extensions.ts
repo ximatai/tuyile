@@ -49,7 +49,10 @@ export interface ExtensionsRepository {
   planningProviders(p: Principal): Promise<PlanningProviderView[]>;
   revokePlanning(p: Principal, id: string): Promise<void>;
   planningConfig(id: string): Promise<PlanningExecutionConfig>;
-  currentPlanning(): Promise<PlanningProviderView>;
+  currentPlanning(
+    p?: Principal,
+    selectionId?: string,
+  ): Promise<PlanningProviderView>;
   tools(): Promise<
     { id: string; version: number; enabled: boolean; revoked: boolean }[]
   >;

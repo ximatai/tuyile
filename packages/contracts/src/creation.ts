@@ -10,6 +10,7 @@ export const imageInput = z.object({
     .max(12000)
     .regex(/^[^\u0000]+$/),
   model: z.string().min(1).max(120),
+  modelSelectionId: z.uuid().optional(),
   width: z.number().int().min(256).max(8192).multipleOf(16),
   height: z.number().int().min(256).max(8192).multipleOf(16),
   quality: z.enum(["low", "medium", "high"]),
@@ -84,6 +85,7 @@ export interface ImageUsage {
   policy: ImagePolicy;
   models: string[];
   providerMode: string | null;
+  modelOptions?: import("./model-catalog.js").ModelChoice[];
   capabilities: ImageCapability[];
 }
 export interface ProviderView {

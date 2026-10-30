@@ -5,8 +5,9 @@ import type {
   ExecutionSettings,
   PlanningPolicy,
   UsersPage,
+  ModelCatalogSnapshot,
 } from "@tuyile/contracts";
-import { Button, ChoiceField, Field, Notice, Table } from "@tuyile/ui";
+import { Button, ChoiceField, Field, Notice, Table, Select } from "@tuyile/ui";
 import { useSessionState } from "./session-state";
 import { client } from "./api";
 export function OperationsAdmin() {
@@ -250,6 +251,15 @@ function PlanningPolicyForm({ userId }: { userId: string }) {
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [message, setMessage] = useState("");
+  const modelCatalog = useQuery({
+    queryKey: state.key("model-catalog"),
+    queryFn: ({ signal }) =>
+      client(state.session.csrfToken)<ModelCatalogSnapshot>(
+        "/model-admin/catalog",
+        undefined,
+        signal,
+      ),
+  });
   const query = useQuery({
       queryKey: state.key("planning-policy", userId),
       queryFn: ({ signal }) =>
@@ -332,6 +342,24 @@ function PlanningPolicyForm({ userId }: { userId: string }) {
           }
         />
       </div>
+      <label className="field">
+        <span>允许的对话模型</span>
+        <Select
+          mode="multiple"
+          aria-label="允许的对话模型"
+          value={current.allowedModels ?? []}
+          options={
+            modelCatalog.data?.entries
+              .filter((e) => e.kind === "conversation")
+              .map((e) => ({
+                value: e.id,
+                label: `${e.modelId} · ${modelCatalog.data!.services.find((s) => s.id === e.serviceId)?.name ?? "服务不可用"}`,
+              })) ?? []
+          }
+          onChange={(allowedModels) => setDraft({ ...current, allowedModels })}
+          placeholder="留空跟随全局对话池"
+        />
+      </label>
       <p className="hint">
         降低次数上限只阻止新的超额提交，已接受的预留继续保留。
       </p>

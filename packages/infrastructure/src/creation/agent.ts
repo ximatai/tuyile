@@ -302,7 +302,20 @@ export class PgAgentRepository
     ).rows[0];
     if (!row) return;
     const authorized = await this.ready(work);
-    const result = authorized ? document : undefined;
+    const result =
+      authorized && document
+        ? {
+            ...document,
+            steps: document.steps.map((step) => ({
+              ...step,
+              ...(!step.modelSelectionId &&
+              row.input.modelSelectionId &&
+              step.model === row.input.model
+                ? { modelSelectionId: row.input.modelSelectionId }
+                : {}),
+            })),
+          }
+        : undefined;
     if (!row.charged)
       await this.c.query(
         "UPDATE planning_days SET held=held-1 WHERE user_id=$1 AND day=$2",

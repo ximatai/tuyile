@@ -291,3 +291,4 @@ export * from "./agent.js";
 export * from "./planning-executor.js";
 export * from "./library.js";
 export * from "./administration.js";
+export * from './model-catalog.js';

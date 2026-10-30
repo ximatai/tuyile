@@ -161,3 +161,4 @@ export {
   ConfigProvider as ControlScope,
 } from "antd";
 export { Select } from "antd";
+export { Drawer, Card, Radio, Tooltip } from "antd";

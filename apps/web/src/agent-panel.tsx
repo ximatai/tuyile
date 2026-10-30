@@ -11,6 +11,8 @@ import {
   type PlanningRequest,
   type PlanningUsage,
   type SkillView,
+  type UserModelPools,
+  type ModelChoice,
 } from "@tuyile/contracts";
 import {
   Button,
@@ -58,6 +60,7 @@ export function AgentPanel({
   const [prompt, setPrompt] = useState(""),
     [skillId, setSkillId] = useState(""),
     [model, setModel] = useState(""),
+    [conversationModel, setConversationModel] = useState(""),
     [current, setCurrent] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
@@ -78,6 +81,19 @@ export function AgentPanel({
       page.jobs.length === 50 ? pages.length * 50 : undefined,
     refetchInterval: 1500,
   });
+  const modelPools = useQuery({
+    queryKey: state.key("model-pools"),
+    queryFn: ({ signal }) => api<UserModelPools>("/models", undefined, signal),
+    refetchInterval: 10000,
+  });
+  useEffect(() => {
+    const options = modelPools.data?.conversation ?? [];
+    setConversationModel((old) =>
+      options.some((e) => e.id === old)
+        ? old
+        : (options.find((e) => e.isDefault)?.id ?? options[0]?.id ?? ""),
+    );
+  }, [modelPools.data]);
   const planning = useQuery({
     queryKey: state.key("planning-usage"),
     queryFn: ({ signal }) =>
@@ -92,7 +108,15 @@ export function AgentPanel({
   useEffect(() => {
     if (usage)
       setModel((old) =>
-        usage.models.includes(old) ? old : (usage.models[0] ?? ""),
+        usage.modelOptions
+          ? usage.modelOptions.some((e) => e.id === old)
+            ? old
+            : (usage.modelOptions.find((e) => e.isDefault)?.id ??
+              usage.modelOptions[0]?.id ??
+              "")
+          : usage.models.includes(old)
+            ? old
+            : (usage.models[0] ?? ""),
       );
   }, [usage]);
   const history = jobs.data?.pages.flatMap((page) => page.jobs) ?? [];
@@ -122,7 +146,9 @@ export function AgentPanel({
       projectId,
       requestKey: crypto.randomUUID(),
       prompt,
-      model,
+      model: usage?.modelOptions?.find((e) => e.id === model)?.modelId ?? model,
+      ...(usage?.modelOptions ? { modelSelectionId: model } : {}),
+      ...(conversationModel ? { conversationModelId: conversationModel } : {}),
       width: 1024,
       height: 1024,
       quality: "medium" as const,
@@ -254,6 +280,7 @@ export function AgentPanel({
             plan={plan}
             visible={visible}
             models={usage?.models ?? []}
+            modelOptions={usage?.modelOptions}
             references={references}
             busy={busy}
             setBusy={setBusy}
@@ -284,11 +311,22 @@ export function AgentPanel({
               items={[
                 {
                   key: "settings",
-                  label: `创作设置 · ${skillId ? "已选技能" : "通用创作"} · ${model || "未配置模型"}`,
+                  label: `创作设置 · ${skillId ? "已选技能" : "通用创作"} · ${usage?.modelOptions?.find((e) => e.id === model)?.modelId || model || "未配置模型"}`,
                   children: (
                     <>
                       {" "}
                       <div className="agent-options">
+                        {!!modelPools.data?.conversation.length && (
+                          <ChoiceField
+                            label="对话模型"
+                            value={conversationModel}
+                            onValueChange={setConversationModel}
+                            options={modelPools.data.conversation.map((m) => ({
+                              value: m.id,
+                              label: `${m.modelId} · ${m.serviceName}`,
+                            }))}
+                          />
+                        )}
                         <ChoiceField
                           label="创作技能"
                           value={skillId}
@@ -305,10 +343,16 @@ export function AgentPanel({
                           label="Agent 图片模型"
                           value={model}
                           onValueChange={setModel}
-                          options={(usage?.models ?? []).map((m) => ({
-                            value: m,
-                            label: m,
-                          }))}
+                          options={
+                            usage?.modelOptions?.map((m) => ({
+                              value: m.id,
+                              label: `${m.modelId} · ${m.serviceName}`,
+                            })) ??
+                            (usage?.models ?? []).map((m) => ({
+                              value: m,
+                              label: m,
+                            }))
+                          }
                         />
                       </div>
                       <div className="agent-references">
@@ -411,6 +455,7 @@ function PlanCard({
   plan,
   visible,
   models,
+  modelOptions,
   references,
   busy,
   setBusy,
@@ -420,6 +465,7 @@ function PlanCard({
   plan: AgentPlanVersion;
   visible: boolean;
   models: string[];
+  modelOptions?: ModelChoice[];
   references: { id: string; name: string }[];
   busy: boolean;
   setBusy: (v: boolean) => void;
@@ -687,12 +733,39 @@ function PlanCard({
                   />
                   <ChoiceField
                     label={`步骤 ${index + 1} 模型`}
-                    value={step.model}
-                    onValueChange={(model) => patch(index, { model })}
-                    options={[...new Set([...models, step.model])].map((m) => ({
-                      value: m,
-                      label: m,
-                    }))}
+                    value={step.modelSelectionId ?? step.model}
+                    onValueChange={(value) => {
+                      const selected = modelOptions?.find(
+                        (e) => e.id === value,
+                      );
+                      patch(index, {
+                        model: selected?.modelId ?? value,
+                        modelSelectionId: selected?.id,
+                      });
+                    }}
+                    options={
+                      modelOptions
+                        ? [
+                            ...modelOptions.map((e) => ({
+                              value: e.id,
+                              label: `${e.modelId} · ${e.serviceName}`,
+                            })),
+                            ...(!modelOptions.some(
+                              (e) => e.id === step.modelSelectionId,
+                            )
+                              ? [
+                                  {
+                                    value: step.modelSelectionId ?? step.model,
+                                    label: `${step.model}（原选择）`,
+                                  },
+                                ]
+                              : []),
+                          ]
+                        : [...new Set([...models, step.model])].map((m) => ({
+                            value: m,
+                            label: m,
+                          }))
+                    }
                   />
                   <Field
                     label={`步骤 ${index + 1} 宽度`}
