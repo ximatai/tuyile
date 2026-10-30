@@ -3178,3 +3178,18 @@ h3 {
 .model-custom-size > .button {
   justify-self: start;
 }
+
+.user-policy-editor {
+  margin-top: 24px;
+}
+.user-policy-save {
+  position: sticky;
+  bottom: -24px;
+  padding: 12px 0;
+  background: var(--ant-color-bg-container, #fff);
+  border-top: 1px solid var(--ant-color-border-secondary, #edf0f4);
+  z-index: 1;
+}
+.user-policy-save > button {
+  width: 100%;
+}

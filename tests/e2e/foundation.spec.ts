@@ -40,11 +40,47 @@ test("desktop and mobile: persistent projects, activation, account boundaries an
   await expect(
     page.getByRole("heading", { name: "品牌视觉方案" }),
   ).toBeVisible();
-  await page.getByRole("link", { name: "账号管理", exact: true }).click();
+  await page.getByRole("link", { name: "用户管理", exact: true }).click();
   await page.getByLabel("新账号").fill("designer01");
   await page.getByRole("button", { name: "创建账号", exact: true }).click();
   await expect(page.getByLabel("新账号")).toHaveValue("");
   const activation = await page.getByLabel("复制交付链接").inputValue();
+  await page
+    .getByRole("row")
+    .filter({ hasText: "designer01" })
+    .getByRole("button", { name: "管理", exact: true })
+    .click();
+  const drawer = page.getByRole("dialog", { name: "designer01" });
+  const quota = drawer.getByLabel("每日图片额度", { exact: true });
+  await expect(quota).toBeVisible();
+  const originalQuota = await quota.inputValue();
+  await quota.fill("7");
+  await drawer.getByRole("button", { name: "关闭", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "请确认" })
+    .getByRole("button", { name: "取消", exact: true })
+    .click();
+  await expect(quota).toHaveValue("7");
+  await drawer
+    .getByRole("button", { name: "保存用户配置", exact: true })
+    .click();
+  await expect(drawer.getByText("已保存。", { exact: true })).toBeVisible();
+  await drawer.getByRole("button", { name: "关闭", exact: true }).click();
+  await expect(drawer).toBeHidden();
+  await page
+    .getByRole("row")
+    .filter({ hasText: "designer01" })
+    .getByRole("button", { name: "管理", exact: true })
+    .click();
+  await expect(quota).toHaveValue("7");
+  await quota.fill(originalQuota);
+  await drawer
+    .getByRole("button", { name: "保存用户配置", exact: true })
+    .click();
+  await expect(drawer.getByText("已保存。", { exact: true })).toBeVisible();
+  await drawer.getByRole("button", { name: "关闭", exact: true }).click();
+  await expect(drawer).toBeHidden();
+
   await expect(
     page.getByRole("row").filter({ hasText: "designer01" }),
   ).toContainText("待激活");
@@ -69,7 +105,7 @@ test("desktop and mobile: persistent projects, activation, account boundaries an
   await member.getByRole("button", { name: "登录", exact: true }).click();
   await expect(member.getByRole("heading", { name: "我的项目" })).toBeVisible();
   await expect(
-    member.getByRole("link", { name: "账号管理", exact: true }),
+    member.getByRole("link", { name: "用户管理", exact: true }),
   ).toHaveCount(0);
   await expect(member.getByText("从第一个项目开始")).toBeVisible();
   await member.getByLabel("项目名称").fill("我的插画");
@@ -160,8 +196,8 @@ test("desktop and mobile: persistent projects, activation, account boundaries an
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.getByRole("link", { name: "账号管理", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "账号管理" })).toBeVisible();
+  await page.getByRole("link", { name: "用户管理", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "用户管理" })).toBeVisible();
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
@@ -179,7 +215,7 @@ test("same login tab consumes a new activation and then a reset link", async ({
   browser,
 }) => {
   await login(page);
-  await page.getByRole("link", { name: "账号管理", exact: true }).click();
+  await page.getByRole("link", { name: "用户管理", exact: true }).click();
   await page.getByLabel("新账号").fill("hashuser02");
   await page.getByRole("button", { name: "创建账号", exact: true }).click();
   const activation = await page.getByLabel("复制交付链接").inputValue();
@@ -200,8 +236,9 @@ test("same login tab consumes a new activation and then a reset link", async ({
   await page
     .getByRole("row")
     .filter({ hasText: "hashuser02" })
-    .getByRole("button", { name: "重新生成链接" })
+    .getByRole("button", { name: "管理", exact: true })
     .click();
+  await page.getByRole("button", { name: "重新生成链接" }).click();
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "确认", exact: true })

@@ -2,8 +2,17 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { useSessionState } from "./session-state";
 import { useState, type FormEvent } from "react";
 import type { UserView, LinkResult, UsersPage } from "@tuyile/contracts";
-import { Button, Field, Notice, useConfirm, Table, Modal } from "@tuyile/ui";
+import {
+  Button,
+  Field,
+  Notice,
+  useConfirm,
+  Table,
+  Modal,
+  Drawer,
+} from "@tuyile/ui";
 import { client, notifySessionChange } from "./api";
+import { UserPolicyEditor } from "./user-policy-editor";
 export function AdminPage({
   csrfToken,
   ownId,
@@ -11,6 +20,10 @@ export function AdminPage({
   csrfToken: string;
   ownId: string;
 }) {
+  const [selectedId, setSelectedId] = useState("");
+  const [search, setSearch] = useState("");
+  const [policyBusy, setPolicyBusy] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const [createVersion, setCreateVersion] = useState(0);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
@@ -34,6 +47,14 @@ export function AdminPage({
     ],
     loading = query.isPending,
     hasMore = query.hasNextPage;
+  const selectedUser = users.find((u) => u.id === selectedId);
+  async function selectUser(id: string) {
+    if (id === selectedId || policyBusy) return;
+    if (dirty && !(await confirm("有未保存的用户配置，放弃修改？"))) return;
+    setDirty(false);
+    setError("");
+    setSelectedId(id);
+  }
   async function action(run: () => Promise<LinkResult | unknown>) {
     setBusy(true);
     setError("");
@@ -83,10 +104,46 @@ export function AdminPage({
     });
   }
   const url = link ? `${location.origin}/login#${link.kind}=${link.token}` : "";
+  const linkResult = link ? (
+    <section className="link-result" aria-label="账号链接">
+      {link.user.id === ownId && (
+        <Notice>
+          当前会话已结束。请保存此链接并打开，设置新密码后重新登录。
+        </Notice>
+      )}
+      <h2>
+        {link.kind === "activate" ? "激活链接" : "重置链接"}：
+        {link.user.username}
+      </h2>
+      <p>
+        仅展示此次，请通过可信渠道交付。有效期至{" "}
+        {new Date(link.expiresAt).toLocaleString("zh-CN")}，使用一次即失效。
+      </p>
+      <Field
+        label="复制交付链接"
+        value={url}
+        readOnly
+        onFocus={(e) => e.target.select()}
+      />
+      <div className="actions">
+        <Button
+          onClick={() => {
+            void navigator.clipboard
+              .writeText(url)
+              .then(() => setCopied(true))
+              .catch(() => setError("自动复制失败，请选中链接手动复制。"));
+          }}
+        >
+          {copied ? "已复制" : "复制链接"}
+        </Button>
+        <Button onClick={() => setLink(null)}>隐藏链接</Button>
+      </div>
+    </section>
+  ) : null;
   return (
     <section>
       <p className="eyebrow">管理</p>
-      <h1>账号管理</h1>
+      <h1>用户管理</h1>
       <form
         key={createVersion}
         onSubmit={create}
@@ -109,48 +166,21 @@ export function AdminPage({
       {(error || query.error) && (
         <Notice error>{error || query.error?.message}</Notice>
       )}
-      {link && (
-        <section className="link-result" aria-label="账号链接">
-          {link.user.id === ownId && (
-            <Notice>
-              当前会话已结束。请保存此链接并打开，设置新密码后重新登录。
-            </Notice>
-          )}
-          <h2>
-            {link.kind === "activate" ? "激活链接" : "重置链接"}：
-            {link.user.username}
-          </h2>
-          <p>
-            仅展示此次，请通过可信渠道交付。有效期至{" "}
-            {new Date(link.expiresAt).toLocaleString("zh-CN")}，使用一次即失效。
-          </p>
-          <Field
-            label="复制交付链接"
-            value={url}
-            readOnly
-            onFocus={(e) => e.target.select()}
-          />
-          <div className="actions">
-            <Button
-              onClick={() => {
-                void navigator.clipboard
-                  .writeText(url)
-                  .then(() => setCopied(true))
-                  .catch(() => setError("自动复制失败，请选中链接手动复制。"));
-              }}
-            >
-              {copied ? "已复制" : "复制链接"}
-            </Button>
-            <Button onClick={() => setLink(null)}>隐藏链接</Button>
-          </div>
-        </section>
-      )}
+      {!selectedUser && linkResult}
+      <Field
+        label="搜索用户"
+        placeholder="用户名"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
       {loading ? (
         <p role="status">正在加载账号…</p>
       ) : (
         <Table<UserView>
           rowKey="id"
-          dataSource={users}
+          dataSource={users.filter((u) =>
+            u.username.includes(search.trim().toLowerCase()),
+          )}
           pagination={false}
           scroll={{ x: 620 }}
           columns={[
@@ -158,7 +188,7 @@ export function AdminPage({
             {
               title: "角色",
               key: "role",
-              render: (_, u) => (u.role === "admin" ? "管理员" : "成员"),
+              render: (_, u) => (u.role === "admin" ? "管理员" : "用户"),
             },
             {
               title: "状态",
@@ -175,41 +205,8 @@ export function AdminPage({
               key: "actions",
               render: (_, u) => (
                 <div className="actions">
-                  <Button
-                    type="button"
-                    disabled={busy || !u.enabled}
-                    onClick={async () => {
-                      if (
-                        await confirm(
-                          `重新生成 ${u.username} 的链接？旧链接和旧密码将失效，所有设备退出登录；请保存新链接。`,
-                        )
-                      )
-                        void action(() =>
-                          api(`/admin/users/${u.id}/reset`, {}),
-                        );
-                    }}
-                  >
-                    重新生成链接
-                  </Button>
-                  <Button
-                    type="button"
-                    disabled={busy || u.id === ownId}
-                    onClick={async () => {
-                      if (
-                        u.enabled &&
-                        !(await confirm(
-                          `停用 ${u.username}？所有设备会退出登录，已确认任务的执行授权也将撤销。`,
-                        ))
-                      )
-                        return;
-                      void action(() =>
-                        api(`/admin/users/${u.id}/enabled`, {
-                          enabled: !u.enabled,
-                        }),
-                      );
-                    }}
-                  >
-                    {u.enabled ? "停用" : "启用"}
+                  <Button type="button" onClick={() => void selectUser(u.id)}>
+                    管理
                   </Button>
                 </div>
               ),
@@ -217,6 +214,76 @@ export function AdminPage({
           ]}
         />
       )}
+      <Drawer
+        title={selectedUser?.username ?? "用户配置"}
+        open={!!selectedUser}
+        size={560}
+        onClose={() => void selectUser("")}
+        destroyOnHidden
+      >
+        {selectedUser && (
+          <>
+            {error && <Notice error>{error}</Notice>}
+            {link?.user.id === selectedId && linkResult}
+            <section aria-label="账号信息">
+              <h3>账号</h3>
+              <p>
+                {selectedUser.role === "admin" ? "管理员" : "用户"} ·{" "}
+                {!selectedUser.enabled
+                  ? "已停用"
+                  : selectedUser.activated
+                    ? "已激活"
+                    : "待激活"}
+              </p>
+              <div className="actions">
+                <Button
+                  type="button"
+                  disabled={busy || !selectedUser.enabled}
+                  onClick={async () => {
+                    if (
+                      await confirm(
+                        `重新生成 ${selectedUser.username} 的链接？旧链接和旧密码将失效，所有设备退出登录；请保存新链接。`,
+                      )
+                    )
+                      void action(() =>
+                        api(`/admin/users/${selectedUser.id}/reset`, {}),
+                      );
+                  }}
+                >
+                  重新生成链接
+                </Button>
+                <Button
+                  type="button"
+                  disabled={busy || selectedUser.id === ownId}
+                  onClick={async () => {
+                    if (
+                      selectedUser.enabled &&
+                      !(await confirm(
+                        `停用 ${selectedUser.username}？所有设备会退出登录，已确认任务的执行授权也将撤销。`,
+                      ))
+                    )
+                      return;
+                    void action(() =>
+                      api(`/admin/users/${selectedUser.id}/enabled`, {
+                        enabled: !selectedUser.enabled,
+                      }),
+                    );
+                  }}
+                >
+                  {selectedUser.enabled ? "停用" : "启用"}
+                </Button>
+              </div>
+            </section>
+            <UserPolicyEditor
+              key={selectedUser.id}
+              userId={selectedUser.id}
+              csrfToken={csrfToken}
+              onDirtyChange={setDirty}
+              onBusyChange={setPolicyBusy}
+            />
+          </>
+        )}
+      </Drawer>
       {hasMore && (
         <Button disabled={busy} onClick={() => void more()}>
           {busy ? "正在加载…" : "加载更多账号"}
