@@ -1,5 +1,7 @@
 # M4 本地技术验收
 
+> 历史归档（2026-10-30）：保留当时的计划、失败修正与验收证据。其中阶段状态和过渡规则不作为当前执行要求；现行文档见[文档索引](../../../README.md)。
+
 日期：2026-10-30。状态：主代理验收及唯一独立review通过，M4完成。范围为本地运行、HTTPS代理材料及合成备份恢复；旧业务数据迁移已取消，未执行公开部署。
 
 ## 实现与核验
@@ -14,9 +16,9 @@
 | HTTPS与代理 | 原Nginx模板在固定官方1.30.6镜像通过语法/证书检查；本地实际运行该代理配置，仅替换演练上游IPv4地址，浏览器请求经过Nginx到production编译API。 |
 | 私有资源 | Secure/HttpOnly/SameSite=Strict Cookie、CSP、任务轮询、原图下载哈希与no-store通过；跨账号项目/原图404、成员管理403、匿名原图401。 |
 | 清理与故障 | 正常结束清理临时代理、恢复卷和API，恢复原测试容器。克隆后有意中断预期退出非零，仍清理并恢复原实例，不写成功报告。硬终止时按run.json核对进程/容器后处理。 |
-| 运行材料 | [运行与恢复手册](../operations.md)、[production覆盖文件](../../compose.production.yaml)、[Nginx模板](../../deploy/nginx.conf.example)、排他锁保护的 `test:recovery` 已提供。 |
+| 运行材料 | [运行与恢复手册](../../../operations.md)、[production覆盖文件](../../../../compose.production.yaml)、[Nginx模板](../../../../deploy/nginx.conf.example)、排他锁保护的 `test:recovery` 已提供。 |
 
-测试实现见 [本地恢复演练](../../tests/recovery/local-recovery.ts)。报告、dump、自签证书、Nginx日志和HTTPS截图位于被忽略的 `.codex-temp/m4-recovery-*`；不提交凭据或生成产物。
+测试实现见 [本地恢复演练](../../../../tests/recovery/local-recovery.ts)。报告、dump、自签证书、Nginx日志和HTTPS截图位于被忽略的 `.codex-temp/m4-recovery-*`；不提交凭据或生成产物。
 
 ## 过程与结果
 

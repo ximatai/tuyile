@@ -1,5 +1,7 @@
 # Tuyile 架构专项治理
 
+> 历史归档（2026-10-30）：保留当时的计划、失败修正与验收证据。其中阶段状态和过渡规则不作为当前执行要求；现行文档见[文档索引](../../README.md)。
+
 日期：2026-10-29。审阅基线：M2 提交 `a1acb8c`。状态：G1—G6 已随 M3 五步完成并通过自查与独立 review；M4 本地技术验收及独立review完成。本文件记录当前必须处理的结构问题和验收要求，不把设计完成视为实现完成。
 
 ## 1. 目标与适用范围
@@ -8,7 +10,7 @@
 
 保持 TypeScript 模块化单体、React/Vite/Ant Design、Hono、PostgreSQL、一个 Worker、HTTP 轮询和私有图片卷。此次治理集中于即将随画布、Agent 和图库增长的业务边界，不更换技术栈，不建设通用平台。
 
-文档分工：业务以 [产品基线](product-baseline.md) 为准，整体技术边界见 [架构设计](architecture.md)，本文件规定治理差距、最低实现和验收；交付仍遵循 [工程执行计划](exec-plans/active/tuyile-foundation.md) 和 [路线图](delivery-roadmap.md)。治理作为 M3 内部前置及集成工作，不新增里程碑、不拆分阶段提交。原文档轮次已结束；当前 M3 按工程执行计划第 14 节的五步提交与逐次 review 安排推进。
+文档分工：业务以 [产品基线](../../product-baseline.md) 为准，整体技术边界见 [架构设计](../../architecture.md)，本文件规定治理差距、最低实现和验收；交付仍遵循 [工程执行计划](tuyile-foundation.md) 和 [路线图](../../delivery-roadmap.md)。治理作为 M3 内部前置及集成工作，不新增里程碑、不拆分阶段提交。原文档轮次已结束；当前 M3 按工程执行计划第 14 节的五步提交与逐次 review 安排推进。
 
 ## 2. 本轮已确认的业务决定
 
@@ -43,7 +45,7 @@
 | G5 服务能力与配置 | 执行复用管理表单 ProviderInput；模型主要是字符串；单一图片服务配置 | 支持独立规划服务，准入前识别模型不支持的请求 | 规划 Provider 接入前 |
 | G6 技能与工具扩展 | 仅有全局 Skills 的业务方向，尚无注册与执行契约 | 新增创作能力不重写队列、结算和前端主流程 | Agent 规划、确认、执行集成时 |
 
-证据入口：[核心创作用例](../packages/core/src/creation.ts)、[PG 创作仓储](../packages/infrastructure/src/creation-repository.ts)、[HTTP 路由](../apps/api/src/creation-routes.ts)、[现有表结构](../migrations/0002_creation.sql)、[创作页面](../apps/web/src/creation.tsx)、[应用入口](../apps/web/src/main.tsx)、[模型适配器](../packages/infrastructure/src/image-provider.ts)。这些是静态审阅结论，不代表已测得线上性能故障。
+证据入口：[核心创作用例](../../../packages/core/src/creation.ts)、[PG 创作仓储](../../../packages/infrastructure/src/creation-repository.ts)、[HTTP 路由](../../../apps/api/src/creation-routes.ts)、[现有表结构](../../../migrations/0002_creation.sql)、[创作页面](../../../apps/web/src/creation.tsx)、[应用入口](../../../apps/web/src/main.tsx)、[模型适配器](../../../packages/infrastructure/src/image-provider.ts)。这些是静态审阅结论，不代表已测得线上性能故障。
 
 ## 4. 治理规格与验收
 

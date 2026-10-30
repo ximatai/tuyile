@@ -1,12 +1,14 @@
 # M3 工作台验收记录
 
+> 历史归档（2026-10-30）：保留当时的计划、失败修正与验收证据。其中阶段状态和过渡规则不作为当前执行要求；现行文档见[文档索引](../../../README.md)。
+
 日期：2026-10-30。状态：主代理整体验收及第五步独立 review 均通过，M3完成；本记录不代表整个用户目标完成。
 
 ## 范围与证据
 
 | 要求 | 当前实现与核验 |
 | --- | --- |
-| G1 事务与用例边界 | API/Worker 经 core 用例，共享事务内完成任务、预留、引用和输出结算；[集成测试](../../tests/integration/creation.test.ts)覆盖失败回滚与竞争。 |
+| G1 事务与用例边界 | API/Worker 经 core 用例，共享事务内完成任务、预留、引用和输出结算；[集成测试](../../../../tests/integration/creation.test.ts)覆盖失败回滚与竞争。 |
 | G2 输出与额度 | 本地成功输出才消费图片次数，预留/流水/汇总可对账；未知保留、晚到及重复处置不重扣，原图删除不退款。 |
 | G3 查询与锁 | 只读事务不写业务数据，用户级写锁及队列锁协议；规划列表批量读取，每页50作业、每作业最新50版本，旧版本仍可按ID确认。 |
 | G4 前端状态 | 显式路由、会话范围查询缓存、项目编辑 store、revision冲突和输出回执；切换/注销清理、响应丢失与重复轮询已回归。 |
@@ -17,7 +19,7 @@
 | 管理 | 账号、服务、技能、用户策略、执行设置、脱敏统计/错误/审计和图片/规划对账；管理员无用户正文及图片查看特权。 |
 | 桌面体验 | A布局/B折叠窄轨；计划默认摘要、显式编辑，固定确认；模型设置可展开。构建版额外核对1440×900/1920×1080两步计划完整可见及确认按钮边界。 |
 
-测试实现分别见 [Agent](../../tests/integration/agent.test.ts)、[图库](../../tests/integration/library.test.ts)、[管理](../../tests/integration/administration.test.ts)、[浏览器主流程](../../tests/e2e/foundation.spec.ts)和 [Docker浏览器](../../scripts/docker-browser-smoke.ts)。原始日志和截图保存在忽略目录，不进入Git。
+测试实现分别见 [Agent](../../../../tests/integration/agent.test.ts)、[图库](../../../../tests/integration/library.test.ts)、[管理](../../../../tests/integration/administration.test.ts)、[浏览器主流程](../../../../tests/e2e/foundation.spec.ts)和 [Docker浏览器](../../../../scripts/docker-browser-smoke.ts)。原始日志和截图保存在忽略目录，不进入Git。
 
 ## 实际检查
 

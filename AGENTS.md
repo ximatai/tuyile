@@ -1,9 +1,8 @@
 # Tuyile repository instructions
 
-Read docs/product-baseline.md, docs/architecture.md, docs/delivery-roadmap.md and the active engineering plan before product work. docs/development.md defines local commands and isolation.
+Read docs/README.md, docs/product-baseline.md, docs/architecture.md and docs/delivery-roadmap.md before product work. Read an active engineering plan when one is listed in docs/delivery-roadmap.md; completed plans in docs/archive/ are historical evidence, not pending instructions. docs/development.md defines local commands and isolation.
 
 - Main agent implements each complete stage personally. One stage, one commit, then self-review and one independent reviewer; fixes amend the stage commit. Do not delegate implementation or split stages into smaller deliveries.
-- User-approved M3 exception (2026-10-29): deliver the five steps in docs/exec-plans/active/tuyile-foundation.md section 14 as five commits. The main agent implements each step personally, validates and commits it, then invokes one sub-agent for review only. The main agent fixes findings and amends that step's commit; the same reviewer verifies fixes before the next step. This supersedes the earlier M3 no-sub-agent/no-split instruction. Do not split these steps further or delegate implementation.
 - Node version is pinned in .node-version; pnpm is pinned in package.json. Use corepack pnpm when the host's pnpm wrapper selects another runtime.
 - Before completing a code stage run typecheck/build and relevant unit, real PostgreSQL integration, browser and Docker checks. Never report a blocked check as passed.
 - Tests use only the dedicated tuyile_test database on loopback port 55440. Do not point reset/seed scripts at any other database. Never run integration and browser tests concurrently because both reset this database.
