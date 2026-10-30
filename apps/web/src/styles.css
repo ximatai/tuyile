@@ -3033,3 +3033,57 @@ h3 {
   justify-content: center;
   align-items: center;
 }
+
+.style-selector {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  min-width: 0;
+}
+.style-selector > .field {
+  flex: 1;
+  min-width: 0;
+}
+.style-selector .style-edit-trigger {
+  width: 32px;
+  min-width: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.style-editor-popover .ant-popover-container {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px #172f4b18;
+}
+.style-editor {
+  display: grid;
+  gap: 14px;
+  width: 340px;
+}
+.style-editor .field > label,
+.style-editor label.field > span {
+  font-size: 13px;
+  font-weight: 500;
+}
+.style-editor textarea {
+  resize: vertical;
+  min-height: 140px;
+  max-height: 280px;
+}
+.style-editor-footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+.style-editor-footer .style-reset {
+  margin-right: auto;
+  padding-inline: 0;
+  border-color: transparent;
+  box-shadow: none;
+  color: var(--muted);
+}

@@ -1,17 +1,16 @@
+import { StyleSelector } from "./style-selector";
 import { composeCreativePrompt, type CreationStyle } from "@tuyile/contracts";
 import { WandSparkles } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ComponentRef } from "react";
 import {
   Button,
-  ChoiceField,
-  Collapse,
   Input,
   Notice,
   Popover,
   Tooltip,
   useConfirm,
 } from "@tuyile/ui";
-import { promptExamples, stylePresets } from "./creation-presets";
+import { promptExamples } from "./creation-presets";
 export function PromptComposer({
   value,
   onChange,
@@ -41,10 +40,6 @@ export function PromptComposer({
   useEffect(() => {
     if (!visible) setAssistOpen(false);
   }, [visible]);
-  const preset = stylePresets.find(
-    (p) => p.label === style?.name && p.text === style?.text,
-  );
-  const styleKey = style ? (preset?.id ?? "custom") : "none";
   const issue =
     style && !style.text.trim()
       ? "请填写风格描述。"
@@ -74,51 +69,11 @@ export function PromptComposer({
           </Tooltip>
         ))}
       </div>
-      <ChoiceField
-        label="风格"
-        value={styleKey}
-        onValueChange={(next) => {
-          const selected = stylePresets.find((p) => p.id === next);
-          if (selected)
-            onStyleChange(
-              selected.text
-                ? { name: selected.label, text: selected.text }
-                : undefined,
-            );
-        }}
-        options={[
-          ...stylePresets.map((p) => ({ value: p.id, label: p.label })),
-          ...(styleKey === "custom"
-            ? [{ value: "custom", label: style?.name ?? "自定义风格" }]
-            : []),
-        ]}
+      <StyleSelector
+        style={style}
+        onChange={onStyleChange}
+        visible={visible && (!compact || assistOpen)}
       />
-      {style && (
-        <Collapse
-          ghost
-          size="small"
-          items={[
-            {
-              key: "style",
-              label: "编辑风格",
-              children: (
-                <Input.TextArea
-                  aria-label="风格描述"
-                  value={style.text}
-                  rows={3}
-                  maxLength={2000}
-                  onChange={(event) =>
-                    onStyleChange({
-                      name: "自定义风格",
-                      text: event.target.value,
-                    })
-                  }
-                />
-              ),
-            },
-          ]}
-        />
-      )}
     </div>
   );
   return (

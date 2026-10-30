@@ -244,11 +244,31 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     .click();
   await expect(page.getByLabel("创作需求")).toHaveValue(authoredPrompt);
   await page.getByRole("button", { name: "编辑风格", exact: true }).click();
+  const presetDescription = await page
+    .getByLabel("风格描述", { exact: true })
+    .inputValue();
+  await page.getByLabel("风格描述", { exact: true }).fill("未应用的草稿");
+  await page
+    .locator(".style-editor")
+    .getByRole("button", { name: "取消", exact: true })
+    .click();
+  await page.getByRole("button", { name: "编辑风格", exact: true }).click();
+  await expect(page.getByLabel("风格描述", { exact: true })).toHaveValue(
+    presetDescription,
+  );
+  await page.getByLabel("风格描述", { exact: true }).fill("临时修改");
+  await page.getByRole("button", { name: "恢复预设", exact: true }).click();
+  await expect(page.getByLabel("风格描述", { exact: true })).toHaveValue(
+    presetDescription,
+  );
   await page
     .getByLabel("风格描述", { exact: true })
     .fill("合成风格：柔和自然光");
   await expect(page.getByLabel("创作需求")).toHaveValue(authoredPrompt);
-  await page.getByRole("button", { name: "编辑风格", exact: true }).click();
+  await page
+    .locator(".style-editor")
+    .getByRole("button", { name: "应用", exact: true })
+    .click();
   const styledDraft = await page.getByLabel("创作需求").inputValue();
   await page.getByRole("button", { name: "城市夜景", exact: true }).click();
   await page
@@ -352,7 +372,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
       .filter({
         has: page.getByRole("combobox", { name: "风格", exact: true }),
       })
-      .getByText("自定义风格", { exact: true }),
+      .getByText("真实摄影 · 已修改", { exact: true }),
   ).toBeVisible();
 
   let releaseSubmission!: () => void;
@@ -363,7 +383,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     "**/api/images/tasks",
     async (route) => {
       expect(route.request().postDataJSON().style).toEqual({
-        name: "自定义风格",
+        name: "真实摄影",
         text: "合成风格：柔和自然光",
       });
       expect(route.request().postDataJSON().prompt).toBe(
@@ -469,12 +489,12 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     reopened.locator(".direct-creation .field").filter({
       has: reopened.getByRole("combobox", { name: "风格", exact: true }),
     }),
-  ).toContainText("自定义风格");
+  ).toContainText("真实摄影 · 已修改");
   await reopened.getByRole("button", { name: "编辑风格", exact: true }).click();
   await expect(reopened.getByLabel("风格描述", { exact: true })).toHaveValue(
     "合成风格：柔和自然光",
   );
-  await reopened.getByRole("button", { name: "编辑风格", exact: true }).click();
+  await reopened.getByLabel("风格描述", { exact: true }).press("Escape");
   await expect(
     reopened.locator(".direct-creation .field").filter({
       has: reopened.getByRole("combobox", { name: "图片张数", exact: true }),
