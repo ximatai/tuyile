@@ -919,6 +919,8 @@ test("desktop canvas saves geometry, handles conflicts and never replaces remove
       .poll(async () => (await savedCanvas()).document.viewport.zoom)
       .toBeLessThan(zoom);
   }
+  await page.locator(".react-flow__pane").click({ position: { x: 5, y: 5 } });
+  await expect(node).not.toHaveClass(/selected/);
   await node.hover();
   const more = imageActions.getByRole("button", {
     name: "更多图片操作",
@@ -928,6 +930,15 @@ test("desktop canvas saves geometry, handles conflicts and never replaces remove
   const smallButton = (await more.boundingBox())!;
   expect(smallButton.width).toBeCloseTo(fullButton!.width, 0);
   expect(smallButton.height).toBeCloseTo(fullButton!.height, 0);
+  const smallImage = (await node.boundingBox())!;
+  expect(smallButton.x).toBeGreaterThanOrEqual(smallImage.x);
+  expect(smallButton.y).toBeGreaterThanOrEqual(smallImage.y);
+  expect(smallButton.x + smallButton.width).toBeLessThanOrEqual(
+    smallImage.x + smallImage.width,
+  );
+  await more.hover();
+  await expect(imageActions).toHaveCSS("opacity", "1");
+  await expect(node).not.toHaveClass(/selected/);
   await more.click();
   const imageMenu = page.getByRole("menu");
   await expect(

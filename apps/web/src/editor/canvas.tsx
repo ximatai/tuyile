@@ -98,7 +98,7 @@ function ImageCard({
     right - width * viewport.zoom < canvasWidth &&
     bottom > 0 &&
     top < canvasHeight;
-  const desiredTop = compact ? (top >= 40 ? top - 36 : bottom + 8) : top + 8;
+  const desiredTop = top + 8;
   const toolbarTop = Math.max(8, Math.min(desiredTop, canvasHeight - 36));
   const toolbarOffset = top - 28 - toolbarTop;
   useEffect(() => setMenuOpen(false), [compact, onScreen]);
