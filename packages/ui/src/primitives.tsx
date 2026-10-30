@@ -12,6 +12,7 @@ import {
   ConfigProvider,
   App,
   Select,
+  type SelectProps,
 } from "antd";
 import zhCN from "antd/locale/zh_CN";
 export function UiProvider({ children }: { children: ReactNode }) {
@@ -153,6 +154,10 @@ export function ChoiceField({
   onValueChange,
   disabled,
   hideLabel = false,
+  showSearch,
+  optionRender,
+  labelRender,
+  popupMatchSelectWidth,
 }: {
   label: string;
   name?: string;
@@ -162,6 +167,10 @@ export function ChoiceField({
   onValueChange?: (value: string) => void;
   disabled?: boolean;
   hideLabel?: boolean;
+  showSearch?: SelectProps["showSearch"];
+  optionRender?: SelectProps["optionRender"];
+  labelRender?: SelectProps["labelRender"];
+  popupMatchSelectWidth?: SelectProps["popupMatchSelectWidth"];
 }) {
   const id = useId(),
     [local, setLocal] = useState(defaultValue ?? options[0]?.value ?? "");
@@ -176,6 +185,10 @@ export function ChoiceField({
         value={current}
         options={options}
         disabled={disabled}
+        showSearch={showSearch}
+        optionRender={optionRender}
+        labelRender={labelRender}
+        popupMatchSelectWidth={popupMatchSelectWidth}
         onChange={(value) => {
           setLocal(value);
           onValueChange?.(value);

@@ -227,6 +227,22 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     .locator(".ant-select-item-option-content")
     .filter({ hasText: /^1K$/ })
     .click();
+  await expect(page.getByLabel("实际尺寸", { exact: true })).toHaveText(
+    "1824 × 1024 px",
+  );
+  await expect(
+    page.getByRole("combobox", { name: "比例", exact: true }),
+  ).toHaveAttribute("aria-expanded", "false");
+  await page.getByRole("combobox", { name: "质量", exact: true }).click();
+  const qualityOptions = page.locator(".ant-select-dropdown:visible");
+  await expect(
+    qualityOptions.getByText("快速草稿", { exact: true }),
+  ).toBeVisible();
+  await expect(qualityOptions.getByText("标准", { exact: true })).toBeVisible();
+  await expect(
+    qualityOptions.getByText("高质量", { exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
   await page.getByRole("combobox", { name: "比例", exact: true }).click();
   await page
     .locator(".ant-select-dropdown:visible")
@@ -1340,6 +1356,7 @@ test("administrators add a service and users select same-named models from the c
   });
   await page.waitForResponse((r) => r.url().endsWith("/api/images/usage"));
   await page.getByLabel("图片模型", { exact: true }).click();
+  await page.getByLabel("图片模型", { exact: true }).fill("备用测试服务");
   await page
     .locator(".ant-select-dropdown:visible")
     .getByText("test-image · 备用测试服务", { exact: true })

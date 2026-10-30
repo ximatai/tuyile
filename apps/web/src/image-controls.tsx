@@ -43,13 +43,41 @@ export function ImageControls({
     ),
     qualities = usage ? allowedQualities(usage, cap) : [];
   const patch = (v: Partial<ImageSettings>) => onChange({ ...value, ...v });
-  const qualityNames = { low: "低", medium: "中", high: "高" };
+  const qualityNames = { low: "快速草稿", medium: "标准", high: "高质量" };
+  const ratioLabel = (ratio: string) => {
+    const [w, h] = ratio.split(":").map(Number);
+    return (
+      <span className="ratio-option">
+        {w && h ? (
+          <span className="ratio-icon-slot" aria-hidden="true">
+            <span
+              className="ratio-icon"
+              style={{
+                width: 18 * Math.min(1, w / h),
+                height: 18 * Math.min(1, h / w),
+              }}
+            />
+          </span>
+        ) : null}
+        <span>{ratio === "custom" ? "自定义" : ratio}</span>
+      </span>
+    );
+  };
   return (
     <div className="image-controls">
       <ChoiceField
         label={label(modelLabel)}
         value={value.modelKey}
         onValueChange={(modelKey) => patch({ modelKey })}
+        showSearch={{ optionFilterProp: "label" }}
+        popupMatchSelectWidth={440}
+        optionRender={(option) => (
+          <span className="model-choice-option">
+            <span>{option.label}</span>
+            {usage?.modelOptions?.find((m) => m.id === option.value)
+              ?.isDefault && <span className="model-default-mark">默认</span>}
+          </span>
+        )}
         options={
           choices.some((m) => m.value === value.modelKey) || !value.modelKey
             ? choices
@@ -85,6 +113,8 @@ export function ImageControls({
         <ChoiceField
           label={label("比例")}
           value={currentSize?.ratio ?? "custom"}
+          optionRender={(option) => ratioLabel(String(option.value))}
+          labelRender={(option) => ratioLabel(String(option.value))}
           options={[...new Set(sizes.map((s) => s.ratio))]
             .map((ratio) => ({ value: ratio, label: ratio }))
             .concat(currentSize ? [] : [{ value: "custom", label: "自定义" }])}
