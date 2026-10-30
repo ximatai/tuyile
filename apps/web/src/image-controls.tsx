@@ -6,13 +6,15 @@ import {
   Collapse,
   Field,
   Image,
+  Radio,
   Upload,
+  Tooltip,
 } from "@tuyile/ui";
 import {
   allowedQualities,
   modelChoices,
   selectedCapability,
-  sizeChoices,
+  supportedSizePresets,
   type ImageSettings,
 } from "./image-settings";
 export function ImageControls({
@@ -34,9 +36,11 @@ export function ImageControls({
   const label = (text: string) =>
     labelPrefix ? `${labelPrefix} ${text}` : text;
   const cap = usage && selectedCapability(usage, value.modelKey),
-    sizes = usage ? sizeChoices(usage, cap) : [],
+    sizes = usage ? supportedSizePresets(usage, cap) : [],
     choices = modelChoices(usage),
-    size = `${value.width}x${value.height}`,
+    currentSize = sizes.find(
+      (s) => s.width === value.width && s.height === value.height,
+    ),
     qualities = usage ? allowedQualities(usage, cap) : [];
   const patch = (v: Partial<ImageSettings>) => onChange({ ...value, ...v });
   const qualityNames = { low: "低", medium: "中", high: "高" };
@@ -59,29 +63,47 @@ export function ImageControls({
               ]
         }
       />
-      <ChoiceField
-        label={label("画面规格")}
-        value={sizes.some((s) => s.value === size) ? size : "custom"}
-        onValueChange={(v) => {
-          if (v === "custom") setAdvancedOpen(true);
-          if (v !== "custom") {
-            const [width, height] = v.split("x").map(Number);
-            patch({ width: width!, height: height! });
-          }
-        }}
-        options={[
-          ...sizes,
-          ...(!cap?.sizes.length || !sizes.some((s) => s.value === size)
-            ? [
-                {
-                  value: "custom",
-                  label: `自定义 · ${value.width} × ${value.height}`,
-                  disabled: !!cap?.sizes.length,
-                },
-              ]
-            : []),
-        ]}
-      />
+      <div className="parameter-grid">
+        <ChoiceField
+          label={label("分辨率")}
+          value={currentSize?.tier ?? "custom"}
+          options={[...new Set(sizes.map((s) => s.tier))]
+            .map((tier) => ({ value: tier, label: tier }))
+            .concat(currentSize ? [] : [{ value: "custom", label: "自定义" }])}
+          onValueChange={(tier) => {
+            if (tier === "custom") {
+              setAdvancedOpen(true);
+              return;
+            }
+            const next =
+              sizes.find(
+                (s) => s.tier === tier && s.ratio === currentSize?.ratio,
+              ) ?? sizes.find((s) => s.tier === tier);
+            if (next) patch({ width: next.width, height: next.height });
+          }}
+        />
+        <ChoiceField
+          label={label("比例")}
+          value={currentSize?.ratio ?? "custom"}
+          options={[...new Set(sizes.map((s) => s.ratio))]
+            .map((ratio) => ({ value: ratio, label: ratio }))
+            .concat(currentSize ? [] : [{ value: "custom", label: "自定义" }])}
+          onValueChange={(ratio) => {
+            if (ratio === "custom") {
+              setAdvancedOpen(true);
+              return;
+            }
+            const next =
+              sizes.find(
+                (s) => s.ratio === ratio && s.tier === currentSize?.tier,
+              ) ?? sizes.find((s) => s.ratio === ratio);
+            if (next) patch({ width: next.width, height: next.height });
+          }}
+        />
+      </div>
+      <span className="size-pixels" aria-label={label("实际尺寸")}>
+        {value.width} × {value.height} px
+      </span>
       <div className="parameter-grid">
         <ChoiceField
           label={label("质量")}
@@ -97,16 +119,31 @@ export function ImageControls({
           }))}
         />
         {count && (
-          <Field
-            label={label(labelPrefix ? "张数" : "图片张数")}
-            name="count"
-            type="number"
-            value={value.count}
-            onChange={(e) => patch({ count: Number(e.target.value) })}
-            min={1}
-            max={usage?.policy.maxCount ?? 16}
-            required
-          />
+          <div className="count-control">
+            <Field
+              label={label(labelPrefix ? "张数" : "图片张数")}
+              name="count"
+              type="number"
+              value={value.count}
+              onChange={(e) => patch({ count: Number(e.target.value) })}
+              min={1}
+              max={usage?.policy.maxCount ?? 16}
+              required
+            />
+            <Radio.Group
+              size="small"
+              aria-label={label("快捷张数")}
+              value={value.count}
+              onChange={(e) => patch({ count: e.target.value })}
+              options={[1, 2, 4].map((n) => ({
+                value: n,
+                label: String(n),
+                disabled: n > (usage?.policy.maxCount ?? 16),
+              }))}
+              optionType="button"
+              buttonStyle="solid"
+            />
+          </div>
         )}
       </div>
       <Collapse
@@ -181,6 +218,8 @@ export function ReferenceAttachments({
   disabled,
   maxReferences = 4,
   agent = false,
+  selected = [],
+  onUseSelected,
 }: {
   references: { id: string; name: string }[];
   onRemove: (id: string) => void;
@@ -188,6 +227,8 @@ export function ReferenceAttachments({
   disabled: boolean;
   maxReferences?: number;
   agent?: boolean;
+  selected?: { id: string; name: string }[];
+  onUseSelected?: () => void;
 }) {
   return (
     <div
@@ -196,22 +237,61 @@ export function ReferenceAttachments({
     >
       <div className="attachment-heading">
         <span>参考图{references.length ? ` · ${references.length}` : ""}</span>
-        <Upload
-          accept="image/png,image/jpeg,image/webp"
-          showUploadList={false}
-          disabled={disabled || references.length >= maxReferences}
-          beforeUpload={(file) => {
-            onUpload(file);
-            return false;
-          }}
-        >
-          <Button
-            type="button"
+        <div className="attachment-actions">
+          {selected.length > 0 && onUseSelected && (
+            <Tooltip
+              title={
+                maxReferences === 0
+                  ? "此模型不支持参考图"
+                  : new Set([
+                        ...references.map((r) => r.id),
+                        ...selected.map((r) => r.id),
+                      ]).size > maxReferences
+                    ? `此模型最多支持${maxReferences}张参考图，请减少选图或移除已有引用`
+                    : !selected.some(
+                          (s) => !references.some((r) => r.id === s.id),
+                        )
+                      ? "选中图片已在参考图中"
+                      : undefined
+              }
+            >
+              <span>
+                <Button
+                  type="button"
+                  disabled={
+                    disabled ||
+                    !selected.some(
+                      (s) => !references.some((r) => r.id === s.id),
+                    ) ||
+                    new Set([
+                      ...references.map((r) => r.id),
+                      ...selected.map((r) => r.id),
+                    ]).size > maxReferences
+                  }
+                  onClick={onUseSelected}
+                >
+                  引用选中 {selected.length} 张
+                </Button>
+              </span>
+            </Tooltip>
+          )}
+          <Upload
+            accept="image/png,image/jpeg,image/webp"
+            showUploadList={false}
             disabled={disabled || references.length >= maxReferences}
+            beforeUpload={(file) => {
+              onUpload(file);
+              return false;
+            }}
           >
-            {agent ? "添加 Agent 参考图" : "选择参考图"}
-          </Button>
-        </Upload>
+            <Button
+              type="button"
+              disabled={disabled || references.length >= maxReferences}
+            >
+              {agent ? "添加 Agent 参考图" : "选择参考图"}
+            </Button>
+          </Upload>
+        </div>
       </div>
       {!!references.length && (
         <div className="attachment-list">

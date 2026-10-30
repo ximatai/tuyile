@@ -1,3 +1,4 @@
+import { standardSizes, type SizePreset } from "./creation-presets";
 import type {
   ImageInput,
   ImageUsage,
@@ -33,7 +34,7 @@ export function allowedQualities(usage: ImageUsage, cap?: ImageCapability) {
       qualityOrder.indexOf(q) <= qualityOrder.indexOf(usage.policy.maxQuality),
   );
 }
-function validSize(
+export function validSize(
   usage: ImageUsage,
   cap: ImageCapability,
   width: number,
@@ -161,4 +162,45 @@ export function taskSettings(
         ? `historical:${task.id}`
         : task.model,
   };
+}
+
+export function supportedSizePresets(
+  usage: ImageUsage,
+  cap?: ImageCapability,
+): SizePreset[] {
+  if (!cap) return [];
+  const allowed = (p: SizePreset) => validSize(usage, cap, p.width, p.height);
+  const gcd = (a: number, b: number): number => (b ? gcd(b, a % b) : a);
+  if (cap.sizes.length)
+    return cap.sizes.flatMap((size) => {
+      const [width, height] = size.split("x").map(Number) as [number, number];
+      const known = standardSizes.find(
+        (p) => p.width === width && p.height === height,
+      );
+      const divisor = gcd(width, height);
+      const preset = known ?? {
+        tier: `${Math.max(width, height)}px`,
+        ratio: `${width / divisor}:${height / divisor}`,
+        width,
+        height,
+      };
+      return allowed(preset) ? [preset] : [];
+    });
+  const presets = standardSizes.filter(allowed);
+  // Retain usable small presets for stricter policies rather than assuming 1K is always allowed.
+  if (!presets.length)
+    return sizeChoices(usage, cap).map((s) => {
+      const [width, height] = s.value.split("x").map(Number) as [
+          number,
+          number,
+        ],
+        divisor = gcd(width, height);
+      return {
+        tier: `${Math.max(width, height)}px`,
+        ratio: `${width / divisor}:${height / divisor}`,
+        width,
+        height,
+      };
+    });
+  return presets;
 }

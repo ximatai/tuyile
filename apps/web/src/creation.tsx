@@ -1,3 +1,4 @@
+import { PromptComposer } from "./prompt-composer";
 import { ImageControls, ReferenceAttachments } from "./image-controls";
 import {
   initialSettings,
@@ -228,6 +229,9 @@ export function CreationPage({
     }),
     [prompt, setPrompt] = useState(""),
     [references, setReferences] = useState<{ id: string; name: string }[]>([]),
+    [canvasSelection, setCanvasSelection] = useState<
+      { id: string; name: string }[]
+    >([]),
     [pending, setPending] = useState<ImageInput | null>(null),
     [mobile, setMobile] = useState("create");
   const confirmDraft = useConfirm();
@@ -257,6 +261,23 @@ export function CreationPage({
     },
     [busy, pending],
   );
+  function useCanvasSelection() {
+    if (busy || pending) {
+      setError("请先确认当前提交结果，再修改参考图。");
+      return;
+    }
+    const next = [
+      ...new Map(
+        [...references, ...canvasSelection].map((r) => [r.id, r]),
+      ).values(),
+    ];
+    if (next.length > 4) {
+      setError("参考图最多4张，请先移除部分引用。");
+      return;
+    }
+    setReferences(next);
+    setError("");
+  }
   const [mode, setMode] = useState("direct");
   const [quotaOpen, setQuotaOpen] = useState(false);
   const active = useRef(false);
@@ -446,6 +467,7 @@ export function CreationPage({
               tasks={tasks}
               projectId={projectId}
               onReference={chooseReference}
+              onSelectionChange={setCanvasSelection}
               onReuse={(task) => void reuse(task)}
             />
           </Suspense>
@@ -508,22 +530,12 @@ export function CreationPage({
                 componentDisabled={busy || !!pending || !usage?.models.length}
               >
                 <fieldset disabled={busy || !!pending || !usage?.models.length}>
-                  <label className="field">
-                    <span>创作需求</span>
-                    <Input.TextArea
-                      name="prompt"
-                      aria-label="创作需求"
-                      value={prompt}
-                      onChange={(event) => setPrompt(event.target.value)}
-                      required
-                      maxLength={12000}
-                      rows={5}
-                      placeholder="描述画面、主体、风格和文字要求"
-                    />
-                  </label>
+                  <PromptComposer value={prompt} onChange={setPrompt} />
                   {mode === "direct" && (
                     <ReferenceAttachments
                       references={references}
+                      selected={canvasSelection}
+                      onUseSelected={useCanvasSelection}
                       onRemove={(id) =>
                         setReferences((v) => v.filter((r) => r.id !== id))
                       }
@@ -612,6 +624,8 @@ export function CreationPage({
               usage={usage}
               tasks={tasks}
               references={references}
+              selectedCanvas={canvasSelection}
+              onUseSelected={useCanvasSelection}
               onRemove={(id) =>
                 setReferences((old) => old.filter((r) => r.id !== id))
               }

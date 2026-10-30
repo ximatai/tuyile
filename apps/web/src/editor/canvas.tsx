@@ -144,12 +144,14 @@ const nodeTypes = { image: ImageCard, group: GroupCard, task: TaskCard };
 export function CanvasEditor({
   projectId,
   onReference,
+  onSelectionChange,
   onReuse,
   tasks,
 }: {
   tasks: ImageTask[];
   projectId: string;
   onReference: (id: string) => void;
+  onSelectionChange?: (assets: { id: string; name: string }[]) => void;
   onReuse?: (task: ImageTask) => void;
 }) {
   const state = useSessionState();
@@ -180,6 +182,7 @@ export function CanvasEditor({
       tasks={tasks}
       projectId={projectId}
       onReference={onReference}
+      onSelectionChange={onSelectionChange}
       onReuse={onReuse}
     />
   ) : (
@@ -190,6 +193,7 @@ function CanvasView({
   store,
   projectId,
   onReference,
+  onSelectionChange,
   onReuse,
   tasks,
 }: {
@@ -197,6 +201,7 @@ function CanvasView({
   store: EditorStore;
   projectId: string;
   onReference: (id: string) => void;
+  onSelectionChange?: (assets: { id: string; name: string }[]) => void;
   onReuse?: (task: ImageTask) => void;
 }) {
   const state = useSessionState(),
@@ -231,6 +236,19 @@ function CanvasView({
     )
       store.place(outputs.data.outputs);
   }, [outputs.data, store, snap.conflict, snap.revision]);
+  useEffect(() => {
+    const selected = snap.document.nodes.filter(
+      (n) => snap.selected.includes(n.id) && n.kind === "image" && n.assetId,
+    );
+    onSelectionChange?.([
+      ...new Map(
+        selected.map((n) => [
+          n.assetId!,
+          { id: n.assetId!, name: n.label || "画布参考图" },
+        ]),
+      ).values(),
+    ]);
+  }, [snap.document, snap.selected, onSelectionChange]);
   const [operationError, setOperationError] = useState("");
   const [copyMessage, setCopyMessage] = useState("");
   const [copyBusy, setCopyBusy] = useState(false);

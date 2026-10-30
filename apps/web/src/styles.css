@@ -25,7 +25,7 @@
   --text-small: 12px;
   --title-page: 22px;
   --title-section: 16px;
-  --control-height: 36px;
+  --control-height: 32px;
   --space-card: 16px;
 }
 * {
@@ -2394,4 +2394,113 @@ h3 {
 
 .direct-creation fieldset {
   align-content: start;
+}
+
+/* Compact controls share Ant Design metrics; retain 13/12px type and visible focus rings. */
+.sidebar nav a {
+  min-height: 36px;
+  padding: 6px 10px;
+}
+.gallery-reuse-actions > .button,
+.agent-compose .button {
+  height: var(--control-height);
+  min-height: var(--control-height);
+}
+.direct-creation > a {
+  min-height: var(--control-height);
+}
+.creation-panel fieldset {
+  gap: 10px;
+}
+.prompt-composer {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.prompt-composer .field {
+  margin-bottom: 0;
+}
+.prompt-shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.prompt-shortcuts .button {
+  height: 28px;
+  min-height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+.image-controls {
+  gap: 8px;
+}
+.size-pixels {
+  margin-top: -4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.count-control {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  align-content: start;
+}
+.count-control .ant-radio-group {
+  display: flex;
+}
+.count-control .ant-radio-button-wrapper {
+  flex: 1;
+  text-align: center;
+  padding-inline: 6px;
+}
+.attachment-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.agent-compose .prompt-shortcuts .button {
+  height: 28px;
+  min-height: 28px;
+}
+.agent-compose .prompt-composer > .field > span {
+  font-size: 12px;
+}
+
+.back,
+.auth-form .hint a,
+.output-grid figcaption,
+.output-grid figcaption a {
+  min-height: var(--control-height);
+}
+
+.image-controls .field {
+  align-content: start;
+}
+.count-control {
+  grid-template-columns: minmax(56px, 1fr) auto;
+  align-items: end;
+}
+.count-control .ant-radio-button-wrapper {
+  min-width: 26px;
+  padding-inline: 4px;
+}
+.prompt-assist-controls {
+  display: grid;
+  gap: 8px;
+}
+.prompt-assist-content {
+  width: 300px;
+  max-width: calc(100vw - 48px);
+}
+.prompt-composer-compact {
+  grid-template-columns: minmax(0, 1fr) 32px;
+  align-items: end;
+}
+.prompt-composer-compact > .button {
+  width: 32px;
+  padding: 0;
+}
+.prompt-composer-compact > .product-notice {
+  grid-column: 1 / -1;
 }

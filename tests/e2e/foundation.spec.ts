@@ -191,7 +191,62 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     .click();
   await expect(page.getByText("本地测试模型：生成测试色块")).toBeVisible();
   const projectUrl = page.url();
+  await page.getByRole("button", { name: "产品海报", exact: true }).click();
+  await expect(page.getByLabel("创作需求")).toHaveValue(/高端商业海报/);
+  await page.getByRole("combobox", { name: "风格", exact: true }).click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("真实摄影", { exact: true })
+    .click();
+  await expect(page.getByLabel("创作需求")).toHaveValue(/画面风格：真实摄影/);
+  const styledDraft = await page.getByLabel("创作需求").inputValue();
+  await page.getByRole("button", { name: "城市夜景", exact: true }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "取消", exact: true })
+    .click();
+  await expect(page.getByLabel("创作需求")).toHaveValue(styledDraft);
+  await page.getByRole("combobox", { name: "分辨率", exact: true }).click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .locator(".ant-select-item-option-content")
+    .filter({ hasText: /^2K$/ })
+    .click();
+  await page.getByRole("combobox", { name: "比例", exact: true }).click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .locator(".ant-select-item-option-content")
+    .filter({ hasText: /^16:9$/ })
+    .click();
+  await expect(page.getByLabel("实际尺寸", { exact: true })).toHaveText(
+    "2048 × 1152 px",
+  );
+  await page.getByRole("combobox", { name: "分辨率", exact: true }).click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .locator(".ant-select-item-option-content")
+    .filter({ hasText: /^1K$/ })
+    .click();
+  await page.getByRole("combobox", { name: "比例", exact: true }).click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .locator(".ant-select-item-option-content")
+    .filter({ hasText: /^1:1$/ })
+    .click();
+  await page
+    .locator(".direct-creation .ant-radio-button-wrapper")
+    .filter({ hasText: /^2$/ })
+    .click();
+  await expect(page.getByLabel("图片张数", { exact: true })).toHaveValue("2");
   await page.getByLabel("创作需求").fill("合成测试：关闭页面后继续执行");
+  await expect(
+    page
+      .locator(".direct-creation .field")
+      .filter({
+        has: page.getByRole("combobox", { name: "风格", exact: true }),
+      })
+      .getByText("无风格", { exact: true }),
+  ).toBeVisible();
   await page.getByLabel("图片张数").fill("2");
   await page.getByRole("button", { name: "提交图片任务", exact: true }).click();
   await page.locator(".canvas-task-history .ant-collapse-header").click();
@@ -210,13 +265,26 @@ test("background creation survives refresh, page closure and ordinary logout, wi
       .locator(".canvas-task-history")
       .getByRole("link", { name: "下载原图" }),
   ).toHaveCount(2);
+  await reopened.locator(".canvas-task-history .ant-collapse-header").click();
+  await reopened.locator(".react-flow__node-image").first().click();
+  await reopened
+    .getByRole("button", { name: "引用选中 1 张", exact: true })
+    .click();
+  await expect(
+    reopened.getByTestId("reference-upload").locator(".attachment"),
+  ).toHaveCount(1);
+  await reopened
+    .getByTestId("reference-upload")
+    .getByRole("button", { name: /移除引用/ })
+    .click();
+  await reopened.locator(".canvas-task-history .ant-collapse-header").click();
   // Reusing a task is an editable draft; preview and reference actions must not dispatch work.
   await reopened.getByRole("button", { name: "复用设置", exact: true }).click();
   await expect(reopened.getByLabel("创作需求")).toHaveValue(
     "合成测试：关闭页面后继续执行",
   );
   await expect(reopened.getByLabel("图片张数")).toHaveValue("2");
-  await expect(reopened.getByLabel("画面规格")).toBeVisible();
+  await expect(reopened.getByLabel("比例")).toBeVisible();
   await reopened.locator(".output-grid .ant-image").first().click();
   await expect(reopened.locator(".ant-image-preview")).toBeVisible();
   await reopened.keyboard.press("Escape");
@@ -235,10 +303,23 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     .click();
   await expect(reopened.locator(".task-result")).toHaveCount(1);
   await reopened.getByLabel("创作需求").fill("合成测试：注销后继续");
+  await reopened.getByRole("combobox", { name: "风格", exact: true }).click();
+  await reopened
+    .locator(".ant-select-dropdown:visible")
+    .getByText("海报视觉", { exact: true })
+    .click();
+  const styledRequest = reopened.waitForRequest(
+    (r) =>
+      r.method() === "POST" &&
+      new URL(r.url()).pathname === "/api/images/tasks",
+  );
   await reopened.getByLabel("图片张数").fill("2");
   await reopened
     .getByRole("button", { name: "提交图片任务", exact: true })
     .click();
+  expect((await styledRequest).postDataJSON().prompt).toContain(
+    "画面风格：鲜明的海报构图",
+  );
   await expect(reopened.getByText("合成测试：注销后继续")).toBeVisible();
   await reopened.reload();
   await reopened.getByRole("button", { name: "退出登录", exact: true }).click();
@@ -616,6 +697,19 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
     .click();
   const projectId = page.url().split("/").at(-1)!;
   await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await page.getByRole("button", { name: "灵感与风格", exact: true }).click();
+  await expect(
+    page
+      .getByRole("tooltip")
+      .getByRole("button", { name: "产品海报", exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(
+    page.getByRole("button", { name: "灵感与风格", exact: true }),
+  ).toHaveAttribute("aria-expanded", "false");
+  await expect(
+    page.getByRole("button", { name: "灵感与风格", exact: true }),
+  ).toBeFocused();
   await page
     .getByText("创作设置 · 通用创作 · test-image", { exact: true })
     .click();
@@ -1131,11 +1225,12 @@ test("administrators add a service and users select same-named models from the c
   await expect(
     page.getByRole("button", { name: "提交图片任务", exact: true }),
   ).toBeDisabled();
-  await page.getByLabel("画面规格", { exact: true }).click();
+  await page.getByLabel("比例", { exact: true }).click();
   await expect(
     page
       .locator(".ant-select-dropdown:visible")
-      .getByText("竖版 3:4 · 768 × 1024", { exact: true }),
+      .locator(".ant-select-item-option-content")
+      .filter({ hasText: /^3:4$/ }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
   await page.unroute(usageRoute);

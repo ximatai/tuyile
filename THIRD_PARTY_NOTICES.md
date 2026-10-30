@@ -11,3 +11,5 @@ Standard UI controls use Ant Design 6.6.8 (https://github.com/ant-design/ant-des
 The pinned @rc-component/util 1.14.0 package (MIT) has a small tracked patch forwarding the application CSP nonce to its dynamic styles for scrollbar measurement and modal scroll locking. See patches/README.md; original package license notices remain intact.
 
 Private ZIP exports use fflate 0.8.3 (https://github.com/101arrowz/fflate), MIT licensed. Its copyright and permission notice are retained in licenses/fflate-MIT.txt.
+
+Creation prompt starters, style directions, resolution/aspect-ratio interactions and preset image geometry are adapted from GPT Image Canvas (MIT). They use Tuyile's own visible editable drafts, Ant Design controls, capability/policy filtering and server-owned execution. Original copyright and permission notices remain in LICENSE; no legacy credentials, data or execution code are copied.

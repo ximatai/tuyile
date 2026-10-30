@@ -1,3 +1,4 @@
+import { PromptComposer } from "./prompt-composer";
 import { ImageControls, ReferenceAttachments } from "./image-controls";
 import {
   initialSettings,
@@ -47,6 +48,8 @@ export function AgentPanel({
   projectId,
   usage,
   references,
+  selectedCanvas,
+  onUseSelected,
   onRemove,
   onUpload,
   uploadBusy,
@@ -56,6 +59,8 @@ export function AgentPanel({
   projectId: string;
   usage?: ImageUsage;
   references: { id: string; name: string }[];
+  selectedCanvas: { id: string; name: string }[];
+  onUseSelected: () => void;
   onRemove: (id: string) => void;
   onUpload: (file: File) => void;
   uploadBusy: boolean;
@@ -394,22 +399,21 @@ export function AgentPanel({
                 },
               ]}
             />
-            <label className="field">
-              <span className="sr-only">告诉 Agent 你的想法</span>
-              <Input.TextArea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                rows={2}
-                maxLength={12000}
-                required
-                placeholder="例如：为这款产品设计一组简洁的宣传图"
-              />
-            </label>
+            <PromptComposer
+              value={prompt}
+              onChange={setPrompt}
+              label="告诉 Agent 你的想法"
+              rows={2}
+              compact
+              visible={visible}
+            />
             <div className="agent-references">
               {visible && (
                 <ReferenceAttachments
                   agent
                   references={references}
+                  selected={selectedCanvas}
+                  onUseSelected={onUseSelected}
                   onRemove={onRemove}
                   onUpload={onUpload}
                   disabled={busy || !!pending || uploadBusy}
