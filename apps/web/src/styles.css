@@ -2528,20 +2528,6 @@ h3 {
   color: var(--brand-blue);
   font-size: 12px;
 }
-.count-control {
-  min-width: 0;
-  display: grid;
-  gap: 6px;
-  align-content: start;
-}
-.count-control .ant-radio-group {
-  display: flex;
-}
-.count-control .ant-radio-button-wrapper {
-  flex: 1;
-  text-align: center;
-  padding-inline: 6px;
-}
 .attachment-actions {
   display: flex;
   flex-wrap: wrap;
@@ -2565,14 +2551,6 @@ h3 {
 
 .image-controls .field {
   align-content: start;
-}
-.count-control {
-  grid-template-columns: minmax(56px, 1fr) auto;
-  align-items: end;
-}
-.count-control .ant-radio-button-wrapper {
-  min-width: 26px;
-  padding-inline: 4px;
 }
 .prompt-assist-controls {
   display: grid;
@@ -2670,4 +2648,41 @@ h3 {
   border-color: var(--brand-blue);
   color: #fff;
   opacity: 1;
+}
+
+/* One compact footer keeps quota and execution guidance beside the action. */
+.execution-note {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.execution-note .help-trigger {
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+}
+.direct-creation > .quota-details {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+  overflow: visible;
+}
+.direct-creation > .quota-details .button {
+  width: auto;
+  padding-inline: 0;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+.direct-creation > .quota-details a {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.image-output-options {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }

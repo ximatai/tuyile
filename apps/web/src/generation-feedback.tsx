@@ -39,8 +39,14 @@ export function GenerationFeedback({
         )}
       </span>
       <div className="generation-feedback-copy">
-        <strong>{status.title}</strong>
-        <span>{status.detail}</span>
+        {status.tone === "success" ? (
+          <strong>已生成 {tasks[0]?.used ?? 0} 张</strong>
+        ) : (
+          <>
+            <strong>{status.title}</strong>
+            <span>{status.detail}</span>
+          </>
+        )}
       </div>
       {onShow && tasks.length > 0 && (
         <Button type="button" onClick={onShow}>

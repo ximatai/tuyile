@@ -6,7 +6,6 @@ import {
   Collapse,
   Field,
   Image,
-  Radio,
   Upload,
   Tooltip,
 } from "@tuyile/ui";
@@ -134,7 +133,7 @@ export function ImageControls({
       <span className="size-pixels" aria-label={label("实际尺寸")}>
         {value.width} × {value.height} px
       </span>
-      <div className="parameter-grid">
+      <div className={`parameter-grid${count ? " image-output-options" : ""}`}>
         <ChoiceField
           label={label("质量")}
           name="quality"
@@ -149,45 +148,42 @@ export function ImageControls({
           }))}
         />
         {count && (
-          <div className="count-control">
-            <Field
-              label={label(labelPrefix ? "张数" : "图片张数")}
-              name="count"
-              type="number"
-              value={value.count}
-              onChange={(e) => patch({ count: Number(e.target.value) })}
-              min={1}
-              max={usage?.policy.maxCount ?? 16}
-              required
-            />
-            <Radio.Group
-              size="small"
-              aria-label={label("快捷张数")}
-              value={value.count}
-              onChange={(e) => patch({ count: e.target.value })}
-              options={[1, 2, 4].map((n) => ({
-                value: n,
-                label: String(n),
-                disabled: n > (usage?.policy.maxCount ?? 16),
-              }))}
-              optionType="button"
-              buttonStyle="solid"
-            />
-          </div>
+          <ChoiceField
+            label={label(labelPrefix ? "张数" : "图片张数")}
+            value={String(value.count)}
+            onValueChange={(count) => patch({ count: Number(count) })}
+            options={Array.from(
+              { length: usage?.policy.maxCount ?? 16 },
+              (_, i) => ({ value: String(i + 1), label: `${i + 1} 张` }),
+            )}
+          />
         )}
+        <ChoiceField
+          label={label("格式")}
+          name="format"
+          value={value.format}
+          onValueChange={(format) =>
+            patch({ format: format as ImageSettings["format"] })
+          }
+          options={(["png", "jpeg", "webp"] as const).map((f) => ({
+            value: f,
+            label: f === "webp" ? "WebP" : f.toUpperCase(),
+            disabled: !cap?.formats.includes(f),
+          }))}
+        />
       </div>
-      <Collapse
-        activeKey={advancedOpen ? ["advanced"] : []}
-        onChange={(keys) => setAdvancedOpen(keys.includes("advanced"))}
-        size="small"
-        ghost
-        items={[
-          {
-            key: "advanced",
-            label: "更多设置",
-            forceRender: true,
-            children: (
-              <>
+      {!!cap && !cap.sizes.length && (
+        <Collapse
+          activeKey={advancedOpen ? ["advanced"] : []}
+          onChange={(keys) => setAdvancedOpen(keys.includes("advanced"))}
+          size="small"
+          ghost
+          items={[
+            {
+              key: "advanced",
+              label: "自定义尺寸",
+              forceRender: true,
+              children: (
                 <div className="parameter-grid">
                   <Field
                     label={label("宽度")}
@@ -201,7 +197,6 @@ export function ImageControls({
                       usage?.policy.maxEdge ?? 8192,
                     )}
                     step={16}
-                    disabled={!!cap?.sizes.length}
                     required
                   />
                   <Field
@@ -216,28 +211,14 @@ export function ImageControls({
                       usage?.policy.maxEdge ?? 8192,
                     )}
                     step={16}
-                    disabled={!!cap?.sizes.length}
                     required
                   />
                 </div>
-                <ChoiceField
-                  label={label("格式")}
-                  name="format"
-                  value={value.format}
-                  onValueChange={(format) =>
-                    patch({ format: format as ImageSettings["format"] })
-                  }
-                  options={(["png", "jpeg", "webp"] as const).map((f) => ({
-                    value: f,
-                    label: f === "webp" ? "WebP" : f.toUpperCase(),
-                    disabled: !cap?.formats.includes(f),
-                  }))}
-                />
-              </>
-            ),
-          },
-        ]}
-      />
+              ),
+            },
+          ]}
+        />
+      )}
     </div>
   );
 }

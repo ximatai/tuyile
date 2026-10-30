@@ -1,3 +1,4 @@
+import { HelpPopover } from "./interface-help";
 import { PromptComposer } from "./prompt-composer";
 import { GenerationFeedback } from "./generation-feedback";
 import type { GenerationPhase } from "./generation-status";
@@ -613,9 +614,12 @@ export function CreationPage({
                 <Notice error>{issues.join(" ")}</Notice>
               )}
               {error && <Notice error>{error}</Notice>}
-              <p className="hint">
-                关页不影响后台执行。取消可能仍计费，中断不自动续跑。
-              </p>
+              <div className="execution-note">
+                <span>关页继续 · 取消可能计费 · 中断不续跑</span>
+                <HelpPopover title="后台执行与计费">
+                  取消可能仍计费；Worker 中断后不自动续跑，已保存结果会保留。
+                </HelpPopover>
+              </div>
               <GenerationFeedback
                 tasks={tasks}
                 phase={phase}
@@ -688,12 +692,13 @@ export function CreationPage({
                       }
                     }}
                   >
-                    今日可用 {usage.available} 张 · 预留 {usage.held} 张
+                    今日可用 {usage.available} 张
+                    {usage.held > 0 ? ` · 预留 ${usage.held} 张` : ""}
                   </Button>
                 </Popover>
+                <Link to="/usage">查看额度</Link>
               </div>
             )}
-            <Link to="/usage">查看额度</Link>
           </div>
           <div className="agent-creation" hidden={mode !== "agent"}>
             <AgentPanel

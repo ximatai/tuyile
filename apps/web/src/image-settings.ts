@@ -128,7 +128,7 @@ export function settingsIssues(
   if (!allowedQualities(usage, cap).includes(settings.quality))
     errors.push("当前质量不受支持，请重新选择。");
   if (!cap.formats.includes(settings.format))
-    errors.push("当前格式不受支持，请在更多设置中重新选择。");
+    errors.push("当前格式不受支持，请重新选择。");
   if (
     !Number.isInteger(settings.count) ||
     settings.count < 1 ||

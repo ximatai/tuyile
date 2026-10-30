@@ -90,7 +90,7 @@ try {
   await page.waitForFunction(() =>
     document
       .querySelector('[aria-label="图片生成状态"]')
-      ?.textContent?.includes("图片生成完成"),
+      ?.textContent?.includes("已生成"),
   );
   await page.screenshot({
     path: ".codex-temp/docker-generation-feedback.png",

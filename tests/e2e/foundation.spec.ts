@@ -292,11 +292,38 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     .locator(".ant-select-item-option-content")
     .filter({ hasText: /^1:1$/ })
     .click();
+  await page.getByRole("combobox", { name: "图片张数", exact: true }).click();
   await page
-    .locator(".direct-creation .ant-radio-button-wrapper")
-    .filter({ hasText: /^2$/ })
+    .locator(".ant-select-dropdown:visible")
+    .getByText("2 张", { exact: true })
     .click();
-  await expect(page.getByLabel("图片张数", { exact: true })).toHaveValue("2");
+  await expect(
+    page.locator(".direct-creation .field").filter({
+      has: page.getByRole("combobox", { name: "图片张数", exact: true }),
+    }),
+  ).toContainText("2 张");
+  await expect(page.getByLabel("宽度", { exact: true })).toBeHidden();
+  await page.getByRole("button", { name: "自定义尺寸", exact: true }).click();
+  await expect(page.getByLabel("宽度", { exact: true })).toBeEnabled();
+  await page.getByLabel("宽度", { exact: true }).fill("1008");
+  await expect(page.getByLabel("实际尺寸", { exact: true })).toHaveText(
+    "1008 × 1024 px",
+  );
+  await page.getByLabel("宽度", { exact: true }).fill("1024");
+  await page.getByRole("button", { name: "自定义尺寸", exact: true }).click();
+  await expect(
+    page.getByRole("combobox", { name: "格式", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "后台执行与计费", exact: true })
+    .click();
+  await expect(
+    page.getByText(
+      "取消可能仍计费；Worker 中断后不自动续跑，已保存结果会保留。",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
   await page.getByLabel("创作需求").fill("合成测试：关闭页面后继续执行");
   await expect(
     page
@@ -306,7 +333,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
       })
       .getByText("无风格", { exact: true }),
   ).toBeVisible();
-  await page.getByLabel("图片张数").fill("2");
+
   let releaseSubmission!: () => void;
   const submissionGate = new Promise<void>((resolve) => {
     releaseSubmission = resolve;
@@ -357,7 +384,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   ).toBeVisible({ timeout: 15000 });
   await expect(
     reopened.getByRole("status", { name: "图片生成状态" }),
-  ).toContainText("图片生成完成");
+  ).toContainText("已生成");
   await expect(
     reopened
       .locator(".canvas-task-history")
@@ -382,7 +409,11 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   await expect(reopened.getByLabel("创作需求")).toHaveValue(
     "合成测试：关闭页面后继续执行",
   );
-  await expect(reopened.getByLabel("图片张数")).toHaveValue("2");
+  await expect(
+    reopened.locator(".direct-creation .field").filter({
+      has: reopened.getByRole("combobox", { name: "图片张数", exact: true }),
+    }),
+  ).toContainText("2 张");
   await expect(reopened.getByLabel("比例")).toBeVisible();
   await reopened.locator(".output-grid .ant-image").first().click();
   await expect(reopened.locator(".ant-image-preview")).toBeVisible();
@@ -427,7 +458,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   ).toContainText("本次图片任务未提交");
   await expect(
     reopened.getByRole("status", { name: "图片生成状态" }),
-  ).not.toContainText("图片生成完成");
+  ).not.toContainText("已生成");
   await expect(reopened.getByLabel("创作需求")).toHaveValue(rejectedDraft);
   await expect(
     reopened.getByRole("button", { name: "查找这次提交", exact: true }),
@@ -455,7 +486,13 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     },
     { times: 1 },
   );
-  await reopened.getByLabel("图片张数").fill("2");
+  await reopened
+    .getByRole("combobox", { name: "图片张数", exact: true })
+    .click();
+  await reopened
+    .locator(".ant-select-dropdown:visible")
+    .getByText("2 张", { exact: true })
+    .click();
   await reopened
     .getByRole("button", { name: "提交图片任务", exact: true })
     .click();
@@ -980,9 +1017,22 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
   const planningBefore = await (
     await page.request.get("/api/agent/usage")
   ).json();
-  await page.getByLabel("步骤 1 张数", { exact: true }).fill("2");
+  await page
+    .getByRole("combobox", { name: "步骤 1 张数", exact: true })
+    .click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("2 张", { exact: true })
+    .click();
   await page.getByRole("button", { name: "添加步骤", exact: true }).click();
-  await page.getByLabel("步骤 2 张数", { exact: true }).fill("1");
+  await expect(page.locator(".ant-select-dropdown:visible")).toHaveCount(0);
+  await page
+    .getByRole("combobox", { name: "步骤 2 张数", exact: true })
+    .click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("1 张", { exact: true })
+    .click();
   await page.getByLabel("使用上一步第一张图片").check();
   await expect(
     page.getByText("本计划预留 3 张图片", { exact: true }),
@@ -993,9 +1043,11 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
   await page.getByRole("tab", { name: "Agent", exact: true }).click();
   await expect(page.getByLabel("计划步骤摘要")).toBeVisible();
   await page.getByRole("button", { name: "修改计划", exact: true }).click();
-  await expect(page.getByLabel("步骤 1 张数", { exact: true })).toHaveValue(
-    "2",
-  );
+  await expect(
+    page.locator(".field").filter({
+      has: page.getByRole("combobox", { name: "步骤 1 张数", exact: true }),
+    }),
+  ).toContainText("2 张");
   await expect(page.getByLabel("使用上一步第一张图片")).toBeChecked();
   expect(
     (
@@ -1451,6 +1503,10 @@ test("administrators add a service and users select same-named models from the c
   await expect(
     page.getByText("当前尺寸不受支持，请选择画面规格。", { exact: false }),
   ).toBeVisible();
+  await expect(page.getByLabel("宽度", { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "自定义尺寸", exact: true }),
+  ).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "提交图片任务", exact: true }),
   ).toBeDisabled();
