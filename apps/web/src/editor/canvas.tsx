@@ -602,10 +602,10 @@ function CanvasView({
             <MousePointer2 size={16} />
           </Button>
         </Tooltip>
-        <Tooltip title="小手" trigger={["hover", "focus"]}>
+        <Tooltip title="拖拽" trigger={["hover", "focus"]}>
           <Button
             type="button"
-            aria-label="小手工具"
+            aria-label="拖拽工具"
             aria-pressed={handMode}
             onClick={() => {
               store.select([]);

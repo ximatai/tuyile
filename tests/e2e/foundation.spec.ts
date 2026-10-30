@@ -861,9 +861,9 @@ test("desktop canvas saves geometry, handles conflicts and never replaces remove
     .not.toBe(first.document.viewport.x);
   const afterBlank = await savedCanvas();
   expect(afterBlank.document.nodes).toEqual(first.document.nodes);
-  await page.getByRole("button", { name: "小手工具", exact: true }).click();
+  await page.getByRole("button", { name: "拖拽工具", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "小手工具", exact: true }),
+    page.getByRole("button", { name: "拖拽工具", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
   const handNode = (await node.boundingBox())!;
   await dragAt(handNode.x + 70, handNode.y + 70);
