@@ -917,9 +917,28 @@ test("desktop administration publishes service model pools and preserves version
   await imagePool
     .getByRole("button", { name: "能力设置", exact: true })
     .click();
-  await page.getByLabel(/^限定尺寸/).fill("512x512");
+  await expect(
+    page.getByRole("radio", { name: "按模型范围开放", exact: true }),
+  ).toBeChecked();
+  await page
+    .getByRole("radio", { name: "仅开放指定尺寸", exact: true })
+    .check();
+  await expect(
+    page.getByRole("button", { name: "应用到待发布配置", exact: true }),
+  ).toBeDisabled();
+  await page.getByRole("combobox", { name: "允许的尺寸", exact: true }).click();
+  await page
+    .getByRole("combobox", { name: "允许的尺寸", exact: true })
+    .fill("512");
+  await page
+    .locator(".ant-select-dropdown:visible .ant-select-item-option-content")
+    .filter({ hasText: /^512 × 512$/ })
+    .click();
+  await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "恢复默认", exact: true }).click();
-  await expect(page.getByLabel(/^限定尺寸/)).toHaveValue("1024x1024");
+  await expect(page.locator(".model-size-selector")).toContainText(
+    "1024 × 1024",
+  );
   await expect(page.getByLabel("模型最大边长", { exact: true })).toHaveValue(
     "1024",
   );
@@ -930,15 +949,34 @@ test("desktop administration publishes service model pools and preserves version
   await imagePool
     .getByRole("button", { name: "能力设置", exact: true })
     .click();
-  await expect(page.getByLabel(/^限定尺寸/)).toHaveValue("");
+  await expect(
+    page.getByRole("radio", { name: "按模型范围开放", exact: true }),
+  ).toBeChecked();
   await page.getByLabel("模型最大边长", { exact: true }).fill("2048");
-  const sizes = page.getByLabel(/^限定尺寸/);
+  await page
+    .getByRole("radio", { name: "仅开放指定尺寸", exact: true })
+    .check();
   const abilitySave = await page
     .getByRole("button", { name: "应用到待发布配置", exact: true })
     .boundingBox();
   expect(abilitySave!.y + abilitySave!.height).toBeLessThanOrEqual(1000);
-  await sizes.pressSequentially("1024x1024,512x512");
-  await expect(sizes).toHaveValue("1024x1024,512x512");
+  await page.getByRole("combobox", { name: "允许的尺寸", exact: true }).click();
+  await page
+    .locator(".ant-select-dropdown:visible .ant-select-item-option-content")
+    .filter({ hasText: /^1024 × 1024$/ })
+    .click();
+  await page.keyboard.press("Escape");
+  await page
+    .getByRole("button", { name: "添加自定义尺寸", exact: true })
+    .click();
+  await page.getByLabel("自定义宽度", { exact: true }).fill("4096");
+  await expect(
+    page.getByRole("button", { name: "添加尺寸", exact: true }),
+  ).toBeDisabled();
+  await page.getByLabel("自定义宽度", { exact: true }).fill("512");
+  await page.getByLabel("自定义高度", { exact: true }).fill("512");
+  await page.getByRole("button", { name: "添加尺寸", exact: true }).click();
+  await expect(page.locator(".model-size-selector")).toContainText("512 × 512");
   await page.getByLabel("支持格式", { exact: true }).click();
   const formatMenu = page.locator(".ant-select-dropdown:visible");
   await expect(formatMenu).toBeVisible();

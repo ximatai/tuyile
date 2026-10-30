@@ -1,4 +1,8 @@
 import {
+  ModelSizeSelector,
+  allowedConfiguredSize,
+} from "./model-size-selector";
+import {
   recommendedModelCapabilities,
   conversationModelKnowledge,
 } from "./model-recommendations";
@@ -62,7 +66,8 @@ export function ModelServicesAdmin() {
     } | null>(null),
     [editor, setEditor] = useState<Partial<ModelServiceInput> | null>(null),
     [advanced, setAdvanced] = useState<PoolEntryInput | null>(null),
-    [sizes, setSizes] = useState(""),
+    [sizes, setSizes] = useState<string[]>([]),
+    [sizeMode, setSizeMode] = useState<"range" | "fixed">("range"),
     [manual, setManual] = useState(false),
     [manualId, setManualId] = useState("");
   const data = query.data,
@@ -355,7 +360,10 @@ export function ModelServicesAdmin() {
                           onClick={() => {
                             setError("");
                             setAdvanced(structuredClone(e));
-                            setSizes(e.image?.sizes.join(",") ?? "");
+                            setSizes(e.image?.sizes ?? []);
+                            setSizeMode(
+                              e.image?.sizes.length ? "fixed" : "range",
+                            );
                           }}
                         >
                           能力设置
@@ -780,7 +788,8 @@ export function ModelServicesAdmin() {
                     ),
                   };
                   setAdvanced(next);
-                  setSizes(next.image?.sizes.join(",") ?? "");
+                  setSizes(next.image?.sizes ?? []);
+                  setSizeMode(next.image?.sizes.length ? "fixed" : "range");
                   setError("");
                 }}
               >
@@ -790,7 +799,20 @@ export function ModelServicesAdmin() {
                 className="primary"
                 type="submit"
                 form="model-capability-editor"
-                disabled={busy}
+                disabled={
+                  busy ||
+                  (!!advanced?.image &&
+                    sizeMode === "fixed" &&
+                    (!sizes.length ||
+                      sizes.some((size) => {
+                        const [width, height] = size.split("x").map(Number);
+                        return !allowedConfiguredSize(
+                          advanced.image!,
+                          width!,
+                          height!,
+                        );
+                      })))
+                }
               >
                 应用到待发布配置
               </Button>
@@ -812,10 +834,7 @@ export function ModelServicesAdmin() {
                       ? {
                           image: {
                             ...advanced.image,
-                            sizes: sizes
-                              .split(",")
-                              .map((s) => s.trim())
-                              .filter(Boolean),
+                            sizes: sizeMode === "range" ? [] : sizes,
                           },
                         }
                       : {}),
@@ -829,7 +848,7 @@ export function ModelServicesAdmin() {
                   setAdvanced(null);
                 } catch {
                   setError(
-                    "请检查模型能力：尺寸使用1024x1024格式，质量/格式至少一项，上限不得超过已校准的模型能力。",
+                    "请检查模型能力：质量和格式至少选择一项，尺寸及上限需符合已校准的能力。",
                   );
                 }
               }}
@@ -1013,10 +1032,12 @@ export function ModelServicesAdmin() {
                       ),
                     )}
                   </div>
-                  <Field
-                    label="限定尺寸（英文逗号分隔，留空按上限校验）"
+                  <ModelSizeSelector
+                    capability={advanced.image}
+                    mode={sizeMode}
+                    onModeChange={setSizeMode}
                     value={sizes}
-                    onChange={(e) => setSizes(e.target.value)}
+                    onChange={setSizes}
                   />
                   <label className="field">
                     <span>支持质量</span>
