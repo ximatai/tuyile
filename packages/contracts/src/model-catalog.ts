@@ -1,3 +1,4 @@
+import { imageDeclarationWithinKnownLimits } from "./image-model-knowledge.js";
 import { z } from "zod";
 import { imageCapability } from "./extensions.js";
 export const modelKind = z.enum(["conversation", "image"]);
@@ -89,6 +90,13 @@ export const poolPublication = z
         .size !== v.entries.length
     )
       c.addIssue({ code: "custom", message: "Duplicate model" });
+    for (const entry of v.entries) {
+      if (entry.image && !imageDeclarationWithinKnownLimits(entry.image))
+        c.addIssue({
+          code: "custom",
+          message: "Declared image limits exceed documented model capability",
+        });
+    }
     for (const kind of ["image", "conversation"]) {
       const enabled = v.entries.filter((e) => e.kind === kind && e.enabled);
       const defaults = enabled.filter((e) => e.isDefault);

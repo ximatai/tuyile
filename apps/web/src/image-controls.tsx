@@ -16,6 +16,8 @@ import {
   selectedCapability,
   supportedSizePresets,
   sizeOptionLabel,
+  initialSettings,
+  validSize,
   type ImageSettings,
 } from "./image-settings";
 export function ImageControls({
@@ -45,7 +47,47 @@ export function ImageControls({
       (s) => s.width === value.width && s.height === value.height,
     ),
     qualities = usage ? allowedQualities(usage, cap) : [];
-  const patch = (v: Partial<ImageSettings>) => onChange({ ...value, ...v });
+  const formats = (["png", "jpeg", "webp"] as const).filter((format) =>
+    cap?.formats.includes(format),
+  );
+  const ratios = [...new Set(sizes.map((size) => size.ratio))];
+  const sameRatioSizes = sizes.filter(
+    (size) => !currentSize || size.ratio === currentSize.ratio,
+  );
+  const patch = (v: Partial<ImageSettings>) => {
+    if (v.modelKey && usage && v.modelKey !== value.modelKey) {
+      const nextUsage = {
+        ...usage,
+        models: [v.modelKey, ...usage.models.filter((id) => id !== v.modelKey)],
+        modelOptions: usage.modelOptions?.map((model) => ({
+          ...model,
+          isDefault: model.id === v.modelKey,
+        })),
+      };
+      const defaults = initialSettings(nextUsage);
+      const next = selectedCapability(usage, v.modelKey);
+      const sizeAllowed =
+        next &&
+        validSize(usage, next, value.width, value.height) &&
+        (!next.sizes.length ||
+          next.sizes.includes(`${value.width}x${value.height}`));
+      onChange({
+        ...value,
+        modelKey: v.modelKey,
+        width: sizeAllowed ? value.width : defaults.width,
+        height: sizeAllowed ? value.height : defaults.height,
+        quality:
+          next && allowedQualities(usage, next).includes(value.quality)
+            ? value.quality
+            : defaults.quality,
+        format: next?.formats.includes(value.format)
+          ? value.format
+          : defaults.format,
+      });
+      return;
+    }
+    onChange({ ...value, ...v });
+  };
   const qualityNames = { low: "快速草稿", medium: "标准", high: "高质量" };
   const ratioLabel = (ratio: string) => {
     const [w, h] = ratio.split(":").map(Number);
@@ -74,10 +116,13 @@ export function ImageControls({
       onValueChange={(quality) =>
         patch({ quality: quality as ImageSettings["quality"] })
       }
-      options={(["low", "medium", "high"] as const).map((q) => ({
+      disabled={
+        !qualities.length ||
+        (qualities.length === 1 && qualities.includes(value.quality))
+      }
+      options={qualities.map((q) => ({
         value: q,
         label: qualityNames[q],
-        disabled: !qualities.includes(q),
       }))}
     />
   );
@@ -89,6 +134,10 @@ export function ImageControls({
         <ChoiceField
           label={label(modelLabel)}
           value={value.modelKey}
+          disabled={
+            !choices.length ||
+            (choices.length === 1 && choices[0]?.value === value.modelKey)
+          }
           onValueChange={(modelKey) => patch({ modelKey })}
           showSearch={{ optionFilterProp: "label" }}
           popupMatchSelectWidth={440}
@@ -136,11 +185,16 @@ export function ImageControls({
         <ChoiceField
           label={label("比例")}
           value={currentSize?.ratio ?? "custom"}
+          disabled={!ratios.length || (ratios.length === 1 && !!currentSize)}
           optionRender={(option) => ratioLabel(String(option.value))}
           labelRender={(option) => ratioLabel(String(option.value))}
-          options={[...new Set(sizes.map((s) => s.ratio))]
+          options={ratios
             .map((ratio) => ({ value: ratio, label: ratio }))
-            .concat(currentSize ? [] : [{ value: "custom", label: "自定义" }])}
+            .concat(
+              currentSize || cap?.sizes.length
+                ? []
+                : [{ value: "custom", label: "自定义" }],
+            )}
           onValueChange={(ratio) => {
             if (ratio === "custom") {
               setAdvancedOpen(true);
@@ -156,8 +210,11 @@ export function ImageControls({
         <ChoiceField
           label={label("尺寸")}
           value={`${value.width}x${value.height}`}
-          options={sizes
-            .filter((s) => !currentSize || s.ratio === currentSize.ratio)
+          disabled={
+            !sameRatioSizes.length ||
+            (sameRatioSizes.length === 1 && !!currentSize)
+          }
+          options={sameRatioSizes
             .sort((a, b) => a.width * a.height - b.width * b.height)
             .map((s) => ({
               value: `${s.width}x${s.height}`,
@@ -185,6 +242,7 @@ export function ImageControls({
           <ChoiceField
             label={label(labelPrefix ? "张数" : "图片张数")}
             value={String(value.count)}
+            disabled={usage?.policy.maxCount === 1 && value.count === 1}
             onValueChange={(count) => patch({ count: Number(count) })}
             options={Array.from(
               { length: usage?.policy.maxCount ?? 16 },
@@ -196,13 +254,16 @@ export function ImageControls({
           label={label("格式")}
           name="format"
           value={value.format}
+          disabled={
+            !formats.length ||
+            (formats.length === 1 && formats.includes(value.format))
+          }
           onValueChange={(format) =>
             patch({ format: format as ImageSettings["format"] })
           }
-          options={(["png", "jpeg", "webp"] as const).map((f) => ({
+          options={formats.map((f) => ({
             value: f,
             label: f === "webp" ? "WebP" : f.toUpperCase(),
-            disabled: !cap?.formats.includes(f),
           }))}
         />
       </div>

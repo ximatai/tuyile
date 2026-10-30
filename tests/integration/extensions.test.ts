@@ -253,3 +253,32 @@ it("a newly registered trusted image tool uses the existing executor, output and
     ).rows[0].n,
   ).toBe(1);
 });
+it("enforces documented model bounds before holds even when administrator declarations are broader", async () => {
+  const model = "gpt-image-2.5-sunburst";
+  await f.repo.saveProvider(f.principal, {
+    mode: "fake",
+    baseUrl: "",
+    models: [model],
+    preserveKey: false,
+    capabilities: [{ ...defaultImageCapability(model), formats: ["webp"] }],
+  });
+  await expect(
+    f.creation.submit(
+      f.principal,
+      f.input({ model, width: 512, height: 512, format: "webp" }),
+    ),
+  ).rejects.toMatchObject({ code: "MODEL_CAPABILITY_UNSUPPORTED" });
+  await expect(
+    f.creation.submit(
+      f.principal,
+      f.input({ model, width: 1024, height: 1024, format: "png" }),
+    ),
+  ).rejects.toMatchObject({ code: "MODEL_CAPABILITY_UNSUPPORTED" });
+  expect(await f.repo.usage(f.principal)).toMatchObject({ held: 0 });
+  const accepted = await f.creation.submit(
+    f.principal,
+    f.input({ model, width: 1024, height: 1024, format: "webp" }),
+  );
+  expect(accepted.state).toBe("queued");
+  expect(await f.repo.usage(f.principal)).toMatchObject({ held: 1 });
+});

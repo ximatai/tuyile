@@ -1,3 +1,7 @@
+import {
+  imageModelKnowledge,
+  imageDeclarationWithinKnownLimits,
+} from "@tuyile/contracts";
 import { useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -731,16 +735,37 @@ export function ModelServicesAdmin() {
                         }
                       : {}),
                   });
+                  if (
+                    value.image &&
+                    !imageDeclarationWithinKnownLimits(value.image)
+                  )
+                    throw new Error("KNOWN_MODEL_LIMIT");
                   editEntry(value.id, value);
                   setAdvanced(null);
                 } catch {
                   setError(
-                    "请检查模型能力：尺寸使用1024x1024格式，质量/格式至少选择一项。",
+                    "请检查模型能力：尺寸使用1024x1024格式，质量/格式至少一项，上限不得超过已校准的模型能力。",
                   );
                 }
               }}
             >
-              <p className="hint">按服务商文档声明模型能力。</p>
+              {imageModelKnowledge(advanced.modelId) ? (
+                <p className="hint">
+                  已校准官方文档（2026-10-30）：PNG / JPEG /
+                  WebP；边长不超过3840，像素655360—8294400，比例不超过3:1。
+                  <a
+                    href={imageModelKnowledge(advanced.modelId)!.source}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    能力依据
+                  </a>
+                </p>
+              ) : (
+                <p className="hint">
+                  尚无独立能力记录，按服务商文档声明；未经文档或实测确认的能力不要开放。
+                </p>
+              )}
               {advanced.conversation && (
                 <>
                   <Checkbox
@@ -858,8 +883,10 @@ export function ModelServicesAdmin() {
                             key === "maxReferences"
                               ? 4
                               : key === "maxEdge"
-                                ? 8192
-                                : 32000000
+                                ? (imageModelKnowledge(advanced.modelId)
+                                    ?.maxEdge ?? 8192)
+                                : (imageModelKnowledge(advanced.modelId)
+                                    ?.maxPixels ?? 32000000)
                           }
                           value={advanced.image![key]}
                           onChange={(e) =>

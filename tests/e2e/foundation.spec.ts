@@ -355,6 +355,38 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   await expect(
     page.getByRole("combobox", { name: "格式", exact: true }),
   ).toBeVisible();
+  const restrictedUsage = async (route: import("@playwright/test").Route) => {
+    const response = await route.fetch();
+    const usage = await response.json();
+    const restrict = (cap: any) => ({
+      ...cap,
+      formats: ["png"],
+      qualities: ["medium", "high"],
+      sizes: ["1024x1024"],
+    });
+    await route.fulfill({
+      response,
+      json: {
+        ...usage,
+        policy: { ...usage.policy, maxQuality: "medium" },
+        capabilities: usage.capabilities.map(restrict),
+        modelOptions: usage.modelOptions?.map((model: any) => ({
+          ...model,
+          image: model.image ? restrict(model.image) : undefined,
+        })),
+      },
+    });
+  };
+  await page.route("**/api/images/usage", restrictedUsage);
+  for (const name of ["质量", "格式", "比例", "尺寸"]) {
+    await expect(
+      page.getByRole("combobox", { name, exact: true }),
+    ).toBeDisabled();
+  }
+  await page.unroute("**/api/images/usage", restrictedUsage);
+  await expect(
+    page.getByRole("combobox", { name: "质量", exact: true }),
+  ).toBeEnabled();
   await page
     .getByRole("button", { name: "后台执行与计费", exact: true })
     .click();

@@ -1,4 +1,8 @@
-import { imageCapabilityDefaults } from "@tuyile/contracts";
+import {
+  imageCapabilityDefaults,
+  effectiveImageCapability,
+  imageSizeWithinKnownLimits,
+} from "@tuyile/contracts";
 import type { ImageCapability, ImageInput } from "@tuyile/contracts";
 import { AppError } from "./index.js";
 /** Compatibility profile is an administrator declaration, not provider discovery. */
@@ -20,9 +24,11 @@ export function checkImageCapability(
   input: ImageInput,
   capabilities: ImageCapability[],
 ) {
-  const c = capabilities.find((c) => c.model === input.model);
+  const declared = capabilities.find((c) => c.model === input.model);
+  const c = declared && effectiveImageCapability(declared);
   if (
     !c ||
+    !imageSizeWithinKnownLimits(input.model, input.width, input.height) ||
     (input.referenceIds.length ? !c.editing : !c.generation) ||
     input.referenceIds.length > c.maxReferences ||
     input.width > c.maxEdge ||

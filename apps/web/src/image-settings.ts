@@ -1,3 +1,7 @@
+import {
+  effectiveImageCapability,
+  imageSizeWithinKnownLimits,
+} from "@tuyile/contracts";
 import { standardSizes, type SizePreset } from "./creation-presets";
 import type {
   ImageInput,
@@ -15,9 +19,10 @@ export function selectedCapability(
   usage: ImageUsage,
   key: string,
 ): ImageCapability | undefined {
-  return usage.modelOptions
+  const declared = usage.modelOptions
     ? usage.modelOptions.find((m) => m.id === key)?.image
     : usage.capabilities.find((c) => c.model === key);
+  return declared && effectiveImageCapability(declared);
 }
 export function modelChoices(usage?: ImageUsage) {
   return (
@@ -41,13 +46,15 @@ export function validSize(
   height: number,
 ) {
   return (
+    imageSizeWithinKnownLimits(cap.model, width, height) &&
     [width, height].every(
       (n) =>
         Number.isInteger(n) &&
         n >= 256 &&
         n % 16 === 0 &&
         n <= Math.min(cap.maxEdge, usage.policy.maxEdge),
-    ) && width * height <= Math.min(cap.maxPixels, usage.policy.maxPixels)
+    ) &&
+    width * height <= Math.min(cap.maxPixels, usage.policy.maxPixels)
   );
 }
 export function sizeChoices(usage: ImageUsage, cap?: ImageCapability) {

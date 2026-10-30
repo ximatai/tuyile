@@ -70,3 +70,5 @@ export * from "./agent.js";
 export * from "./library.js";
 export * from "./administration.js";
 export * from "./model-catalog.js";
+
+export * from "./image-model-knowledge.js";
