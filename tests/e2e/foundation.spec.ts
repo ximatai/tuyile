@@ -249,6 +249,21 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     .getByRole("button", { name: "取消", exact: true })
     .click();
   await expect(page.getByLabel("创作需求")).toHaveValue(styledDraft);
+  const resolutionHeading = page
+    .locator(".direct-creation .field-heading")
+    .filter({ has: page.getByLabel("实际尺寸", { exact: true }) });
+  await expect(resolutionHeading).toContainText("分辨率");
+  const headingGeometry = await resolutionHeading.evaluate((heading) => {
+    const title = heading.querySelector("label")!.getBoundingClientRect();
+    const pixels = heading
+      .querySelector(".size-pixels")!
+      .getBoundingClientRect();
+    return {
+      sameLine: Math.abs(title.top - pixels.top) < 3,
+      fits: heading.scrollWidth <= heading.clientWidth,
+    };
+  });
+  expect(headingGeometry).toEqual({ sameLine: true, fits: true });
   await page.getByRole("combobox", { name: "分辨率", exact: true }).click();
   await page
     .locator(".ant-select-dropdown:visible")

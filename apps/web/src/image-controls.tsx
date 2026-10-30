@@ -93,6 +93,11 @@ export function ImageControls({
       <div className="parameter-grid">
         <ChoiceField
           label={label("分辨率")}
+          labelExtra={
+            <span className="size-pixels" aria-label={label("实际尺寸")}>
+              {value.width} × {value.height} px
+            </span>
+          }
           value={currentSize?.tier ?? "custom"}
           options={[...new Set(sizes.map((s) => s.tier))]
             .map((tier) => ({ value: tier, label: tier }))
@@ -130,9 +135,6 @@ export function ImageControls({
           }}
         />
       </div>
-      <span className="size-pixels" aria-label={label("实际尺寸")}>
-        {value.width} × {value.height} px
-      </span>
       <div className={`parameter-grid${count ? " image-output-options" : ""}`}>
         <ChoiceField
           label={label("质量")}

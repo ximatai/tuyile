@@ -2490,7 +2490,6 @@ h3 {
   gap: 8px;
 }
 .size-pixels {
-  margin-top: -4px;
   font-size: 12px;
   color: var(--muted);
 }
@@ -2685,4 +2684,22 @@ h3 {
 
 .image-output-options {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.field-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+.field-heading > label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.field-heading .size-pixels {
+  flex-shrink: 0;
+  white-space: nowrap;
 }

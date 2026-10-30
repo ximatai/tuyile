@@ -158,6 +158,7 @@ export function ChoiceField({
   onValueChange,
   disabled,
   hideLabel = false,
+  labelExtra,
   showSearch,
   optionRender,
   labelRender,
@@ -171,6 +172,7 @@ export function ChoiceField({
   onValueChange?: (value: string) => void;
   disabled?: boolean;
   hideLabel?: boolean;
+  labelExtra?: ReactNode;
   showSearch?: SelectProps["showSearch"];
   optionRender?: SelectProps["optionRender"];
   labelRender?: SelectProps["labelRender"];
@@ -181,9 +183,22 @@ export function ChoiceField({
   const current = value ?? local;
   return (
     <div className="field">
-      <label htmlFor={id} className={hideLabel ? "sr-only" : undefined}>
-        {label}
-      </label>
+      {labelExtra ? (
+        <div className="field-heading">
+          <label
+            htmlFor={id}
+            className={hideLabel ? "sr-only" : undefined}
+            title={label}
+          >
+            {label}
+          </label>
+          {labelExtra}
+        </div>
+      ) : (
+        <label htmlFor={id} className={hideLabel ? "sr-only" : undefined}>
+          {label}
+        </label>
+      )}
       <Select
         id={id}
         value={current}
