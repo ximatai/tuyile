@@ -256,21 +256,10 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     .getByRole("button", { name: "取消", exact: true })
     .click();
   await expect(page.getByLabel("创作需求")).toHaveValue(styledDraft);
-  const resolutionHeading = page
-    .locator(".direct-creation .field-heading")
-    .filter({ has: page.getByLabel("实际尺寸", { exact: true }) });
-  await expect(resolutionHeading).toContainText("尺寸");
-  const headingGeometry = await resolutionHeading.evaluate((heading) => {
-    const title = heading.querySelector("label")!.getBoundingClientRect();
-    const pixels = heading
-      .querySelector(".size-pixels")!
-      .getBoundingClientRect();
-    return {
-      sameLine: Math.abs(title.top - pixels.top) < 3,
-      fits: heading.scrollWidth <= heading.clientWidth,
-    };
+  const resolutionField = page.locator(".direct-creation .field").filter({
+    has: page.getByRole("combobox", { name: "尺寸", exact: true }),
   });
-  expect(headingGeometry).toEqual({ sameLine: true, fits: true });
+  await expect(resolutionField.locator(".size-pixels")).toHaveCount(0);
   await page.getByRole("combobox", { name: "尺寸", exact: true }).click();
   await page
     .locator(".ant-select-dropdown:visible")
@@ -283,26 +272,20 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     .locator(".ant-select-item-option-content")
     .filter({ hasText: /^16:9$/ })
     .click();
-  await expect(page.getByLabel("实际尺寸", { exact: true })).toHaveText(
-    "2048 × 1152 px",
-  );
+  await expect(resolutionField).toContainText("2048 × 1152");
   await page.getByRole("combobox", { name: "尺寸", exact: true }).click();
   await page
     .locator(".ant-select-dropdown:visible")
     .locator(".ant-select-item-option-content")
     .filter({ hasText: /^1824 × 1024$/ })
     .click();
-  await expect(page.getByLabel("实际尺寸", { exact: true })).toHaveText(
-    "1824 × 1024 px",
-  );
+  await expect(resolutionField).toContainText("1824 × 1024");
   await page.getByRole("combobox", { name: "尺寸", exact: true }).click();
   await page
     .locator(".ant-select-dropdown:visible")
     .getByText("1280 × 720 · 720p", { exact: true })
     .click();
-  await expect(page.getByLabel("实际尺寸", { exact: true })).toHaveText(
-    "1280 × 720 px",
-  );
+  await expect(resolutionField).toContainText("1280 × 720");
   await page.getByRole("combobox", { name: "尺寸", exact: true }).click();
   await expect(
     page
@@ -346,9 +329,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   await page.getByRole("button", { name: "自定义尺寸", exact: true }).click();
   await expect(page.getByLabel("宽度", { exact: true })).toBeEnabled();
   await page.getByLabel("宽度", { exact: true }).fill("1008");
-  await expect(page.getByLabel("实际尺寸", { exact: true })).toHaveText(
-    "1008 × 1024 px",
-  );
+  await expect(resolutionField).toContainText("1008 × 1024");
   await page.getByLabel("宽度", { exact: true }).fill("1024");
   await page.getByRole("button", { name: "自定义尺寸", exact: true }).click();
   await expect(

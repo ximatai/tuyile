@@ -155,11 +155,6 @@ export function ImageControls({
         />
         <ChoiceField
           label={label("尺寸")}
-          labelExtra={
-            <span className="size-pixels" aria-label={label("实际尺寸")}>
-              {value.width} × {value.height} px
-            </span>
-          }
           value={`${value.width}x${value.height}`}
           options={sizes
             .filter((s) => !currentSize || s.ratio === currentSize.ratio)
