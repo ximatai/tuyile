@@ -845,6 +845,62 @@ test("desktop canvas saves geometry, handles conflicts and never replaces remove
   const first = await (
     await page.request.get(`/api/projects/${projectId}/canvas`)
   ).json();
+  const imageActions = node.getByRole("toolbar", {
+    name: "图片操作",
+    exact: true,
+  });
+  await page.mouse.move(5, 5);
+  await expect(imageActions).toHaveCSS("opacity", "0");
+  const imageGeometry = await node.evaluate((element) => {
+    const outer = element.getBoundingClientRect(),
+      image = element.querySelector("img")!.getBoundingClientRect();
+    return {
+      width: Math.abs(outer.width - image.width),
+      height: Math.abs(outer.height - image.height),
+    };
+  });
+  expect(imageGeometry.width).toBeLessThan(1);
+  expect(imageGeometry.height).toBeLessThan(1);
+  await node.hover();
+  await expect(imageActions).toHaveCSS("opacity", "1");
+  await node.getByRole("button", { name: "查看原图", exact: true }).click();
+  await expect(page.locator(".ant-image-preview")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".ant-image-preview")).toBeHidden();
+  const downloadAction = node.getByRole("link", {
+    name: "下载原图",
+    exact: true,
+  });
+  await page.mouse.move(5, 5);
+  await downloadAction.focus();
+  await expect(downloadAction).toBeFocused();
+  await expect(imageActions).toHaveCSS("opacity", "1");
+  await expect(downloadAction).toHaveAttribute(
+    "href",
+    `/api/images/assets/${first.document.nodes[0].assetId}/download`,
+  );
+  await node.getByRole("button", { name: "复用图片设置", exact: true }).click();
+  await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
+    "合成画布图片",
+  );
+  await page.getByLabel("创作需求", { exact: true }).fill("");
+  await node.hover();
+  await node.getByRole("button", { name: "作为参考图", exact: true }).click();
+  await expect(
+    page
+      .getByTestId("reference-upload")
+      .getByText("画布参考图", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "移除引用 画布参考图", exact: true })
+    .click();
+  expect(
+    (
+      await (
+        await page.request.get(`/api/images/tasks?projectId=${projectId}`)
+      ).json()
+    ).tasks,
+  ).toHaveLength(1);
   const pane = (await page.locator(".react-flow__pane").boundingBox())!;
   async function savedCanvas() {
     return (await page.request.get(`/api/projects/${projectId}/canvas`)).json();

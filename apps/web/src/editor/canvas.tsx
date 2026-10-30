@@ -29,6 +29,10 @@ import type {
   Project,
 } from "@tuyile/contracts";
 import {
+  Expand,
+  Download,
+  ImagePlus,
+  SlidersHorizontal,
   Hand,
   MousePointer2,
   Undo2,
@@ -39,14 +43,7 @@ import {
   Ungroup,
   AlignStartVertical,
 } from "lucide-react";
-import {
-  Button,
-  Dropdown,
-  Image,
-  Notice,
-  Tooltip,
-  useConfirm,
-} from "@tuyile/ui";
+import { Button, Image, Notice, Tooltip, useConfirm } from "@tuyile/ui";
 import { useNavigate } from "react-router-dom";
 import { EditorStore } from "./store";
 import { GenerationFeedback } from "../generation-feedback";
@@ -82,46 +79,56 @@ function ImageCard({ data, selected }: NodeProps<ImageNode>) {
         keepAspectRatio
       />
       <Handle type="target" position={Position.Left} isConnectable={false} />
-      <div className="canvas-image-heading" title={data.label}>
-        {data.label}
-      </div>
       <img
         draggable={false}
         src={`/api/images/assets/${data.assetId}/preview`}
         alt={data.label}
       />
-      <div className="canvas-image-caption">
-        <span title={data.label}>{data.label}</span>
-        <a
-          className="nodrag"
-          href={`/api/images/assets/${data.assetId}/download`}
-        >
-          下载原图
-        </a>
-        {selected && (
-          <Dropdown
-            trigger={["click"]}
-            menu={{
-              items: [
-                { key: "preview", label: "查看原图" },
-                ...(data.reuse ? [{ key: "reuse", label: "复用设置" }] : []),
-              ],
-              onClick: ({ key }) =>
-                key === "preview" ? setPreview(true) : data.reuse?.(),
-            }}
-          >
-            <Button type="button" className="nodrag" aria-label="图片操作">
-              ···
-            </Button>
-          </Dropdown>
-        )}
-        {selected && (
+      <div
+        className="canvas-image-actions nodrag nopan"
+        role="toolbar"
+        aria-label="图片操作"
+        onDoubleClick={(event) => event.stopPropagation()}
+      >
+        <Tooltip title="预览" trigger={["hover", "focus"]}>
           <Button
-            className="nodrag"
-            onClick={() => data.reference?.(data.assetId!)}
+            type="button"
+            aria-label="查看原图"
+            onClick={() => setPreview(true)}
           >
-            作为参考图
+            <Expand size={16} aria-hidden="true" />
           </Button>
+        </Tooltip>
+        <Tooltip title="下载" trigger={["hover", "focus"]}>
+          <a
+            className="canvas-image-action"
+            aria-label="下载原图"
+            href={`/api/images/assets/${data.assetId}/download`}
+          >
+            <Download size={16} aria-hidden="true" />
+          </a>
+        </Tooltip>
+        {data.reference && (
+          <Tooltip title="参考图" trigger={["hover", "focus"]}>
+            <Button
+              type="button"
+              aria-label="作为参考图"
+              onClick={() => data.reference?.(data.assetId!)}
+            >
+              <ImagePlus size={16} aria-hidden="true" />
+            </Button>
+          </Tooltip>
+        )}
+        {data.reuse && (
+          <Tooltip title="复用" trigger={["hover", "focus"]}>
+            <Button
+              type="button"
+              aria-label="复用图片设置"
+              onClick={() => data.reuse?.()}
+            >
+              <SlidersHorizontal size={16} aria-hidden="true" />
+            </Button>
+          </Tooltip>
         )}
       </div>
       <Handle type="source" position={Position.Right} isConnectable={false} />
