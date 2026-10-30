@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState, type FormEvent } from "react";
+import { useState, useId, type FormEvent } from "react";
 import type { ImagePolicy, ModelCatalogSnapshot } from "@tuyile/contracts";
 import {
   Button,
@@ -10,6 +10,7 @@ import {
   Collapse,
   Radio,
   Checkbox,
+  Input,
 } from "@tuyile/ui";
 import { useSessionState } from "./session-state";
 import { client } from "./api";
@@ -34,6 +35,7 @@ export function UserPolicyEditor({
   onDirtyChange: (dirty: boolean) => void;
   onBusyChange: (busy: boolean) => void;
 }) {
+  const quotaInputId = useId();
   const state = useSessionState(),
     api = client(csrfToken);
   const [finiteQuota, setFiniteQuota] = useState(100);
@@ -114,10 +116,25 @@ export function UserPolicyEditor({
       {policy.isPending && <p role="status">正在加载配置…</p>}
       {current && (
         <form aria-label="保存用户配置" onSubmit={(e) => void save(e)}>
-          <div className="parameter-grid">
-            <div>
-              <Field
-                label="每日图片额度"
+          <div className="parameter-grid user-policy-quota-grid">
+            <div className="field">
+              <div className="user-policy-quota-heading">
+                <label htmlFor={quotaInputId}>每日图片额度</label>
+                <Checkbox
+                  checked={current.imageLimit === -1}
+                  disabled={busy}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setFiniteQuota(current.imageLimit);
+                      patch({ imageLimit: -1 });
+                    } else patch({ imageLimit: finiteQuota });
+                  }}
+                >
+                  不限额
+                </Checkbox>
+              </div>
+              <Input
+                id={quotaInputId}
                 type="number"
                 min={0}
                 max={10000}
@@ -127,18 +144,6 @@ export function UserPolicyEditor({
                 placeholder={current.imageLimit === -1 ? "不限额" : undefined}
                 onChange={(e) => patch({ imageLimit: Number(e.target.value) })}
               />
-              <Checkbox
-                checked={current.imageLimit === -1}
-                disabled={busy}
-                onChange={(e) => {
-                  if (e.target.checked) {
-                    setFiniteQuota(current.imageLimit);
-                    patch({ imageLimit: -1 });
-                  } else patch({ imageLimit: finiteQuota });
-                }}
-              >
-                不限额
-              </Checkbox>
             </div>
             <Field
               label="存储上限（GB）"

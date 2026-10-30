@@ -3197,3 +3197,17 @@ h3 {
 .user-policy-models {
   margin-top: 12px;
 }
+
+.user-policy-quota-grid {
+  align-items: start;
+}
+.user-policy-quota-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.user-policy-quota-heading .ant-checkbox-wrapper {
+  font-size: inherit;
+  line-height: inherit;
+}

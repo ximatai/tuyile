@@ -2229,3 +2229,38 @@ test("administrators add a service and users select same-named models from the c
     fullPage: true,
   });
 });
+
+test("user quota inputs align in finite and unlimited modes on desktop", async ({
+  page,
+}) => {
+  await login(page);
+  await page.getByRole("link", { name: "用户管理", exact: true }).click();
+  await page.getByRole("button", { name: "管理", exact: true }).click();
+  const drawer = page.getByRole("dialog", { name: "admin", exact: true });
+  const quota = drawer.getByLabel("每日图片额度", { exact: true });
+  const storage = drawer.getByLabel("存储上限（GB）", { exact: true });
+  const unlimited = drawer.getByRole("checkbox", {
+    name: "不限额",
+    exact: true,
+  });
+  await expect(unlimited).toBeChecked();
+  for (const width of [1280, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const checked of [false, true]) {
+      await unlimited.setChecked(checked);
+      await expect
+        .poll(async () => {
+          const a = await quota.boundingBox(),
+            b = await storage.boundingBox();
+          return a && b
+            ? Math.max(Math.abs(a.y - b.y), Math.abs(a.height - b.height))
+            : Infinity;
+        })
+        .toBeLessThan(1);
+      await expect(quota).toHaveJSProperty("disabled", checked);
+    }
+  }
+  await expect(
+    drawer.getByRole("button", { name: "保存用户配置", exact: true }),
+  ).toBeDisabled();
+});
