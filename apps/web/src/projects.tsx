@@ -79,9 +79,7 @@ export function ProjectsPage({ csrfToken }: { csrfToken: string }) {
     <section>
       <div className="page-heading">
         <div>
-          <p className="eyebrow">个人工作区</p>
           <h1>我的项目</h1>
-          <p className="muted">按创作主题整理你的项目，内容仅自己可见。</p>
         </div>
       </div>
       <form className="create-project" onSubmit={create} aria-label="创建项目">

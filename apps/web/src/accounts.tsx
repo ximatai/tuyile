@@ -87,9 +87,6 @@ export function AdminPage({
     <section>
       <p className="eyebrow">管理</p>
       <h1>账号管理</h1>
-      <p className="muted">
-        维护账号与访问状态。管理员不能查看其他用户的项目、图片和对话。
-      </p>
       <form
         key={createVersion}
         onSubmit={create}
@@ -99,7 +96,7 @@ export function AdminPage({
         <Field
           label="新账号"
           name="username"
-          placeholder="例如：designer01"
+          placeholder="3–64 位小写字母、数字或 . _ -"
           required
           pattern="[a-z0-9][a-z0-9_.-]{2,63}"
           minLength={3}
@@ -109,9 +106,6 @@ export function AdminPage({
           {busy ? "正在处理…" : "创建账号"}
         </Button>
       </form>
-      <p className="hint">
-        3–64 位小写字母、数字或 . _ -；新账号通过链接自行设置密码。
-      </p>
       {(error || query.error) && (
         <Notice error>{error || query.error?.message}</Notice>
       )}

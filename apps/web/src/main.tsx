@@ -24,7 +24,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import type { SessionView } from "@tuyile/contracts";
-import { Button, Notice, UiProvider } from "@tuyile/ui";
+import { Button, Notice, UiProvider, Tooltip } from "@tuyile/ui";
 import { client, ApiError, notifySessionChange, sessionTabId } from "./api";
 import { SessionProvider, useSessionState } from "./session-state";
 import "./styles.css";
@@ -191,17 +191,22 @@ function Shell() {
   }
   const workspace = /^\/projects\/[^/]+$/.test(path);
   const nav = (to: string, label: string, icon: React.ReactNode) => (
-    <Link
-      to={to}
-      aria-label={label}
-      title={label}
-      aria-current={
-        path === to || (to === "/projects" && workspace) ? "page" : undefined
-      }
+    <Tooltip
+      title={collapsed ? label : undefined}
+      placement="right"
+      trigger={["hover", "focus"]}
     >
-      {icon}
-      <span>{label}</span>
-    </Link>
+      <Link
+        to={to}
+        aria-label={label}
+        aria-current={
+          path === to || (to === "/projects" && workspace) ? "page" : undefined
+        }
+      >
+        {icon}
+        <span>{label}</span>
+      </Link>
+    </Tooltip>
   );
   return (
     <div

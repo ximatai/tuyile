@@ -10,6 +10,8 @@ import { useState, useEffect, useRef, type FormEvent } from "react";
 import type { ImageInput, ImageTask, ImageUsage } from "@tuyile/contracts";
 import {
   Tabs,
+  Collapse,
+  Popover,
   Button,
   Field,
   Notice,
@@ -178,7 +180,7 @@ export function UsageSummary({ usage }: { usage: ImageUsage }) {
         {((usage.storageUsed + usage.storageReserved) / 1048576).toFixed(1)} /{" "}
         {(usage.policy.storageLimit / 1048576).toFixed(0)} MiB（包含预留）
       </p>
-      <p className="hint">次数额度不等于费用上限；费用未知时不显示估算账单。</p>
+      <p className="hint">次数额度不代表账单上限。</p>
     </div>
   );
 }
@@ -218,6 +220,7 @@ export function CreationPage({
     [],
   );
   const [mode, setMode] = useState("direct");
+  const [quotaOpen, setQuotaOpen] = useState(false);
   const active = useRef(false);
   const usageQuery = useQuery({
     queryKey: sessionState.key("usage"),
@@ -367,19 +370,31 @@ export function CreationPage({
               onReference={chooseReference}
             />
           </Suspense>
-          <details className="canvas-task-history" open={tasks.length > 0}>
-            <summary>任务与结果 · {tasks.length}</summary>
-            <TaskResults
-              tasks={tasks}
-              csrfToken={csrfToken}
-              refresh={() => void refresh()}
-            />
-          </details>
+          <Collapse
+            className="canvas-task-history"
+            ghost
+            items={[
+              {
+                key: "history",
+                label: `任务与结果 · ${tasks.length}`,
+                children: (
+                  <TaskResults
+                    tasks={tasks}
+                    csrfToken={csrfToken}
+                    refresh={() => void refresh()}
+                  />
+                ),
+              },
+            ]}
+          />
         </div>
         <aside className="creation-panel" aria-label="图片创作">
           <Tabs
             activeKey={mode}
-            onChange={setMode}
+            onChange={(next) => {
+              setQuotaOpen(false);
+              setMode(next);
+            }}
             items={[
               { key: "direct", label: "直接创作" },
               { key: "agent", label: "Agent" },
@@ -481,7 +496,7 @@ export function CreationPage({
                     />
                   </div>
                   <div className="field" data-testid="reference-upload">
-                    <span>上传参考图（可选）</span>
+                    <span>参考图</span>
                     <Upload
                       accept="image/png,image/jpeg,image/webp"
                       showUploadList={false}
@@ -515,7 +530,7 @@ export function CreationPage({
               </ControlScope>
               {error && <Notice error>{error}</Notice>}
               <p className="hint">
-                提交后后台排队，关页、刷新和普通退出登录不影响执行。取消可能仍计费；后台中断允许失败，已保存结果保留。整单预留额度，不足时不会自动降低规格。
+                关页不影响后台执行。取消可能仍计费，中断不自动续跑。
               </p>
               <Button
                 className="primary"
@@ -534,12 +549,28 @@ export function CreationPage({
               )}
             </form>
             {usage && (
-              <details className="quota-details">
-                <summary>
-                  今日可用 {usage.available} 张 · 预留 {usage.held} 张
-                </summary>
-                <UsageSummary usage={usage} />
-              </details>
+              <div className="quota-details">
+                <Popover
+                  trigger="click"
+                  placement="leftBottom"
+                  open={quotaOpen}
+                  onOpenChange={setQuotaOpen}
+                  content={<UsageSummary usage={usage} />}
+                >
+                  <Button
+                    type="button"
+                    aria-expanded={quotaOpen}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape") {
+                        setQuotaOpen(false);
+                        event.stopPropagation();
+                      }
+                    }}
+                  >
+                    今日可用 {usage.available} 张 · 预留 {usage.held} 张
+                  </Button>
+                </Popover>
+              </div>
             )}
             <Link to="/usage">查看全部任务与额度</Link>
           </div>

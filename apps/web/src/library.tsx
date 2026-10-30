@@ -18,8 +18,12 @@ import {
   Field,
   Input,
   Notice,
+  Dropdown,
+  Drawer,
   useConfirm,
 } from "@tuyile/ui";
+import { MoreHorizontal } from "lucide-react";
+import { HelpPopover, Excerpt } from "./interface-help";
 import { ApiError, client } from "./api";
 import { useSessionState } from "./session-state";
 type Mode = "gallery" | "prompts" | "favorites";
@@ -123,6 +127,8 @@ export function LibraryPage({ mode }: { mode: Mode }) {
     }
   }
   function startFavorite(input: Partial<FavoriteInput>) {
+    setError("");
+    setMessage("");
     pendingFavorite.current = null;
     setEditing({
       id: input.id ?? crypto.randomUUID(),
@@ -317,10 +323,9 @@ export function LibraryPage({ mode }: { mode: Mode }) {
                 ? "提示池"
                 : "我的收藏"}
           </h1>
-          <p className="muted">图片可在自己的项目间复用，不新增生图计次。</p>
         </div>
       </div>
-      {(error || queryError) && (
+      {((!editing && error) || queryError) && (
         <Notice error>{error || queryError?.message}</Notice>
       )}
       {message && <Notice>{message}</Notice>}
@@ -383,7 +388,9 @@ export function LibraryPage({ mode }: { mode: Mode }) {
             >
               导出所选 ZIP
             </Button>
-            <small>每批最多 5 张、合计 50 MiB</small>
+            <HelpPopover title="复用与导出">
+              跨项目复用不新增生图计次。参考图最多4张；每批导出最多5张、合计50MiB。
+            </HelpPopover>
           </>
         )}
         {mode === "favorites" && (
@@ -409,47 +416,22 @@ export function LibraryPage({ mode }: { mode: Mode }) {
           </>
         )}
       </div>
-      {editing && (
-        <form
-          className="favorite-editor"
-          onSubmit={saveFavorite}
-          aria-label="编辑收藏"
-        >
-          <Field
-            label="收藏标题"
-            value={editing.title}
-            required
-            maxLength={100}
-            disabled={busy || !!pendingFavorite.current}
-            onChange={(e) => setEditing({ ...editing, title: e.target.value })}
-          />
-          <Field
-            label="收藏分组名称"
-            value={editing.groupName}
-            maxLength={60}
-            disabled={busy || !!pendingFavorite.current}
-            onChange={(e) =>
-              setEditing({ ...editing, groupName: e.target.value })
-            }
-          />
-          {editing.prompt !== undefined && (
-            <label className="field">
-              <span>收藏提示词</span>
-              <Input.TextArea
-                aria-label="收藏提示词"
-                value={editing.prompt}
-                rows={4}
-                required
-                maxLength={12000}
-                disabled={busy || !!pendingFavorite.current}
-                onChange={(e) =>
-                  setEditing({ ...editing, prompt: e.target.value })
-                }
-              />
-            </label>
-          )}
+      <Drawer
+        title="编辑收藏"
+        open={!!editing}
+        size={480}
+        destroyOnHidden
+        onClose={() => {
+          if (!busy && !pendingFavorite.current) setEditing(null);
+        }}
+        footer={
           <div className="actions">
-            <Button className="primary" disabled={busy}>
+            <Button
+              className="primary"
+              type="submit"
+              form="favorite-editor"
+              disabled={busy || !editing}
+            >
               保存收藏
             </Button>
             <Button
@@ -460,8 +442,54 @@ export function LibraryPage({ mode }: { mode: Mode }) {
               关闭编辑
             </Button>
           </div>
-        </form>
-      )}
+        }
+      >
+        {editing && error && <Notice error>{error}</Notice>}
+        {editing && (
+          <form
+            id="favorite-editor"
+            className="favorite-editor"
+            onSubmit={saveFavorite}
+            aria-label="编辑收藏"
+          >
+            <Field
+              label="收藏标题"
+              value={editing.title}
+              required
+              maxLength={100}
+              disabled={busy || !!pendingFavorite.current}
+              onChange={(e) =>
+                setEditing({ ...editing, title: e.target.value })
+              }
+            />
+            <Field
+              label="收藏分组名称"
+              value={editing.groupName}
+              maxLength={60}
+              disabled={busy || !!pendingFavorite.current}
+              onChange={(e) =>
+                setEditing({ ...editing, groupName: e.target.value })
+              }
+            />
+            {editing.prompt !== undefined && (
+              <label className="field">
+                <span>收藏提示词</span>
+                <Input.TextArea
+                  aria-label="收藏提示词"
+                  value={editing.prompt}
+                  rows={4}
+                  required
+                  maxLength={12000}
+                  disabled={busy || !!pendingFavorite.current}
+                  onChange={(e) =>
+                    setEditing({ ...editing, prompt: e.target.value })
+                  }
+                />
+              </label>
+            )}
+          </form>
+        )}
+      </Drawer>
       {mode === "gallery" && (
         <>
           <div className="gallery-grid">
@@ -526,24 +554,44 @@ export function LibraryPage({ mode }: { mode: Mode }) {
                     用作参考
                   </Button>
                 </div>
-                <div className="actions">
+                <div className="gallery-secondary-actions">
                   <a href={`/api/images/assets/${asset.id}/download`}>
                     下载原图
                   </a>
-                  <Button
-                    disabled={busy || !!pendingReuse}
-                    onClick={() =>
-                      startFavorite({ assetId: asset.id, title: "图片收藏" })
-                    }
+                  <Dropdown
+                    autoFocus
+                    trigger={["click"]}
+                    menu={{
+                      items: [
+                        {
+                          key: "favorite",
+                          label: "收藏图片",
+                          disabled: busy || !!pendingReuse,
+                          onClick: () =>
+                            startFavorite({
+                              assetId: asset.id,
+                              title: "图片收藏",
+                            }),
+                        },
+                        { type: "divider" },
+                        {
+                          key: "delete",
+                          label: "删除原图",
+                          danger: true,
+                          disabled: busy || !!pendingReuse,
+                          onClick: () => void removeAsset(asset.id),
+                        },
+                      ],
+                    }}
                   >
-                    收藏图片
-                  </Button>
-                  <Button
-                    disabled={busy || !!pendingReuse}
-                    onClick={() => void removeAsset(asset.id)}
-                  >
-                    删除原图
-                  </Button>
+                    <Button
+                      type="button"
+                      aria-label="图片更多操作"
+                      disabled={busy || !!pendingReuse}
+                    >
+                      <MoreHorizontal size={16} />
+                    </Button>
+                  </Dropdown>
                 </div>
               </article>
             ))}
@@ -567,7 +615,7 @@ export function LibraryPage({ mode }: { mode: Mode }) {
             <article className="prompt-card" key={p.id}>
               <span className="eyebrow">{p.category}</span>
               <h2>{p.title}</h2>
-              <p>{p.prompt}</p>
+              <Excerpt>{p.prompt}</Excerpt>
               <div className="actions">
                 <Button
                   disabled={busy}
@@ -607,7 +655,7 @@ export function LibraryPage({ mode }: { mode: Mode }) {
                       alt={f.title}
                     />
                   ) : (
-                    <p>{f.prompt}</p>
+                    <Excerpt>{f.prompt!}</Excerpt>
                   )}
                   <div className="actions">
                     <Button

@@ -118,6 +118,7 @@ export function ChoiceField({
   options,
   onValueChange,
   disabled,
+  hideLabel = false,
 }: {
   label: string;
   name?: string;
@@ -126,13 +127,16 @@ export function ChoiceField({
   options: { value: string; label: string }[];
   onValueChange?: (value: string) => void;
   disabled?: boolean;
+  hideLabel?: boolean;
 }) {
   const id = useId(),
     [local, setLocal] = useState(defaultValue ?? options[0]?.value ?? "");
   const current = value ?? local;
   return (
     <div className="field">
-      <label htmlFor={id}>{label}</label>
+      <label htmlFor={id} className={hideLabel ? "sr-only" : undefined}>
+        {label}
+      </label>
       <Select
         id={id}
         value={current}
@@ -161,4 +165,13 @@ export {
   ConfigProvider as ControlScope,
 } from "antd";
 export { Select } from "antd";
-export { Drawer, Card, Radio, Tooltip } from "antd";
+export {
+  Drawer,
+  Card,
+  Radio,
+  Tooltip,
+  Popover,
+  Dropdown,
+  Affix,
+  Typography,
+} from "antd";

@@ -194,12 +194,14 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   await page.getByLabel("创作需求").fill("合成测试：关闭页面后继续执行");
   await page.getByLabel("图片张数").fill("2");
   await page.getByRole("button", { name: "提交图片任务", exact: true }).click();
+  await page.locator(".canvas-task-history .ant-collapse-header").click();
   await expect(page.getByText("合成测试：关闭页面后继续执行")).toBeVisible();
   const context = page.context();
   await page.close();
   const reopened = await context.newPage();
   await reopened.setViewportSize({ width: 1440, height: 900 });
   await reopened.goto(projectUrl);
+  await reopened.locator(".canvas-task-history .ant-collapse-header").click();
   await expect(
     reopened.getByRole("heading", { name: "已完成", exact: true }),
   ).toBeVisible({ timeout: 15000 });
@@ -221,6 +223,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   ).toBeVisible();
   await login(reopened);
   await reopened.goto(projectUrl);
+  await reopened.locator(".canvas-task-history .ant-collapse-header").click();
   await expect(
     reopened.getByRole("heading", { name: "已完成", exact: true }),
   ).toHaveCount(2, { timeout: 15000 });
@@ -254,11 +257,23 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     .getByRole("button", { name: "提交图片任务", exact: true })
     .boundingBox();
   const quotaBox = await reopened
-    .locator(".quota-details summary")
+    .locator(".quota-details button")
     .boundingBox();
   expect(submitBox).not.toBeNull();
   expect(quotaBox).not.toBeNull();
   expect(submitBox!.y + submitBox!.height).toBeLessThanOrEqual(quotaBox!.y);
+  const quotaTrigger = reopened.locator(".quota-details button");
+  await quotaTrigger.focus();
+  await reopened.keyboard.press("Enter");
+  await expect(quotaTrigger).toHaveAttribute("aria-expanded", "true");
+  await expect(reopened.getByRole("tooltip")).toBeVisible();
+  await reopened.keyboard.press("Escape");
+  await expect(reopened.getByRole("tooltip")).toBeHidden();
+  await expect(quotaTrigger).toBeFocused();
+  await quotaTrigger.click();
+  await reopened.getByRole("tab", { name: "Agent", exact: true }).click();
+  await expect(reopened.getByRole("tooltip")).toBeHidden();
+  await reopened.getByRole("tab", { name: "直接创作", exact: true }).click();
   await reopened.setViewportSize({ width: 1920, height: 1080 });
   await expect(reopened.locator(".react-flow__node-image")).toHaveCount(5);
   await expect(
@@ -326,8 +341,19 @@ test("desktop administration publishes service model pools and preserves version
     .click();
   await page.getByLabel("模型最大边长", { exact: true }).fill("2048");
   const sizes = page.getByLabel(/^限定尺寸/);
+  const abilitySave = await page
+    .getByRole("button", { name: "应用到待发布配置", exact: true })
+    .boundingBox();
+  expect(abilitySave!.y + abilitySave!.height).toBeLessThanOrEqual(1000);
   await sizes.pressSequentially("1024x1024,512x512");
   await expect(sizes).toHaveValue("1024x1024,512x512");
+  await page.getByLabel("支持格式", { exact: true }).click();
+  const formatMenu = page.locator(".ant-select-dropdown:visible");
+  await expect(formatMenu).toBeVisible();
+  const formatBox = await formatMenu.boundingBox();
+  expect(formatBox!.y + formatBox!.height).toBeLessThanOrEqual(1000);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toBeVisible();
   await page
     .getByRole("button", { name: "应用到待发布配置", exact: true })
     .click();
@@ -531,7 +557,7 @@ test("desktop canvas saves geometry, handles conflicts and never replaces remove
     const submit = (await page
       .getByRole("button", { name: "提交图片任务", exact: true })
       .boundingBox())!;
-    const quota = (await page.locator(".quota-details summary").boundingBox())!;
+    const quota = (await page.locator(".quota-details button").boundingBox())!;
     const viewport = page.viewportSize()!;
     expect(
       Math.abs(canvas.x - (navigation.x + navigation.width)),
@@ -590,6 +616,9 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
     .fill("合成验收：先生成基准图，再参考基准图改图");
   await page.getByRole("button", { name: "发送规划需求", exact: true }).click();
   await expect(page.getByLabel("计划步骤摘要")).toBeVisible({ timeout: 15000 });
+  await expect(page.locator(".agent-confirm-footer")).toContainText(
+    "确认后后台执行",
+  );
   await expect(page.getByLabel("步骤 1 提示词", { exact: true })).toBeHidden();
   await page.getByRole("button", { name: "修改计划", exact: true }).click();
   await expect(page.getByLabel("步骤 1 提示词", { exact: true })).toBeVisible();
@@ -740,12 +769,15 @@ test("Gallery reuse, ZIP export, favorites, prompt application and project clean
   ).toBeVisible();
   const card = page.locator(".gallery-card").first();
   await expect(card).toBeVisible();
-  await card.getByRole("button", { name: "收藏图片", exact: true }).click();
+  await card.getByRole("button", { name: "图片更多操作", exact: true }).click();
+  await page.getByRole("menuitem", { name: "收藏图片", exact: true }).click();
   await page.getByLabel("收藏标题", { exact: true }).fill("素材测试收藏");
   await page.getByLabel("收藏分组名称", { exact: true }).fill("验收分组");
   await page.getByRole("button", { name: "保存收藏", exact: true }).click();
+  await expect(page.locator(".ant-drawer:visible")).toHaveCount(0);
   await expect(page.getByText("收藏已保存。", { exact: true })).toBeVisible();
-  await card.getByRole("button", { name: "删除原图", exact: true }).click();
+  await card.getByRole("button", { name: "图片更多操作", exact: true }).click();
+  await page.getByRole("menuitem", { name: "删除原图", exact: true }).click();
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "确认", exact: true })
@@ -809,6 +841,7 @@ test("Gallery reuse, ZIP export, favorites, prompt application and project clean
   await page.getByLabel("收藏标题", { exact: true }).fill("提示收藏验收");
   await page.getByLabel("收藏分组名称", { exact: true }).fill("写作");
   await page.getByRole("button", { name: "保存收藏", exact: true }).click();
+  await expect(page.locator(".ant-drawer:visible")).toHaveCount(0);
   await expect(page.getByText("收藏已保存。", { exact: true })).toBeVisible();
   const prompt = (await (await page.request.get("/api/library/prompts")).json())
     .prompts[0].prompt;
@@ -829,6 +862,7 @@ test("Gallery reuse, ZIP export, favorites, prompt application and project clean
   await page.getByLabel("收藏标题", { exact: true }).fill("更新素材收藏");
   await page.getByLabel("收藏分组名称", { exact: true }).fill("归档");
   await page.getByRole("button", { name: "保存收藏", exact: true }).click();
+  await expect(page.locator(".ant-drawer:visible")).toHaveCount(0);
   await expect(
     page.getByRole("heading", { name: "更新素材收藏", exact: true }),
   ).toBeVisible();
@@ -1036,4 +1070,55 @@ test("administrators add a service and users select same-named models from the c
       (e: any) => e.serviceId === service.id && e.kind === "conversation",
     ).id,
   );
+  const session = await (await page.request.get("/api/auth/me")).json();
+  for (let i = 0; i < 12; i++) {
+    const response = await page.request.post(
+      `/api/model-admin/services/${service.id}/manual`,
+      {
+        headers: {
+          Origin: new URL(page.url()).origin,
+          "X-CSRF-Token": session.csrfToken,
+        },
+        data: {
+          modelId: `scroll-${String(i).padStart(2, "0")}-${"long-model-name-".repeat(5)}`,
+        },
+      },
+    );
+    expect(response.ok()).toBe(true);
+  }
+  await page.getByRole("link", { name: "模型服务", exact: true }).click();
+  await page
+    .getByRole("region", { name: "服务接入", exact: true })
+    .getByRole("combobox", { name: "模型服务", exact: true })
+    .click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("备用测试服务", { exact: true })
+    .click();
+  const tableBody = page.locator(".model-catalog-candidates .ant-table-body");
+  await expect
+    .poll(() => tableBody.evaluate((el) => el.scrollHeight > el.clientHeight))
+    .toBe(true);
+  await tableBody.hover();
+  await page.mouse.wheel(0, 500);
+  await expect
+    .poll(() => tableBody.evaluate((el) => el.scrollTop))
+    .toBeGreaterThan(0);
+  await page.getByRole("button", { name: "模型开放规则", exact: true }).click();
+  await expect(page.getByRole("tooltip")).toBeVisible();
+  const popup = await page.getByRole("tooltip").boundingBox();
+  expect(popup!.x).toBeGreaterThanOrEqual(0);
+  expect(popup!.x + popup!.width).toBeLessThanOrEqual(1440);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("tooltip")).toBeHidden();
+  await page.getByRole("button", { name: "服务管理", exact: true }).click();
+  await expect(page.getByRole("menu")).toBeVisible();
+  const menu = await page.getByRole("menu").boundingBox();
+  expect(menu!.y + menu!.height).toBeLessThanOrEqual(1000);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toBeHidden();
+  await page.screenshot({
+    path: ".codex-temp/ui-clarity-models-1440.png",
+    fullPage: true,
+  });
 });

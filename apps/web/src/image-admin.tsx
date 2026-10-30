@@ -109,9 +109,6 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
   return (
     <section className="image-admin">
       <h1>模型服务</h1>
-      <p className="muted">
-        接入服务，获取模型，再选择向用户开放的对话与图像模型。
-      </p>
       {(error || users.error || policy.error || review.error) && (
         <Notice error>
           {error ||

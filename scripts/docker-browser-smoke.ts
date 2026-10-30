@@ -39,11 +39,11 @@ try {
   await page
     .getByRole("button", { name: "提交图片任务", exact: true })
     .waitFor();
-  await page.locator(".quota-details summary").waitFor();
+  await page.locator(".quota-details button").waitFor();
   const submit = await page
     .getByRole("button", { name: "提交图片任务", exact: true })
     .boundingBox();
-  const quota = await page.locator(".quota-details summary").boundingBox();
+  const quota = await page.locator(".quota-details button").boundingBox();
   assert(submit && quota && submit.y + submit.height <= quota.y);
   const projectId = new URL(page.url()).pathname.split("/").at(-1)!;
   const session = await (
@@ -188,6 +188,9 @@ try {
   await page.getByLabel("图片模型", { exact: true }).click();
   await page.locator(".ant-select-dropdown:visible").waitFor();
   await page.keyboard.press("Escape");
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .waitFor({ state: "hidden" });
   await page.screenshot({
     path: ".codex-temp/docker-stage2-workbench.png",
     fullPage: true,
@@ -226,6 +229,8 @@ try {
     .getByRole("button", { name: "收藏提示词", exact: true })
     .click();
   await page.getByLabel("收藏标题", { exact: true }).waitFor();
+  await page.getByRole("button", { name: "关闭编辑", exact: true }).click();
+  await page.locator(".ant-drawer:visible").waitFor({ state: "hidden" });
   await page.getByRole("link", { name: "模型服务", exact: true }).click();
   await page.getByRole("tab", { name: "运行与核验", exact: true }).click();
   await page

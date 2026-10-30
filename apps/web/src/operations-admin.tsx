@@ -45,9 +45,6 @@ export function OperationsAdmin() {
   return (
     <section className="settings-section operations-admin">
       <h2>运行概览与规划策略</h2>
-      <p className="hint">
-        只展示状态、用量和管理元数据，不包含用户图片、提示词或服务密钥。
-      </p>
       {(summary.error || settings.error || users.error) && (
         <Notice error>
           {summary.error?.message ||

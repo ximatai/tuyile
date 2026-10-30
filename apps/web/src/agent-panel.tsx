@@ -27,6 +27,7 @@ import {
   Upload,
   useConfirm,
 } from "@tuyile/ui";
+import { HelpPopover, Excerpt } from "./interface-help";
 import { ApiError, client } from "./api";
 import { useSessionState } from "./session-state";
 const states: Record<string, string> = {
@@ -227,9 +228,6 @@ export function AgentPanel({
         {!history.length && !jobs.isPending && (
           <div className="agent-intro">
             <h2>先聊想法，再确认创作</h2>
-            <p>
-              描述目标和风格。Agent 会先给出可修改的计划，确认后才生成图片。
-            </p>
           </div>
         )}
         {jobs.hasNextPage && (
@@ -412,16 +410,17 @@ export function AgentPanel({
         </Button>
       </form>
       <div className="agent-confirm-footer">
-        <div className="hint">
-          规划：可用 {planning.data?.available ?? "—"} 次 · 预留{" "}
+        <div className="hint heading-with-help">
+          规划可用 {planning.data?.available ?? "—"} 次 · 预留{" "}
           {planning.data?.held ?? "—"} 次
+          <HelpPopover title="规划与执行规则">
+            每次规划在开始调用时计次。计划确认后才生成图片，整单预留图片额度，不足时不自动降低规格；关页和普通退出登录不影响已接受的任务。
+          </HelpPopover>
         </div>
         {plan && !plan.confirmed && plan.document.steps.length > 0 ? (
           <>
             <strong>本计划预留 {total} 张图片</strong>
-            <span className="hint">
-              当前可用 {usage?.available ?? "—"} 张。额度不足将整单拒绝。
-            </span>
+            <span className="hint">可用 {usage?.available ?? "—"} 张</span>
             <Button
               className="primary"
               type="submit"
@@ -441,11 +440,9 @@ export function AgentPanel({
               停止后续执行
             </Button>
           </>
-        ) : (
-          <span className="hint">收到可执行计划后，在这里确认。</span>
-        )}
+        ) : null}
         <span className="hint">
-          确认后关页仍在后台执行；取消可能仍计费。后台中断后不自动续跑。
+          确认后后台执行，取消可能仍计费；中断不自动续跑。
         </span>
       </div>
     </div>
@@ -656,7 +653,7 @@ function PlanCard({
                   {step.title}
                   <span>{step.count} 张</span>
                 </strong>
-                <p>{step.prompt}</p>
+                <Excerpt rows={3}>{step.prompt}</Excerpt>
                 <small>
                   {step.width} × {step.height} · {step.model} · {step.quality} ·{" "}
                   {step.format.toUpperCase()}

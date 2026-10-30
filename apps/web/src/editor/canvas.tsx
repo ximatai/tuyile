@@ -36,7 +36,7 @@ import {
   Ungroup,
   AlignStartVertical,
 } from "lucide-react";
-import { Button, Notice, useConfirm } from "@tuyile/ui";
+import { Button, Notice, Tooltip, useConfirm } from "@tuyile/ui";
 import { useNavigate } from "react-router-dom";
 import { EditorStore } from "./store";
 import { useSessionState } from "../session-state";
@@ -521,62 +521,69 @@ function CanvasView({
         <Controls showInteractive={false} />
       </ReactFlow>
       <div className="canvas-toolbar" role="toolbar" aria-label="画布操作">
-        <Button
-          aria-label="撤销"
-          title="撤销"
-          disabled={!snap.canUndo}
-          onClick={() => store.undo()}
-        >
-          <Undo2 size={16} />
-        </Button>
-        <Button
-          aria-label="重做"
-          title="重做"
-          disabled={!snap.canRedo}
-          onClick={() => store.redo()}
-        >
-          <Redo2 size={16} />
-        </Button>
-        <Button
-          aria-label="复制"
-          title="复制"
-          disabled={!snap.selected.length}
-          onClick={() => command("copy")}
-        >
-          <Copy size={16} />
-        </Button>
-        <Button
-          aria-label="移除节点"
-          title="移除节点"
-          disabled={!snap.selected.length}
-          onClick={() => command("remove")}
-        >
-          <Trash2 size={16} />
-        </Button>
-        <Button
-          aria-label="分组"
-          title="分组"
-          disabled={snap.selected.length < 2}
-          onClick={() => command("group")}
-        >
-          <Group size={16} />
-        </Button>
-        <Button
-          aria-label="解除分组"
-          title="解除分组"
-          disabled={!snap.selected.length}
-          onClick={() => command("ungroup")}
-        >
-          <Ungroup size={16} />
-        </Button>
-        <Button
-          aria-label="左对齐"
-          title="左对齐"
-          disabled={snap.selected.length < 2}
-          onClick={() => command("align")}
-        >
-          <AlignStartVertical size={16} />
-        </Button>
+        <Tooltip title="撤销" trigger={["hover", "focus"]}>
+          <Button
+            aria-label="撤销"
+            disabled={!snap.canUndo}
+            onClick={() => store.undo()}
+          >
+            <Undo2 size={16} />
+          </Button>
+        </Tooltip>
+        <Tooltip title="重做" trigger={["hover", "focus"]}>
+          <Button
+            aria-label="重做"
+            disabled={!snap.canRedo}
+            onClick={() => store.redo()}
+          >
+            <Redo2 size={16} />
+          </Button>
+        </Tooltip>
+        <Tooltip title="复制" trigger={["hover", "focus"]}>
+          <Button
+            aria-label="复制"
+            disabled={!snap.selected.length}
+            onClick={() => command("copy")}
+          >
+            <Copy size={16} />
+          </Button>
+        </Tooltip>
+        <Tooltip title="移除节点" trigger={["hover", "focus"]}>
+          <Button
+            aria-label="移除节点"
+            disabled={!snap.selected.length}
+            onClick={() => command("remove")}
+          >
+            <Trash2 size={16} />
+          </Button>
+        </Tooltip>
+        <Tooltip title="分组" trigger={["hover", "focus"]}>
+          <Button
+            aria-label="分组"
+            disabled={snap.selected.length < 2}
+            onClick={() => command("group")}
+          >
+            <Group size={16} />
+          </Button>
+        </Tooltip>
+        <Tooltip title="解除分组" trigger={["hover", "focus"]}>
+          <Button
+            aria-label="解除分组"
+            disabled={!snap.selected.length}
+            onClick={() => command("ungroup")}
+          >
+            <Ungroup size={16} />
+          </Button>
+        </Tooltip>
+        <Tooltip title="左对齐" trigger={["hover", "focus"]}>
+          <Button
+            aria-label="左对齐"
+            disabled={snap.selected.length < 2}
+            onClick={() => command("align")}
+          >
+            <AlignStartVertical size={16} />
+          </Button>
+        </Tooltip>
       </div>
     </section>
   );

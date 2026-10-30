@@ -21,8 +21,13 @@ import {
   Input,
   Select,
   ControlScope,
+  Affix,
+  Dropdown,
+  Tooltip,
   useConfirm,
 } from "@tuyile/ui";
+import { MoreHorizontal } from "lucide-react";
+import { HelpPopover } from "./interface-help";
 import { useSessionState } from "./session-state";
 import { client } from "./api";
 export function ModelServicesAdmin() {
@@ -237,6 +242,7 @@ export function ModelServicesAdmin() {
         <section className="model-service-bar" aria-label="服务接入">
           <ChoiceField
             label="模型服务"
+            hideLabel
             value={service?.id ?? ""}
             onValueChange={setSelected}
             options={services.map((s) => ({
@@ -247,7 +253,6 @@ export function ModelServicesAdmin() {
           <div className="model-service-summary">
             {service ? (
               <>
-                <strong>{service.name}</strong>
                 <span>
                   {service.mode === "fake" ? "本地合成测试" : service.baseUrl}
                 </span>
@@ -264,20 +269,34 @@ export function ModelServicesAdmin() {
             )}
           </div>
           <div className="actions">
-            <Button
-              type="button"
-              disabled={busy || !!draft}
-              onClick={() => editService()}
+            <Tooltip
+              title={draft ? "先保存或放弃模型池修改" : undefined}
+              trigger={["hover", "focus"]}
             >
-              新增服务
-            </Button>
-            <Button
-              type="button"
-              disabled={busy || !!draft || !service || service.revoked}
-              onClick={() => editService(service)}
+              <span tabIndex={draft ? 0 : undefined}>
+                <Button
+                  type="button"
+                  disabled={busy || !!draft}
+                  onClick={() => editService()}
+                >
+                  新增服务
+                </Button>
+              </span>
+            </Tooltip>
+            <Tooltip
+              title={draft ? "先保存或放弃模型池修改" : undefined}
+              trigger={["hover", "focus"]}
             >
-              编辑服务
-            </Button>
+              <span tabIndex={draft ? 0 : undefined}>
+                <Button
+                  type="button"
+                  disabled={busy || !!draft || !service || service.revoked}
+                  onClick={() => editService(service)}
+                >
+                  编辑服务
+                </Button>
+              </span>
+            </Tooltip>
             <Button
               className="primary"
               type="button"
@@ -293,20 +312,17 @@ export function ModelServicesAdmin() {
             </Button>
           </div>
         </section>
-        {!!draft && (
-          <p className="hint">
-            有未保存的模型池修改；服务编辑和停用将在保存或放弃修改后可用。
-          </p>
-        )}
         <div className="model-catalog-grid">
           <section className="model-catalog-candidates" aria-label="可用模型">
             <div className="model-pool-heading">
-              <h2>可用模型</h2>
+              <div className="heading-with-help">
+                <h2>可用模型</h2>
+                <HelpPopover title="模型开放规则">
+                  获取目录不会调用模型。将候选加入相应模型池，核对能力后保存才向用户开放。目录刷新不会改变已开放范围，已提交任务保留原配置。
+                </HelpPopover>
+              </div>
               <span>{service ? candidates.length : 0} 个</span>
             </div>
-            <p className="hint">
-              获取后进入候选列表，加入右侧模型池并保存才会向用户开放。
-            </p>
             <Input
               aria-label="筛选服务模型"
               placeholder="按模型名称筛选"
@@ -318,7 +334,12 @@ export function ModelServicesAdmin() {
               rowKey="modelId"
               size="small"
               dataSource={candidates}
-              pagination={{ pageSize: 8, showSizeChanger: false }}
+              pagination={{
+                pageSize: 6,
+                showSizeChanger: false,
+                showLessItems: true,
+              }}
+              scroll={{ y: 330 }}
               columns={[
                 {
                   title: "模型",
@@ -373,35 +394,47 @@ export function ModelServicesAdmin() {
             >
               手动登记模型
             </Button>
-            <p className="hint">
-              列表不代表调用能力。加入后请在能力设置中核对；获取列表不执行生图或对话。
-            </p>
             {service && (
-              <details className="model-service-actions">
-                <summary>服务状态与版本</summary>
-                <p className="hint">
-                  版本 {service.revision} ·{" "}
-                  {service.catalogUpdatedAt
-                    ? `最近获取 ${new Date(service.catalogUpdatedAt).toLocaleString("zh-CN")}`
-                    : "尚未获取模型"}
-                </p>
-                <div className="actions">
-                  <Button
-                    disabled={busy || !!draft || service.revoked}
-                    onClick={() =>
-                      void toggleService(service, !service.enabled)
-                    }
-                  >
-                    {service.enabled ? "停用服务" : "启用服务"}
-                  </Button>
-                  <Button
-                    disabled={busy || !!draft || service.revoked}
-                    onClick={() => void toggleService(service, false, true)}
-                  >
-                    紧急撤销
-                  </Button>
-                </div>
-              </details>
+              <Dropdown
+                autoFocus
+                trigger={["click"]}
+                menu={{
+                  items: [
+                    {
+                      key: "version",
+                      label: `版本 ${service.revision}`,
+                      disabled: true,
+                    },
+                    {
+                      key: "updated",
+                      label: service.catalogUpdatedAt
+                        ? `最近获取 ${new Date(service.catalogUpdatedAt).toLocaleString("zh-CN")}`
+                        : "尚未获取模型",
+                      disabled: true,
+                    },
+                    { type: "divider" },
+                    {
+                      key: "state",
+                      label: service.enabled ? "停用服务" : "启用服务",
+                      disabled: busy || !!draft || service.revoked,
+                      onClick: () =>
+                        void toggleService(service, !service.enabled),
+                    },
+                    {
+                      key: "revoke",
+                      label: "紧急撤销",
+                      danger: true,
+                      disabled: busy || !!draft || service.revoked,
+                      onClick: () => void toggleService(service, false, true),
+                    },
+                  ],
+                }}
+              >
+                <Button type="button" aria-label="服务管理" disabled={busy}>
+                  <MoreHorizontal size={16} />
+                  服务管理
+                </Button>
+              </Dropdown>
             )}
           </section>
           {(["conversation", "image"] as const).map((kind) => {
@@ -418,11 +451,6 @@ export function ModelServicesAdmin() {
                     开放 {list.filter((e) => e.enabled).length}
                   </Tag>
                 </div>
-                <p className="hint">
-                  {kind === "image"
-                    ? "用于直接创作和计划中的图片步骤。"
-                    : "用于现有 Agent 的对话与创作规划。"}
-                </p>
                 <Radio.Group
                   aria-label={`${kind === "image" ? "图像生成" : "对话"}默认模型`}
                   value={list.find((e) => e.isDefault)?.id}
@@ -518,38 +546,47 @@ export function ModelServicesAdmin() {
             );
           })}
         </div>
-        <footer className="model-pool-save">
-          <span className="hint">
-            {draft
-              ? "修改尚未发布"
-              : "用户只能选择已开放并符合个人权限的模型。"}{" "}
-            · 已提交任务保留原配置绑定
-          </span>
-          <div className="actions">
-            <Button
-              type="button"
-              disabled={busy || !draft}
-              onClick={() => {
-                setDraft(null);
-                setError("");
-              }}
-            >
-              放弃修改
-            </Button>
-            <Button
-              type="button"
-              className="primary"
-              disabled={busy || !draft}
-              onClick={() => void publish()}
-            >
-              保存开放配置
-            </Button>
-          </div>
-        </footer>
+        {draft && (
+          <Affix offsetBottom={16}>
+            <footer className="model-pool-save">
+              <span>修改尚未发布</span>
+              <div className="actions">
+                <Button
+                  type="button"
+                  disabled={busy || !draft}
+                  onClick={() => {
+                    setDraft(null);
+                    setError("");
+                  }}
+                >
+                  放弃修改
+                </Button>
+                <Button
+                  type="button"
+                  className="primary"
+                  disabled={busy || !draft}
+                  onClick={() => void publish()}
+                >
+                  保存开放配置
+                </Button>
+              </div>
+            </footer>
+          </Affix>
+        )}
         <Drawer
           title={editor?.id ? "编辑模型服务" : "新增模型服务"}
           open={!!editor}
-          width={520}
+          size={520}
+          footer={
+            <Button
+              className="primary"
+              type="submit"
+              form="model-service-editor"
+              disabled={busy}
+            >
+              保存服务
+            </Button>
+          }
           onClose={() => {
             if (!busy) setEditor(null);
           }}
@@ -560,6 +597,7 @@ export function ModelServicesAdmin() {
             <form
               onSubmit={(e) => void saveService(e)}
               aria-label="模型服务接入"
+              id="model-service-editor"
             >
               <Field
                 label="服务名称"
@@ -616,12 +654,7 @@ export function ModelServicesAdmin() {
                   )}
                 </>
               )}
-              <p className="hint">
-                Key只在服务端加密保存。保存服务不会执行模型调用；地址改变时需要重新填写Key。
-              </p>
-              <Button className="primary" disabled={busy}>
-                保存服务
-              </Button>
+              <p className="hint">Key 加密保存。更改地址或协议后需重新填写。</p>
             </form>
           )}
         </Drawer>
@@ -631,7 +664,7 @@ export function ModelServicesAdmin() {
           onClose={() => {
             if (!busy) setManual(false);
           }}
-          width={460}
+          size={460}
           destroyOnHidden
         >
           {error && <Notice error>{error}</Notice>}
@@ -655,9 +688,6 @@ export function ModelServicesAdmin() {
               maxLength={120}
               onChange={(e) => setManualId(e.target.value)}
             />
-            <p className="hint">
-              适用于模型目录未列出、但服务商已明确提供的模型。
-            </p>
             <Button className="primary" disabled={busy}>
               登记候选模型
             </Button>
@@ -667,12 +697,23 @@ export function ModelServicesAdmin() {
           title={`${advanced?.modelId ?? ""} · 能力设置`}
           open={!!advanced}
           size={560}
+          footer={
+            <Button
+              className="primary"
+              type="submit"
+              form="model-capability-editor"
+              disabled={busy}
+            >
+              应用到待发布配置
+            </Button>
+          }
           onClose={() => setAdvanced(null)}
           destroyOnHidden
         >
           {error && <Notice error>{error}</Notice>}
           {advanced && (
             <form
+              id="model-capability-editor"
               onSubmit={(e) => {
                 e.preventDefault();
                 try {
@@ -699,9 +740,7 @@ export function ModelServicesAdmin() {
                 }
               }}
             >
-              <p className="hint">
-                根据服务商文档填写。这里声明能力，不会自动测试或产生模型调用。
-              </p>
+              <p className="hint">按服务商文档声明模型能力。</p>
               {advanced.conversation && (
                 <>
                   <Checkbox
@@ -879,7 +918,6 @@ export function ModelServicesAdmin() {
                   </label>
                 </>
               )}
-              <Button className="primary">应用到待发布配置</Button>
             </form>
           )}
         </Drawer>
