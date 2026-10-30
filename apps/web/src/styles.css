@@ -19,6 +19,14 @@
   color: var(--ink);
   background: var(--paper);
   font-synthesis: none;
+  font-size: 13px;
+  line-height: 1.6;
+  --text-body: 13px;
+  --text-small: 12px;
+  --title-page: 22px;
+  --title-section: 16px;
+  --control-height: 36px;
+  --space-card: 16px;
 }
 * {
   box-sizing: border-box;
@@ -54,13 +62,13 @@ button:disabled {
   opacity: 0.6;
 }
 h1 {
-  font-size: 28px;
+  font-size: var(--title-page);
   line-height: 1.25;
   margin: 0 0 12px;
   text-wrap: balance;
 }
 h2 {
-  font-size: 17px;
+  font-size: var(--title-section);
   margin: 0 0 10px;
   text-wrap: balance;
 }
@@ -73,7 +81,7 @@ p {
   color: var(--muted);
 }
 .hint {
-  font-size: 13px;
+  font-size: var(--text-small);
   line-height: 1.65;
 }
 .eyebrow {
@@ -85,14 +93,14 @@ p {
 
 .field {
   display: grid;
-  gap: 8px;
-  font-size: 14px;
+  gap: 6px;
+  font-size: var(--text-body);
   min-width: 0;
 }
 
 form {
   display: grid;
-  gap: 18px;
+  gap: 12px;
 }
 
 .brand-mark {
@@ -116,7 +124,7 @@ form {
 }
 .brand small {
   display: block;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   letter-spacing: 0.08em;
   font-weight: 400;
@@ -148,7 +156,7 @@ form {
   border-radius: 8px;
 }
 .auth-form h1 {
-  font-size: 26px;
+  font-size: var(--title-page);
 }
 .auth-form form {
   margin-top: 28px;
@@ -492,7 +500,7 @@ form {
 }
 .creation-panel {
   background: #fff;
-  padding: 22px;
+  padding: var(--space-card);
   border: 1px solid var(--line);
   border-radius: 8px;
   min-width: 0;
@@ -502,7 +510,7 @@ form {
   padding: 0;
   margin: 0;
   display: grid;
-  gap: 16px;
+  gap: 12px;
   min-width: 0;
 }
 .field textarea {
@@ -512,7 +520,7 @@ form {
 .parameter-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  gap: 10px;
   min-width: 0;
 }
 .task-result {
@@ -575,7 +583,7 @@ form {
 }
 .usage-numbers strong {
   display: block;
-  font-size: 24px;
+  font-size: 22px;
   margin-top: 6px;
 }
 .reference-row {
@@ -713,7 +721,7 @@ form {
     padding: 2px 5px 4px 2px;
   }
   .creation-panel form > .hint {
-    font-size: 11px;
+    font-size: 12px;
     line-height: 1.6;
     max-height: 84px;
     overflow: auto;
@@ -787,8 +795,8 @@ form {
 }
 
 .button {
-  min-height: 44px;
-  min-width: 44px;
+  min-height: var(--control-height);
+  min-width: var(--control-height);
 }
 .product-notice {
   margin: 12px 0;
@@ -798,7 +806,7 @@ form {
   min-width: 0;
 }
 .field .ant-input {
-  min-height: 44px;
+  min-height: var(--control-height);
 }
 .creation-panel .ant-upload-wrapper {
   max-width: 100%;
@@ -948,11 +956,11 @@ form {
   align-items: center;
   gap: 8px;
   padding: 2px 8px;
-  font-size: 11px;
+  font-size: 12px;
   white-space: nowrap;
 }
 .canvas-image-caption button {
-  font-size: 11px;
+  font-size: 12px;
   height: 24px;
   min-height: 24px;
   padding: 0 5px;
@@ -1179,7 +1187,7 @@ form {
   border-radius: 4px;
 }
 .agent-reference button {
-  font-size: 11px;
+  font-size: 12px;
   min-width: 32px;
   padding: 2px 4px;
 }
@@ -1192,7 +1200,7 @@ form {
   padding-top: 8px;
 }
 .agent-confirm-footer .hint {
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.5;
 }
 .agent-panel > .product-notice {
@@ -1260,7 +1268,7 @@ form {
   gap: 8px;
 }
 .prompt-card h2 {
-  font-size: 17px;
+  font-size: var(--title-section);
   margin: 12px 0;
 }
 .prompt-card p {
@@ -1322,7 +1330,7 @@ form {
   color: var(--muted);
 }
 .operations-metrics strong {
-  font-size: 28px;
+  font-size: 22px;
   font-variant-numeric: tabular-nums;
   color: #1c3d61;
 }
@@ -1496,7 +1504,7 @@ form {
     padding: 0 24px;
   }
   .brand {
-    font-size: 20px;
+    font-size: 18px;
   }
   .main-column header > .actions {
     flex-wrap: nowrap;
@@ -1518,14 +1526,14 @@ form {
     height: calc(100dvh - 64px);
   }
   .content {
-    padding: 28px 32px;
+    padding: 20px 24px;
   }
   .workspace-shell .creation-layout {
-    grid-template-columns: minmax(0, 1fr) clamp(410px, 31.5vw, 490px);
+    grid-template-columns: minmax(0, 1fr) clamp(360px, 28.5vw, 440px);
   }
   .image-admin .settings-section {
     max-width: none;
-    padding: 22px 24px;
+    padding: 16px;
     margin: 16px 0;
     background: #fff;
     border: 1px solid var(--line);
@@ -1787,7 +1795,7 @@ form {
   color: #183451;
 }
 .gallery-card-title span {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 400;
   color: var(--brand-blue);
   background: var(--focus-soft);
@@ -2080,8 +2088,228 @@ form {
   padding: 4px;
 }
 .ant-popover .usage-summary h2 {
-  font-size: 15px;
+  font-size: 14px;
 }
 .model-catalog-candidates .heading-with-help h2 {
-  font-size: 17px;
+  font-size: var(--title-section);
+}
+
+/* Desktop density: shared with Ant tokens; small text never scales below 12px. */
+small {
+  font-size: var(--text-small);
+}
+h3 {
+  font-size: 14px;
+}
+.content {
+  padding: 20px 24px;
+}
+.main-column header {
+  font-size: var(--text-body);
+}
+.sidebar nav {
+  gap: 4px;
+  margin-top: 16px;
+}
+.sidebar nav a {
+  min-height: 40px;
+  padding: 8px 10px;
+  gap: 10px;
+  font-size: var(--text-body);
+}
+.sidebar nav svg {
+  width: 18px;
+  height: 18px;
+}
+.sidebar-projects {
+  margin: 16px 0;
+  padding-top: 8px;
+  gap: 4px;
+}
+.sidebar-projects a {
+  padding: 6px 8px;
+}
+.page-heading {
+  gap: 16px;
+}
+.create-project {
+  margin: 16px 0;
+  gap: 10px;
+}
+.project-grid {
+  margin-top: 20px;
+  gap: 12px;
+}
+.project-card {
+  padding: var(--space-card);
+}
+.project-card h2,
+.prompt-card h2 {
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+.empty {
+  padding: 48px 20px;
+}
+.empty p,
+.task-prompt,
+.provider-summary,
+.detail {
+  font-size: var(--text-body);
+}
+.auth-page {
+  padding-top: 48px;
+}
+.auth-brand {
+  margin-bottom: 32px;
+}
+.auth-form {
+  max-width: 380px;
+  padding: 24px;
+}
+.auth-form form,
+.account-page form {
+  margin-top: 20px;
+}
+.detail {
+  padding: 16px;
+  gap: 12px;
+}
+.link-result {
+  padding: 12px 16px;
+  margin-top: 16px;
+}
+.settings-section {
+  margin-top: 20px;
+  padding: 20px 0;
+}
+.provider-versions li {
+  padding: 12px 0;
+}
+.provider-form,
+.provider-form .settings-fields {
+  gap: 12px;
+}
+.operations-metrics {
+  gap: 10px;
+  margin: 16px 0;
+}
+.operations-metrics > div {
+  padding: 12px;
+  gap: 6px;
+}
+.operations-admin form {
+  padding: 12px;
+  margin: 16px 0;
+}
+.ant-table-wrapper {
+  margin-top: 16px;
+}
+.product-notice {
+  margin: 8px 0;
+}
+.library-toolbar {
+  padding: 12px;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.library-toolbar > a,
+.library-toolbar > span,
+.library-toolbar > small {
+  min-height: var(--control-height);
+}
+.gallery-grid,
+.prompt-grid {
+  gap: 16px;
+  margin-bottom: 20px;
+}
+.prompt-card {
+  padding: 12px;
+}
+.prompt-card h2 {
+  margin-top: 8px;
+}
+.gallery-card {
+  padding-bottom: 12px;
+}
+.gallery-card img {
+  height: 240px;
+}
+.gallery-card-title {
+  margin: 8px 12px 0;
+  font-size: var(--text-body);
+}
+.gallery-card-title span {
+  font-size: var(--text-small);
+}
+.gallery-card > .hint,
+.gallery-reuse-actions {
+  margin: 8px 12px 0;
+}
+.gallery-secondary-actions {
+  margin: 8px 12px 0;
+}
+.task-result {
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.workspace-title h1 {
+  font-size: 14px;
+}
+.agent-panel,
+.model-pool-entry {
+  font-size: var(--text-body);
+}
+.agent-intro h2 {
+  font-size: 14px;
+}
+.agent-message {
+  padding: 6px 0;
+}
+.agent-user-message {
+  padding: 8px 10px;
+}
+.creation-panel .agent-plan-form {
+  padding: 12px;
+}
+.agent-plan-title strong {
+  font-size: 14px;
+}
+.agent-plan-form .plan-edit-toggle {
+  top: 12px;
+}
+.agent-plan-summary li {
+  padding: 8px 0;
+}
+.agent-confirm-footer {
+  padding-top: 10px;
+  gap: 6px;
+}
+.agent-confirm-footer > .primary {
+  min-height: var(--control-height);
+}
+.model-service-bar {
+  padding: 12px 16px;
+}
+.model-service-summary {
+  min-height: var(--control-height);
+}
+.model-catalog-grid {
+  gap: 12px;
+  margin-top: 16px;
+}
+.model-catalog-grid > section {
+  padding: 16px;
+}
+.model-pool-entry {
+  padding: 12px 0;
+}
+.model-capability-tags {
+  margin: 8px 0;
+}
+.model-pool-save {
+  padding: 12px 16px;
+}
+.help-content {
+  font-size: var(--text-body);
 }
