@@ -1,5 +1,6 @@
 import type { ErrorResponse } from "@tuyile/contracts";
 const messages: Record<string, string> = {
+  PROMPT_TOO_LONG: "需求与风格合计不能超过 12000 字符，请精简后再提交。",
   PROJECT_BUSY: "项目仍有活动或待核验任务，请等待处理完成后再删除。",
   EXPORT_LIMIT: "每批最多导出 5 张、合计 50 MiB，请分批导出。",
   PLANNING_IMAGES_UNSUPPORTED:

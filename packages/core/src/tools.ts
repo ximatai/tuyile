@@ -1,3 +1,4 @@
+import { composeCreativePrompt } from "@tuyile/contracts";
 import {
   imageInput,
   toolBinding,
@@ -57,6 +58,8 @@ export class ToolRegistry {
   validate(binding: ToolBinding, input: ImageInput) {
     const parsed = imageInput.parse(input),
       t = this.require(binding);
+    if (composeCreativePrompt(parsed).length > 12000)
+      throw new AppError("PROMPT_TOO_LONG", 400);
     if (
       parsed.referenceIds.length < t.definition.minReferences ||
       parsed.referenceIds.length > t.definition.maxReferences

@@ -1,3 +1,4 @@
+import { composeCreativePrompt } from "@tuyile/contracts";
 import sharp from "sharp";
 import {
   ImageCallError,
@@ -74,7 +75,7 @@ export class CompatibleImageProvider implements ImageProvider {
       };
       const parameters = {
         model: input.model,
-        prompt: input.prompt,
+        prompt: composeCreativePrompt(input),
         size: `${input.width}x${input.height}`,
         quality: input.quality,
         output_format: input.format,

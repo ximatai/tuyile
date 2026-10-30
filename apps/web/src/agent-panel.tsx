@@ -1,3 +1,4 @@
+import { composeCreativePrompt, type CreationStyle } from "@tuyile/contracts";
 import { PromptComposer } from "./prompt-composer";
 import { ImageControls, ReferenceAttachments } from "./image-controls";
 import {
@@ -69,6 +70,7 @@ export function AgentPanel({
   const state = useSessionState(),
     api = client(state.session.csrfToken);
   const [prompt, setPrompt] = useState(""),
+    [style, setStyle] = useState<CreationStyle | undefined>(),
     [skillId, setSkillId] = useState(""),
     [settings, setSettings] = useState<ImageSettings>({
       modelKey: "",
@@ -177,6 +179,7 @@ export function AgentPanel({
       projectId,
       requestKey: crypto.randomUUID(),
       prompt,
+      ...(style ? { style } : {}),
       model: usage?.modelOptions?.find((e) => e.id === model)?.modelId ?? model,
       ...(usage?.modelOptions ? { modelSelectionId: model } : {}),
       ...(conversationModel ? { conversationModelId: conversationModel } : {}),
@@ -271,6 +274,19 @@ export function AgentPanel({
             key={job.id}
           >
             <p className="agent-user-message">{job.prompt}</p>
+            {job.style && (
+              <Collapse
+                ghost
+                size="small"
+                items={[
+                  {
+                    key: "style",
+                    label: `风格 · ${job.style.name}`,
+                    children: job.style.text,
+                  },
+                ]}
+              />
+            )}
             <div className="hint">
               {states[job.state]} · {job.charged ? "已计 1 次规划" : "尚未计用"}
             </div>
@@ -402,6 +418,8 @@ export function AgentPanel({
             <PromptComposer
               value={prompt}
               onChange={setPrompt}
+              style={style}
+              onStyleChange={setStyle}
               label="告诉 Agent 你的想法"
               rows={2}
               compact
@@ -433,7 +451,11 @@ export function AgentPanel({
             uploadBusy ||
             !model ||
             (!pending &&
-              (!prompt.trim() || issues.length > 0 || conversationUnavailable))
+              (!prompt.trim() ||
+                issues.length > 0 ||
+                conversationUnavailable ||
+                (style && !style.text.trim()) ||
+                composeCreativePrompt({ prompt, style }).length > 12000))
           }
         >
           {pending ? "重试同一规划" : "发送规划需求"}

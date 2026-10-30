@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { imageInput } from "./creation.js";
+import { imageInput, type CreationStyle } from "./creation.js";
 import { toolBinding } from "./extensions.js";
 
 // A plan contains declarative image operations. Only server confirmation admits work.
 export const agentStep = imageInput
-  .omit({ projectId: true, requestKey: true })
+  .omit({ projectId: true, requestKey: true, style: true })
   .extend({
     title: z.string().trim().min(1).max(100),
     tool: toolBinding,
@@ -67,6 +67,7 @@ export interface PlanningJob {
   projectId: string;
   requestKey: string;
   prompt: string;
+  style?: CreationStyle;
   state: "queued" | "running" | "succeeded" | "failed" | "cancelled";
   charged: boolean;
   errorCode: string | null;

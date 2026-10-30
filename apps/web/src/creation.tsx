@@ -1,3 +1,4 @@
+import { composeCreativePrompt, type CreationStyle } from "@tuyile/contracts";
 import { HelpPopover } from "./interface-help";
 import { PromptComposer } from "./prompt-composer";
 import { GenerationFeedback } from "./generation-feedback";
@@ -107,6 +108,25 @@ export function TaskResults({
             </span>
           </div>
           <p className="task-prompt">{t.prompt}</p>
+          {t.settings?.style && (
+            <Collapse
+              ghost
+              size="small"
+              items={[
+                {
+                  key: "style",
+                  label: `风格 · ${t.settings.style.name}`,
+                  children: (
+                    <>
+                      <p>{t.settings.style.text}</p>
+                      <strong>实际提交提示词</strong>
+                      <p>{t.finalPrompt}</p>
+                    </>
+                  ),
+                },
+              ]}
+            />
+          )}
           <div className="hint">
             {t.model} · {new Date(t.createdAt).toLocaleString("zh-CN")}
           </div>
@@ -231,6 +251,7 @@ export function CreationPage({
       count: 1,
     }),
     [prompt, setPrompt] = useState(""),
+    [style, setStyle] = useState<CreationStyle | undefined>(),
     [references, setReferences] = useState<{ id: string; name: string }[]>([]),
     [canvasSelection, setCanvasSelection] = useState<
       { id: string; name: string }[]
@@ -315,7 +336,7 @@ export function CreationPage({
     requestAnimationFrame(() =>
       resultsRef.current
         ?.querySelector<HTMLElement>(
-          ".canvas-task-history .ant-collapse-header",
+          ".canvas-task-history > .ant-collapse-item > .ant-collapse-header",
         )
         ?.focus({ preventScroll: true }),
     );
@@ -341,7 +362,13 @@ export function CreationPage({
     }
   }, [usage]);
   const issues = usage
-    ? settingsIssues(usage, settings, references.length)
+    ? [
+        ...settingsIssues(usage, settings, references.length),
+        ...(style && !style.text.trim() ? ["请填写风格描述。"] : []),
+        ...(composeCreativePrompt({ prompt, style }).length > 12000
+          ? ["需求与风格合计不能超过 12000 字符。"]
+          : []),
+      ]
     : [];
   async function reuse(task: ImageTask) {
     if (["queued", "running"].includes(task.state)) {
@@ -366,6 +393,7 @@ export function CreationPage({
     initialized.current = true;
     setSettings(next);
     setPrompt(task.prompt);
+    setStyle(task.settings?.style);
     setReferences(
       task.settings!.referenceIds.map((id) => ({ id, name: "任务参考图" })),
     );
@@ -459,6 +487,7 @@ export function CreationPage({
       projectId,
       requestKey: crypto.randomUUID(),
       prompt,
+      ...(style ? { style } : {}),
       model:
         usage.modelOptions?.find((m) => m.id === settings.modelKey)?.modelId ??
         settings.modelKey,
@@ -581,7 +610,12 @@ export function CreationPage({
                 componentDisabled={busy || !!pending || !usage?.models.length}
               >
                 <fieldset disabled={busy || !!pending || !usage?.models.length}>
-                  <PromptComposer value={prompt} onChange={setPrompt} />
+                  <PromptComposer
+                    value={prompt}
+                    onChange={setPrompt}
+                    style={style}
+                    onStyleChange={setStyle}
+                  />
                   {mode === "direct" && (
                     <ReferenceAttachments
                       references={references}

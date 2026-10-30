@@ -384,6 +384,7 @@ export class PgAgentRepository
       projectId: row.project_id,
       requestKey: row.request_key,
       prompt: row.input.prompt,
+      ...(row.input.style ? { style: row.input.style } : {}),
       state: row.state,
       charged: row.charged,
       errorCode: row.error_code,

@@ -129,6 +129,7 @@ export class PgExecutionRepository extends PgCreationContext {
           userId: t.user_id,
           workspaceId: t.workspace_id,
           input: effectiveInput,
+          finalPrompt: t.input.finalPrompt,
           skillId,
           deadline: t.deadline,
           providerId: t.provider_id,

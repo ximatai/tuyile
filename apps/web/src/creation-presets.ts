@@ -49,20 +49,6 @@ export const stylePresets = [
     text: "富有表现力的角色肖像，突出面部表情，干净背景，精致头像质感。",
   },
 ];
-export function styleParagraph(id: string) {
-  const text = stylePresets.find((s) => s.id === id)?.text;
-  return text ? `画面风格：${text}` : "";
-}
-export function applyStyle(prompt: string, previous: string, next: string) {
-  const previousBlock = styleParagraph(previous),
-    nextBlock = styleParagraph(next);
-  const blocks = prompt
-    .split("\n\n")
-    .filter((block) => !previousBlock || block !== previousBlock);
-  const text = blocks.join("\n\n").trimEnd();
-  if (!nextBlock || blocks.includes(nextBlock)) return text;
-  return `${text}${text ? "\n\n" : ""}${nextBlock}`;
-}
 export interface SizePreset {
   tier: string;
   ratio: string;

@@ -2089,7 +2089,7 @@ form {
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
 }
-.canvas-task-history .ant-collapse-header {
+.canvas-task-history > .ant-collapse-item > .ant-collapse-header {
   font-size: 12px;
   padding: 10px 16px !important;
 }

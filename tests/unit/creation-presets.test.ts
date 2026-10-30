@@ -1,11 +1,8 @@
+import { composeCreativePrompt } from "@tuyile/contracts";
 import { expect, it } from "vitest";
 import type { ImageUsage, ImageCapability } from "@tuyile/contracts";
 import { defaultImagePolicy } from "@tuyile/core";
-import {
-  applyStyle,
-  styleParagraph,
-  standardSizes,
-} from "../../apps/web/src/creation-presets";
+import { standardSizes } from "../../apps/web/src/creation-presets";
 import {
   sizeOptionLabel,
   supportedSizePresets,
@@ -22,19 +19,12 @@ const capability: ImageCapability = {
   formats: ["png"],
 };
 const usage = { policy: defaultImagePolicy } as ImageUsage;
-it("keeps the prompt visible, replaces only the previously selected intact style and removes it reversibly", () => {
-  const first = applyStyle("产品说明", "none", "photo");
-  expect(first).toBe(`产品说明\n\n${styleParagraph("photo")}`);
-  const changed = applyStyle(first, "photo", "poster");
-  expect(changed).not.toContain(styleParagraph("photo"));
-  expect(applyStyle(changed, "poster", "none")).toBe("产品说明");
-});
-it("preserves manual style edits and does not double append a reused style paragraph", () => {
-  const manual = "主体\n\n画面风格：我修改过的光线。";
-  expect(applyStyle(manual, "photo", "poster")).toContain(manual);
-  const reused = applyStyle("主体", "none", "photo");
-  expect(applyStyle(reused, "none", "photo")).toBe(reused);
-  expect(applyStyle("主体", "none", "unknown")).toBe("主体");
+it("composes separate style without parsing or changing authored text", () => {
+  const prompt = "主体\n\n画面风格：用户自行写的内容";
+  expect(composeCreativePrompt({ prompt })).toBe(prompt);
+  expect(
+    composeCreativePrompt({ prompt, style: { name: "摄影", text: "自然光" } }),
+  ).toBe(`${prompt}\n\n画面风格：自然光`);
 });
 it("limits resolution tiers to declared dimensions and personal budgets", () => {
   expect(

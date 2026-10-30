@@ -1,3 +1,4 @@
+import { composeCreativePrompt } from "@tuyile/contracts";
 import { createToolRegistry, type ToolRegistry } from "./tools.js";
 import type { ToolBinding } from "@tuyile/contracts";
 import { ImageOperations } from "./image-operations.js";
@@ -82,6 +83,7 @@ export interface ImageFiles {
   freeSpace(): Promise<boolean>;
 }
 export interface WorkItem {
+  finalPrompt?: string;
   skillId?: string | null;
   id: string;
   userId: string;
@@ -191,7 +193,12 @@ export class ImageExecutor {
                 generate: () =>
                   this.provider.generate(
                     dispatched.provider,
-                    task.input,
+                    {
+                      ...task.input,
+                      prompt:
+                        task.finalPrompt ?? composeCreativePrompt(task.input),
+                      style: undefined,
+                    },
                     bytes,
                     signal,
                   ),

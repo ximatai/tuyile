@@ -513,3 +513,29 @@ it("counts inherited clarification context toward the next request input budget"
   expect(await agent.jobs(f.principal, f.project.id)).toHaveLength(1);
   expect(await agent.usage(f.principal)).toMatchObject({ used: 1, held: 0 });
 });
+
+it("preserves independent style in planning context and produces an explicit, singly styled plan", async () => {
+  const { PlanningExecutor } = await import("@tuyile/core");
+  const { CompatiblePlanningProvider } = await import("@tuyile/infrastructure");
+  const input = { ...request(), style: { name: "摄影", text: "柔和自然光" } };
+  const job = await agent.request(f.principal, input);
+  expect(job).toMatchObject({ prompt: input.prompt, style: input.style });
+  const work = (await agent.claim([]))!;
+  const context = JSON.parse(
+    work.messages.find((m) => m.role === "user")!.content,
+  );
+  expect(context.prompt).toBe(input.prompt);
+  expect(context.style).toEqual(input.style);
+  await new PlanningExecutor(
+    agent,
+    new CompatiblePlanningProvider(true),
+  ).execute(work, new AbortController().signal);
+  const completed = (await agent.jobs(f.principal, f.project.id)).find(
+    (item) => item.id === job.id,
+  )!;
+  expect(completed.plans[0]!.document.steps[0]!.prompt).toBe(
+    `${input.prompt}\n\n画面风格：柔和自然光`,
+  );
+  expect(completed.plans[0]!.document.steps[0]).not.toHaveProperty("style");
+  expect(await f.creation.tasks(f.principal, f.project.id)).toEqual([]);
+});

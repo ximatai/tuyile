@@ -808,3 +808,50 @@ it("serializes manual release against late attempt evidence", async () => {
     ).rows[0].state,
   ).toBe("resolved");
 });
+
+it("snapshots separate style and final prompt, binds idempotency and dispatches the snapshot once", async () => {
+  const input = f.input({ style: { name: "摄影", text: "柔和自然光" } });
+  const task = await f.creation.submit(f.principal, input);
+  const finalPrompt = `${input.prompt}\n\n画面风格：柔和自然光`;
+  expect(task).toMatchObject({
+    prompt: input.prompt,
+    finalPrompt,
+    settings: { style: input.style },
+  });
+  expect(
+    (await f.pool.query("SELECT input FROM image_tasks WHERE id=$1", [task.id]))
+      .rows[0].input.finalPrompt,
+  ).toBe(finalPrompt);
+  await expect(
+    f.creation.submit(f.principal, {
+      ...input,
+      style: { ...input.style!, text: "不同光线" },
+    }),
+  ).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+  let dispatched = 0;
+  await f.worker({
+    generate: async (_config, sent) => {
+      dispatched++;
+      expect(sent.prompt).toBe(finalPrompt);
+      expect(sent.style).toBeUndefined();
+      return f.png;
+    },
+  });
+  expect((await f.done(task.id)).state).toBe("succeeded");
+  expect(dispatched).toBe(1);
+  expect((await f.creation.task(f.principal, task.id)).prompt).toBe(
+    input.prompt,
+  );
+});
+it("rejects the combined prompt budget before reserving images", async () => {
+  await expect(
+    f.creation.submit(
+      f.principal,
+      f.input({
+        prompt: "a".repeat(11990),
+        style: { name: "摄影", text: "b".repeat(30) },
+      }),
+    ),
+  ).rejects.toMatchObject({ code: "PROMPT_TOO_LONG" });
+  expect((await f.creation.usage(f.principal)).held).toBe(0);
+});

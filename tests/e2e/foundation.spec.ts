@@ -236,12 +236,19 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   const projectUrl = page.url();
   await page.getByRole("button", { name: "产品海报", exact: true }).click();
   await expect(page.getByLabel("创作需求")).toHaveValue(/高端商业海报/);
+  const authoredPrompt = await page.getByLabel("创作需求").inputValue();
   await page.getByRole("combobox", { name: "风格", exact: true }).click();
   await page
     .locator(".ant-select-dropdown:visible")
     .getByText("真实摄影", { exact: true })
     .click();
-  await expect(page.getByLabel("创作需求")).toHaveValue(/画面风格：真实摄影/);
+  await expect(page.getByLabel("创作需求")).toHaveValue(authoredPrompt);
+  await page.getByRole("button", { name: "编辑风格", exact: true }).click();
+  await page
+    .getByLabel("风格描述", { exact: true })
+    .fill("合成风格：柔和自然光");
+  await expect(page.getByLabel("创作需求")).toHaveValue(authoredPrompt);
+  await page.getByRole("button", { name: "编辑风格", exact: true }).click();
   const styledDraft = await page.getByLabel("创作需求").inputValue();
   await page.getByRole("button", { name: "城市夜景", exact: true }).click();
   await page
@@ -364,7 +371,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
       .filter({
         has: page.getByRole("combobox", { name: "风格", exact: true }),
       })
-      .getByText("无风格", { exact: true }),
+      .getByText("自定义风格", { exact: true }),
   ).toBeVisible();
 
   let releaseSubmission!: () => void;
@@ -374,6 +381,13 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   await page.route(
     "**/api/images/tasks",
     async (route) => {
+      expect(route.request().postDataJSON().style).toEqual({
+        name: "自定义风格",
+        text: "合成风格：柔和自然光",
+      });
+      expect(route.request().postDataJSON().prompt).toBe(
+        "合成测试：关闭页面后继续执行",
+      );
       const response = await route.fetch();
       await submissionGate;
       await route.fulfill({ response });
@@ -411,7 +425,9 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   const reopened = await context.newPage();
   await reopened.setViewportSize({ width: 1440, height: 900 });
   await reopened.goto(projectUrl);
-  await reopened.locator(".canvas-task-history .ant-collapse-header").click();
+  await reopened
+    .locator(".canvas-task-history > .ant-collapse-item > .ant-collapse-header")
+    .click();
   await expect(
     reopened.getByRole("heading", { name: "已完成", exact: true }),
   ).toBeVisible({ timeout: 15000 });
@@ -423,7 +439,9 @@ test("background creation survives refresh, page closure and ordinary logout, wi
       .locator(".canvas-task-history")
       .getByRole("link", { name: "下载原图" }),
   ).toHaveCount(2);
-  await reopened.locator(".canvas-task-history .ant-collapse-header").click();
+  await reopened
+    .locator(".canvas-task-history > .ant-collapse-item > .ant-collapse-header")
+    .click();
   await reopened.getByRole("button", { name: "Fit View", exact: true }).click();
   await reopened.locator(".react-flow__node-image").first().click();
   await reopened
@@ -436,12 +454,24 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     .getByTestId("reference-upload")
     .getByRole("button", { name: /移除引用/ })
     .click();
-  await reopened.locator(".canvas-task-history .ant-collapse-header").click();
+  await reopened
+    .locator(".canvas-task-history > .ant-collapse-item > .ant-collapse-header")
+    .click();
   // Reusing a task is an editable draft; preview and reference actions must not dispatch work.
   await reopened.getByRole("button", { name: "复用设置", exact: true }).click();
   await expect(reopened.getByLabel("创作需求")).toHaveValue(
     "合成测试：关闭页面后继续执行",
   );
+  await expect(
+    reopened.locator(".direct-creation .field").filter({
+      has: reopened.getByRole("combobox", { name: "风格", exact: true }),
+    }),
+  ).toContainText("自定义风格");
+  await reopened.getByRole("button", { name: "编辑风格", exact: true }).click();
+  await expect(reopened.getByLabel("风格描述", { exact: true })).toHaveValue(
+    "合成风格：柔和自然光",
+  );
+  await reopened.getByRole("button", { name: "编辑风格", exact: true }).click();
   await expect(
     reopened.locator(".direct-creation .field").filter({
       has: reopened.getByRole("combobox", { name: "图片张数", exact: true }),
@@ -529,9 +559,10 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   await reopened
     .getByRole("button", { name: "提交图片任务", exact: true })
     .click();
-  expect((await styledRequest).postDataJSON().prompt).toContain(
-    "画面风格：鲜明的海报构图",
-  );
+  const sentStyleRequest = (await styledRequest).postDataJSON();
+  expect(sentStyleRequest.prompt).toBe("合成测试：注销后继续");
+  expect(sentStyleRequest.style.name).toBe("海报视觉");
+  expect(sentStyleRequest.style.text).toContain("鲜明的海报构图");
   await expect(
     reopened.getByRole("status", { name: "图片生成状态" }),
   ).toContainText("提交结果待确认");
@@ -556,7 +587,9 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   ).toBeVisible();
   await login(reopened);
   await reopened.goto(projectUrl);
-  await reopened.locator(".canvas-task-history .ant-collapse-header").click();
+  await reopened
+    .locator(".canvas-task-history > .ant-collapse-item > .ant-collapse-header")
+    .click();
   await expect(
     reopened.getByRole("heading", { name: "已完成", exact: true }),
   ).toHaveCount(2, { timeout: 15000 });
@@ -1189,7 +1222,9 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
   ).tasks;
   const dependentTask = completedTasks.find((task: any) => task.count === 1);
   expect(dependentTask.settings.referenceIds).toHaveLength(2);
-  await page.locator(".canvas-task-history .ant-collapse-header").click();
+  await page
+    .locator(".canvas-task-history > .ant-collapse-item > .ant-collapse-header")
+    .click();
   await page
     .locator(".task-result")
     .filter({

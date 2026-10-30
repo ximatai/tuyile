@@ -1,3 +1,4 @@
+import { composeCreativePrompt } from "@tuyile/contracts";
 import {
   PlanningCallError,
   type PlanningProvider,
@@ -46,7 +47,7 @@ export class CompatiblePlanningProvider implements PlanningProvider {
           steps = [
             {
               title: "合成创作",
-              prompt: input.prompt,
+              prompt: composeCreativePrompt(input),
               model: input.model,
               width: input.width,
               height: input.height,

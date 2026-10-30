@@ -10,7 +10,7 @@ export interface TaskRow {
   user_id: string;
   input_hash: string;
   request_key: string;
-  input: ImageInput;
+  input: ImageInput & { finalPrompt?: string };
   policy: ImagePolicy;
   provider_id: string;
   tool_id: string;

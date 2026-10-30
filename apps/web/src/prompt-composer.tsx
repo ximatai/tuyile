@@ -1,23 +1,22 @@
+import { composeCreativePrompt, type CreationStyle } from "@tuyile/contracts";
 import { WandSparkles } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ComponentRef } from "react";
 import {
   Button,
   ChoiceField,
+  Collapse,
   Input,
   Notice,
   Popover,
   Tooltip,
   useConfirm,
 } from "@tuyile/ui";
-import {
-  applyStyle,
-  promptExamples,
-  styleParagraph,
-  stylePresets,
-} from "./creation-presets";
+import { promptExamples, stylePresets } from "./creation-presets";
 export function PromptComposer({
   value,
   onChange,
+  style,
+  onStyleChange,
   label = "创作需求",
   rows = 4,
   compact = false,
@@ -25,6 +24,8 @@ export function PromptComposer({
 }: {
   value: string;
   onChange: (value: string) => void;
+  style?: CreationStyle;
+  onStyleChange: (style: CreationStyle | undefined) => void;
   label?: string;
   rows?: number;
   compact?: boolean;
@@ -33,32 +34,21 @@ export function PromptComposer({
   const confirm = useConfirm(),
     id = useId(),
     textarea = useRef<ComponentRef<typeof Input.TextArea>>(null);
-  const [style, setStyle] = useState("none"),
-    [error, setError] = useState(""),
-    [assistOpen, setAssistOpen] = useState(false);
+  const [assistOpen, setAssistOpen] = useState(false);
   const assistTrigger = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!visible) setAssistOpen(false);
   }, [visible]);
-  const emitted = useRef(value);
-  useEffect(() => {
-    // Reuse/transfer supplies a complete visible prompt; never append a second hidden style.
-    if (value !== emitted.current) {
-      setStyle("none");
-      setError("");
-      emitted.current = value;
-    }
-  }, [value]);
-  function update(next: string) {
-    if (next.length > 12000) {
-      setError("提示词已达长度上限，请精简后再添加风格。");
-      return false;
-    }
-    emitted.current = next;
-    setError("");
-    onChange(next);
-    return true;
-  }
+  const preset = stylePresets.find(
+    (p) => p.label === style?.name && p.text === style?.text,
+  );
+  const styleKey = style ? (preset?.id ?? "custom") : "none";
+  const issue =
+    style && !style.text.trim()
+      ? "请填写风格描述。"
+      : composeCreativePrompt({ prompt: value, style }).length > 12000
+        ? "需求与风格合计不能超过 12000 字符。"
+        : "";
   async function example(prompt: string) {
     if (
       value.trim() &&
@@ -66,8 +56,7 @@ export function PromptComposer({
       !(await confirm("用这个示例替换当前提示词？"))
     )
       return;
-    setStyle("none");
-    update(prompt);
+    onChange(prompt);
     setAssistOpen(false);
     textarea.current?.focus();
   }
@@ -85,16 +74,49 @@ export function PromptComposer({
       </div>
       <ChoiceField
         label="风格"
-        value={style}
+        value={styleKey}
         onValueChange={(next) => {
-          if (update(applyStyle(value, style, next))) {
-            setStyle(next);
-            setAssistOpen(false);
-            textarea.current?.focus();
-          }
+          const selected = stylePresets.find((p) => p.id === next);
+          if (selected)
+            onStyleChange(
+              selected.text
+                ? { name: selected.label, text: selected.text }
+                : undefined,
+            );
         }}
-        options={stylePresets.map((p) => ({ value: p.id, label: p.label }))}
+        options={[
+          ...stylePresets.map((p) => ({ value: p.id, label: p.label })),
+          ...(styleKey === "custom"
+            ? [{ value: "custom", label: style?.name ?? "自定义风格" }]
+            : []),
+        ]}
       />
+      {style && (
+        <Collapse
+          ghost
+          size="small"
+          items={[
+            {
+              key: "style",
+              label: "编辑风格",
+              children: (
+                <Input.TextArea
+                  aria-label="风格描述"
+                  value={style.text}
+                  rows={3}
+                  maxLength={2000}
+                  onChange={(event) =>
+                    onStyleChange({
+                      name: "自定义风格",
+                      text: event.target.value,
+                    })
+                  }
+                />
+              ),
+            },
+          ]}
+        />
+      )}
     </div>
   );
   return (
@@ -110,15 +132,7 @@ export function PromptComposer({
           name="prompt"
           aria-label={label}
           value={value}
-          onChange={(e) => {
-            const next = e.target.value;
-            if (
-              style !== "none" &&
-              !next.split("\n\n").includes(styleParagraph(style))
-            )
-              setStyle("none");
-            update(next);
-          }}
+          onChange={(e) => onChange(e.target.value)}
           rows={rows}
           required
           maxLength={12000}
@@ -167,7 +181,7 @@ export function PromptComposer({
       ) : (
         assist
       )}
-      {error && <Notice error>{error}</Notice>}
+      {issue && <Notice error>{issue}</Notice>}
     </div>
   );
 }

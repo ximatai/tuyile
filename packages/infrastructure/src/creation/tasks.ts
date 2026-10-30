@@ -1,3 +1,4 @@
+import { composeCreativePrompt } from "@tuyile/contracts";
 import type { ToolBinding } from "@tuyile/contracts";
 import type { TaskRow, OutputRow } from "./rows.js";
 import type { AdmissionSnapshot } from "@tuyile/core";
@@ -56,7 +57,10 @@ export class PgTasksRepository extends PgCreationContext {
           p.executionVersion,
           input.requestKey,
           createHash("sha256").update(JSON.stringify(input)).digest("hex"),
-          JSON.stringify(input),
+          JSON.stringify({
+            ...input,
+            finalPrompt: composeCreativePrompt(input),
+          }),
           JSON.stringify(snapshot.budget.policy),
           providerId,
           snapshot.day,

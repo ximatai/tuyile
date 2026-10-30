@@ -1,5 +1,25 @@
 import { imageCapability, type ImageCapability } from "./extensions.js";
 import { z } from "zod";
+export const creationStyle = z
+  .object({
+    name: z.string().trim().min(1).max(80),
+    text: z
+      .string()
+      .trim()
+      .min(1)
+      .max(2000)
+      .regex(/^[^\u0000]+$/),
+  })
+  .strict();
+export type CreationStyle = z.infer<typeof creationStyle>;
+export function composeCreativePrompt(input: {
+  prompt: string;
+  style?: CreationStyle;
+}) {
+  return input.style
+    ? `${input.prompt.trim()}\n\n画面风格：${input.style.text}`
+    : input.prompt.trim();
+}
 export const imageInput = z.object({
   projectId: z.uuid(),
   requestKey: z.uuid(),
@@ -9,6 +29,7 @@ export const imageInput = z.object({
     .min(1)
     .max(12000)
     .regex(/^[^\u0000]+$/),
+  style: creationStyle.optional(),
   model: z.string().min(1).max(120),
   modelSelectionId: z.uuid().optional(),
   width: z.number().int().min(256).max(8192).multipleOf(16),
@@ -63,10 +84,12 @@ export interface ImageTask {
   state:
     "queued" | "running" | "succeeded" | "partial" | "failed" | "cancelled";
   prompt: string;
+  finalPrompt?: string;
   model: string;
   count: number;
   settings?: Pick<
     ImageInput,
+    | "style"
     | "width"
     | "height"
     | "quality"

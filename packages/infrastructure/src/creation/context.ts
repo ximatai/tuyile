@@ -1,3 +1,4 @@
+import { composeCreativePrompt } from "@tuyile/contracts";
 import type { TaskRow, AssetRow, OutputRow, PolicyRow } from "./rows.js";
 import pg from "pg";
 import { randomBytes, createCipheriv, createDecipheriv } from "node:crypto";
@@ -147,9 +148,11 @@ export class PgCreationContext {
       requestKey: r.request_key,
       state: r.state,
       prompt: r.input.prompt,
+      finalPrompt: r.input.finalPrompt ?? composeCreativePrompt(r.input),
       model: r.input.model,
       count: r.input.count,
       settings: {
+        ...(r.input.style ? { style: r.input.style } : {}),
         width: r.input.width,
         height: r.input.height,
         quality: r.input.quality,
