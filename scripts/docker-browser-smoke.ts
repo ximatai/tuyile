@@ -47,8 +47,15 @@ try {
   await page
     .getByRole("menuitem", { name: "修改密码", exact: true })
     .press("Enter");
-  await page.getByRole("heading", { name: "修改密码", exact: true }).waitFor();
-  await page.getByRole("link", { name: "项目", exact: true }).click();
+  const passwordDialog = page.getByRole("dialog", {
+    name: "修改密码",
+    exact: true,
+  });
+  await passwordDialog.waitFor();
+  assert.equal(new URL(page.url()).pathname, "/projects");
+  await passwordDialog.getByLabel("当前密码").fill("discarded-password-draft");
+  await passwordDialog.getByLabel("当前密码").press("Escape");
+  await passwordDialog.waitFor({ state: "hidden" });
   await page
     .getByRole("link", { name: /Docker synthetic acceptance/ })
     .first()

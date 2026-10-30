@@ -254,6 +254,10 @@ form {
   box-shadow: none;
   padding-inline: 6px;
 }
+.password-dialog-actions {
+  justify-content: flex-end;
+  margin-top: 8px;
+}
 .content {
   padding: 36px;
   max-width: 1440px;

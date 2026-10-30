@@ -4,6 +4,7 @@ import {
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
   type ReactNode,
+  type ComponentProps,
 } from "react";
 import {
   Button as AntButton,
@@ -84,7 +85,10 @@ export function Button({
   type,
   color: _,
   ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { loading?: boolean }) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & {
+  loading?: boolean;
+  ref?: ComponentProps<typeof AntButton>["ref"];
+}) {
   return (
     <AntButton
       className={`button ${className}`}
@@ -199,6 +203,7 @@ export function ChoiceField({
   );
 }
 export {
+  Modal,
   Collapse,
   Spin,
   Image,

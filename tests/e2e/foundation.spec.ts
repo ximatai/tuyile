@@ -102,15 +102,35 @@ test("desktop and mobile: persistent projects, activation, account boundaries an
     member.getByRole("menuitem", { name: "修改密码", exact: true }),
   ).toBeHidden();
   await member.getByRole("button", { name: "账户菜单", exact: true }).click();
+  const passwordContextUrl = member.url();
   await member
     .getByRole("menuitem", { name: "修改密码", exact: true })
     .press("Enter");
   await expect(
-    member.getByRole("heading", { name: "修改密码", exact: true }),
+    member.getByRole("dialog", { name: "修改密码", exact: true }),
   ).toBeVisible();
+  await expect(member).toHaveURL(passwordContextUrl);
+  await member.getByLabel("当前密码").fill("discarded-password-draft");
+  await member
+    .getByRole("dialog")
+    .getByRole("button", { name: "取消", exact: true })
+    .click();
+  await expect(member.getByRole("dialog")).toBeHidden();
+  await expect(
+    member.getByRole("button", { name: "账户菜单", exact: true }),
+  ).toBeFocused();
+  await member.getByRole("button", { name: "账户菜单", exact: true }).click();
+  await member.getByRole("menuitem", { name: "修改密码", exact: true }).click();
+  await expect(member.getByLabel("当前密码")).toHaveValue("");
   await member.getByLabel("当前密码").fill(newPassword);
   const changed = randomBytes(24).toString("base64url");
   await member.getByLabel("新密码", { exact: true }).fill(changed);
+  await member.getByLabel("确认新密码").fill("mismatched-confirmation");
+  await member.getByRole("button", { name: "保存并重新登录" }).click();
+  await expect(member.getByRole("dialog").getByRole("alert")).toContainText(
+    "两次输入的密码不一致",
+  );
+  await expect(member).toHaveURL(passwordContextUrl);
   await member.getByLabel("确认新密码").fill(changed);
   await member.getByRole("button", { name: "保存并重新登录" }).click();
   await expect(
@@ -756,6 +776,33 @@ test("desktop canvas saves geometry, handles conflicts and never replaces remove
   await page.getByRole("link", { name: "查看额度", exact: true }).click();
   await expect(page).toHaveURL(projectUrl);
   await expect(page.getByText(/未能保存画布/)).toBeVisible();
+  let passwordCalls = 0;
+  await page.route("**/api/auth/password", async (route) => {
+    passwordCalls++;
+    await route.abort();
+  });
+  await page.getByRole("button", { name: "账户菜单", exact: true }).click();
+  await page.getByRole("menuitem", { name: "修改密码", exact: true }).click();
+  const passwordDialog = page.getByRole("dialog", {
+    name: "修改密码",
+    exact: true,
+  });
+  await passwordDialog
+    .getByLabel("当前密码")
+    .fill("synthetic-current-password");
+  await passwordDialog
+    .getByLabel("新密码", { exact: true })
+    .fill("synthetic-new-password");
+  await passwordDialog.getByLabel("确认新密码").fill("synthetic-new-password");
+  await passwordDialog.getByRole("button", { name: "保存并重新登录" }).click();
+  await expect(passwordDialog.getByRole("alert")).toBeVisible();
+  expect(passwordCalls).toBe(0);
+  await expect(page).toHaveURL(projectUrl);
+  await passwordDialog
+    .getByRole("button", { name: "取消", exact: true })
+    .click();
+  await expect(passwordDialog).toBeHidden();
+  await page.unroute("**/api/auth/password");
   let rejectedRequest:
     | { requestKey: string; document: { viewport: { zoom: number } } }
     | undefined;

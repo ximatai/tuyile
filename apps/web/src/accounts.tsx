@@ -2,7 +2,7 @@ import { useInfiniteQuery } from "@tanstack/react-query";
 import { useSessionState } from "./session-state";
 import { useState, type FormEvent } from "react";
 import type { UserView, LinkResult, UsersPage } from "@tuyile/contracts";
-import { Button, Field, Notice, useConfirm, Table } from "@tuyile/ui";
+import { Button, Field, Notice, useConfirm, Table, Modal } from "@tuyile/ui";
 import { client, notifySessionChange } from "./api";
 export function AdminPage({
   csrfToken,
@@ -225,7 +225,18 @@ export function AdminPage({
     </section>
   );
 }
-export function AccountPage({ csrfToken }: { csrfToken: string }) {
+export function PasswordDialog({
+  csrfToken,
+  open,
+  onClose,
+  afterClose,
+}: {
+  csrfToken: string;
+  open: boolean;
+  onClose: () => void;
+  afterClose: () => void;
+}) {
+  const state = useSessionState();
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   async function submit(e: FormEvent<HTMLFormElement>) {
@@ -236,22 +247,37 @@ export function AccountPage({ csrfToken }: { csrfToken: string }) {
     try {
       if (f.get("password") !== f.get("confirm"))
         throw new Error("两次输入的密码不一致。");
+      await state.flush();
       await client(csrfToken)("/auth/password", {
         currentPassword: f.get("currentPassword"),
         password: f.get("password"),
       });
+      state.clear();
       notifySessionChange();
       location.assign("/login");
     } catch (e) {
       setError((e as Error).message);
-    } finally {
       setBusy(false);
     }
   }
   return (
-    <section className="account-page">
-      <p className="eyebrow">账户安全</p>
-      <h1>修改密码</h1>
+    <Modal
+      title="修改密码"
+      open={open}
+      width={440}
+      centered
+      footer={null}
+      destroyOnHidden
+      mask={{ closable: false }}
+      keyboard={!busy}
+      closable={!busy}
+      onCancel={onClose}
+      focusable={{ focusTriggerAfterClose: false }}
+      afterClose={() => {
+        setError("");
+        afterClose();
+      }}
+    >
       <p className="muted">
         保存后所有设备退出登录，已确认任务的后续执行授权也将撤销；在途请求尽力取消。
       </p>
@@ -263,6 +289,8 @@ export function AccountPage({ csrfToken }: { csrfToken: string }) {
           autoComplete="current-password"
           required
           maxLength={128}
+          disabled={busy}
+          autoFocus
         />
         <Field
           label="新密码"
@@ -272,6 +300,7 @@ export function AccountPage({ csrfToken }: { csrfToken: string }) {
           minLength={12}
           maxLength={128}
           required
+          disabled={busy}
         />
         <Field
           label="确认新密码"
@@ -281,12 +310,18 @@ export function AccountPage({ csrfToken }: { csrfToken: string }) {
           minLength={12}
           maxLength={128}
           required
+          disabled={busy}
         />
         {error && <Notice error>{error}</Notice>}
-        <Button className="primary" disabled={busy}>
-          {busy ? "正在保存…" : "保存并重新登录"}
-        </Button>
+        <div className="actions password-dialog-actions">
+          <Button type="button" disabled={busy} onClick={onClose}>
+            取消
+          </Button>
+          <Button className="primary" disabled={busy} loading={busy}>
+            {busy ? "正在保存…" : "保存并重新登录"}
+          </Button>
+        </div>
       </form>
-    </section>
+    </Modal>
   );
 }

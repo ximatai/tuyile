@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useState, useEffect } from "react";
+import React, { lazy, Suspense, useState, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import {
   createBrowserRouter,
@@ -8,7 +8,6 @@ import {
   Link,
   Navigate,
   useLocation,
-  useNavigate,
   useBlocker,
 } from "react-router-dom";
 import {
@@ -57,8 +56,8 @@ const ImageAdminPage = lazy(() =>
 const AdminPage = lazy(() =>
   import("./accounts").then((m) => ({ default: m.AdminPage })),
 );
-const AccountPage = lazy(() =>
-  import("./accounts").then((m) => ({ default: m.AccountPage })),
+const PasswordDialog = lazy(() =>
+  import("./accounts").then((m) => ({ default: m.PasswordDialog })),
 );
 function App() {
   const path = useLocation().pathname;
@@ -134,8 +133,9 @@ function App() {
 function Shell() {
   const state = useSessionState(),
     { session } = state,
-    path = useLocation().pathname,
-    navigate = useNavigate();
+    path = useLocation().pathname;
+  const accountButton = useRef<React.ComponentRef<typeof Button>>(null);
+  const [passwordOpen, setPasswordOpen] = useState(false);
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [collapsed, setCollapsed] = useState(() => {
@@ -279,7 +279,6 @@ function Shell() {
                   "/usage": "额度",
                   "/admin/users": "账号管理",
                   "/admin/images": "模型服务",
-                  "/account": "修改密码",
                 } as Record<string, string>
               )[path] ?? "项目空间"}
             </span>
@@ -306,12 +305,13 @@ function Shell() {
                   },
                 ],
                 onClick: ({ key }) => {
-                  if (key === "password") navigate("/account");
+                  if (key === "password") setPasswordOpen(true);
                   if (key === "logout") void logout();
                 },
               }}
             >
               <Button
+                ref={accountButton}
                 type="button"
                 className="account-menu-trigger"
                 aria-label="账户菜单"
@@ -355,10 +355,6 @@ function Shell() {
                 element={<UsagePage csrfToken={session.csrfToken} />}
               />
               <Route
-                path="/account"
-                element={<AccountPage csrfToken={session.csrfToken} />}
-              />
-              <Route
                 path="/admin/users"
                 element={
                   session.user.role === "admin" ? (
@@ -385,6 +381,14 @@ function Shell() {
             </Routes>
           </Suspense>
         </main>
+        <Suspense fallback={null}>
+          <PasswordDialog
+            csrfToken={session.csrfToken}
+            open={passwordOpen}
+            onClose={() => setPasswordOpen(false)}
+            afterClose={() => accountButton.current?.focus()}
+          />
+        </Suspense>
       </div>
     </div>
   );
