@@ -592,7 +592,7 @@ function CanvasView({
         </div>
       )}
       <div className="canvas-toolbar" role="toolbar" aria-label="画布操作">
-        <Tooltip title="选择 · Shift 框选" trigger={["hover", "focus"]}>
+        <Tooltip title="选择" trigger={["hover", "focus"]}>
           <Button
             type="button"
             aria-label="选择工具"
@@ -602,7 +602,7 @@ function CanvasView({
             <MousePointer2 size={16} />
           </Button>
         </Tooltip>
-        <Tooltip title="小手 · 空格键临时平移" trigger={["hover", "focus"]}>
+        <Tooltip title="小手" trigger={["hover", "focus"]}>
           <Button
             type="button"
             aria-label="小手工具"
