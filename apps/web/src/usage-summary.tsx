@@ -24,7 +24,7 @@ export function UsageSummary({ usage }: { usage: ImageUsage }) {
               )}
               success={{
                 percent: quotaPercentage(usage.used, usage.policy.imageLimit),
-                strokeColor: "#0062b0",
+                strokeColor: "var(--brand-blue)",
               }}
               strokeColor="#aacde8"
               format={() => (
@@ -40,7 +40,7 @@ export function UsageSummary({ usage }: { usage: ImageUsage }) {
           {unlimited ? (
             <strong className="quota-unlimited-label">图片不限额</strong>
           ) : (
-            <span className="quota-accessible-available">
+            <span className="sr-only">
               可用 {usage.available} 张
             </span>
           )}
