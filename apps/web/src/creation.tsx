@@ -759,7 +759,7 @@ function CreationEditor({
                         : `生成 ${settings.count} 张`}
                 </Button>
                 <HelpPopover title="生成说明">
-                  关闭页面不影响生成。取消可能计费；后台中断不续跑，已保存图片保留。
+                  生图任务是后台执行，关闭页面不影响任务执行和费用核算。
                 </HelpPopover>
               </div>
               {pending && (
