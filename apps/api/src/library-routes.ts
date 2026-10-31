@@ -5,6 +5,7 @@ import {
   type CreationService,
 } from "@tuyile/core";
 import {
+  styleInput,
   favoriteInput,
   promptTemplateInput,
   id,
@@ -19,6 +20,35 @@ export function libraryRoutes(
   library: LibraryService,
   creation: CreationService,
 ) {
+  app.get("/api/library/styles", async (c) =>
+    c.json({ styles: await library.styles(c.get("session").user) }),
+  );
+  app.get("/api/admin/styles", async (c) =>
+    c.json({ styles: await library.styles(c.get("session").user, true) }),
+  );
+  for (const shared of [false, true])
+    app.post(shared ? "/api/admin/styles" : "/api/library/styles", async (c) =>
+      c.json(
+        await library.saveStyle(
+          c.get("session").user,
+          styleInput.parse(await c.req.json()),
+          shared,
+        ),
+        201,
+      ),
+    );
+  app.post("/api/library/styles/:id/delete", async (c) => {
+    const input = z
+      .object({ revision: z.number().int().positive() })
+      .strict()
+      .parse(await c.req.json());
+    await library.removeStyle(
+      c.get("session").user,
+      id.parse(c.req.param("id")),
+      input.revision,
+    );
+    return c.json({ ok: true });
+  });
   app.get("/api/library/assets", async (c) => {
     const rows = await library.assets(
       c.get("session").user,

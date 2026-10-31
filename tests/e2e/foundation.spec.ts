@@ -394,7 +394,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     presetDescription,
   );
   await page.getByLabel("风格描述", { exact: true }).fill("临时修改");
-  await page.getByRole("button", { name: "恢复预设", exact: true }).click();
+  await page.getByRole("button", { name: "恢复原风格", exact: true }).click();
   await expect(page.getByLabel("风格描述", { exact: true })).toHaveValue(
     presetDescription,
   );
@@ -541,7 +541,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
       .filter({
         has: page.getByRole("combobox", { name: "风格", exact: true }),
       })
-      .getByText("真实摄影 · 已修改", { exact: true }),
+      .getByText("真实摄影 · 本次创作", { exact: true }),
   ).toBeVisible();
 
   let releaseSubmission!: () => void;
@@ -662,7 +662,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     reopened.locator(".direct-creation .field").filter({
       has: reopened.getByRole("combobox", { name: "风格", exact: true }),
     }),
-  ).toContainText("真实摄影 · 已修改");
+  ).toContainText("真实摄影 · 本次创作");
   await reopened.getByRole("button", { name: "编辑风格", exact: true }).click();
   await expect(reopened.getByLabel("风格描述", { exact: true })).toHaveValue(
     "合成风格：柔和自然光",
@@ -3261,4 +3261,175 @@ test("custom size expansion reveals both fields in the editor scroll area", asyn
   await page.screenshot({ path: ".codex-temp/custom-size-expanded.png" });
   await page.getByRole("button", { name: "自定义尺寸", exact: true }).click();
   await expect(height).toBeHidden();
+});
+
+test("style library supports public maintenance and private saved copies without generating", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const originalTasks = await (
+    await page.request.get("/api/images/tasks")
+  ).json();
+  await page.goto("/admin/prompts");
+  await page.getByRole("button", { name: "管理公共风格", exact: true }).click();
+  const manager = page.getByRole("dialog", { name: "公共风格", exact: true });
+  await manager.getByRole("button", { name: "新增风格", exact: true }).click();
+  await manager.getByLabel("风格名称", { exact: true }).fill("公共风格验收");
+  await manager
+    .getByLabel("风格描述", { exact: true })
+    .fill("合成风格：柔和蓝色调");
+  await manager
+    .getByRole("checkbox", { name: "上架，所有用户可见", exact: true })
+    .check();
+  await manager.getByRole("button", { name: "保存风格", exact: true }).click();
+  await expect(
+    manager.getByRole("row").filter({ hasText: "公共风格验收" }),
+  ).toContainText("已上架");
+  await manager.getByRole("button", { name: "关闭", exact: true }).click();
+  await page.getByRole("link", { name: "项目", exact: true }).click();
+  await page.getByLabel("项目名称", { exact: true }).fill("风格库验收");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await page.locator(".project-card").filter({ hasText: "风格库验收" }).click();
+  await page
+    .getByLabel("创作需求", { exact: true })
+    .fill("独立创作需求保持不变");
+  const select = page.getByRole("combobox", { name: "风格", exact: true });
+  await select.click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("公共风格验收", { exact: true })
+    .click();
+  await page.getByRole("button", { name: "编辑风格", exact: true }).click();
+  const editor = page.locator(".style-editor:visible");
+  await editor.getByLabel("风格名称", { exact: true }).fill("我的蓝色风格");
+  await editor
+    .getByLabel("风格描述", { exact: true })
+    .fill("个人修改后的风格描述");
+  await editor
+    .getByRole("button", { name: "保存为我的风格", exact: true })
+    .click();
+  await expect(editor).toBeHidden();
+  await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
+    "独立创作需求保持不变",
+  );
+  const styleData = await (
+    await page.request.get("/api/library/styles")
+  ).json();
+  expect(
+    styleData.styles.find((s: any) => s.name === "公共风格验收").text,
+  ).toBe("合成风格：柔和蓝色调");
+  await page.reload();
+  await select.click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("我的蓝色风格", { exact: true })
+    .click();
+  await page.getByRole("button", { name: "编辑风格", exact: true }).click();
+  await expect(editor.getByLabel("风格描述", { exact: true })).toHaveValue(
+    "个人修改后的风格描述",
+  );
+  await editor.getByRole("button", { name: "取消", exact: true }).click();
+  const stylesProjectId = new URL(page.url()).pathname.split("/").at(-1)!;
+  await page.route("**/api/images/tasks?projectId=*", (route) =>
+    route.fulfill({
+      json: {
+        tasks: [
+          {
+            id: randomUUID(),
+            projectId: stylesProjectId,
+            requestKey: randomUUID(),
+            state: "failed",
+            prompt: "历史任务的独立需求",
+            model: "test-image",
+            count: 1,
+            used: 0,
+            held: 0,
+            pendingReview: false,
+            cancelRequested: false,
+            errorCode: "UPSTREAM_RATE_LIMIT",
+            createdAt: new Date().toISOString(),
+            outputs: [],
+            settings: {
+              width: 256,
+              height: 256,
+              quality: "medium",
+              format: "png",
+              referenceIds: [],
+              style: {
+                name: "历史任务风格B",
+                text: "不属于个人风格A的历史快照",
+              },
+            },
+          },
+        ],
+      },
+    }),
+  );
+  await expect(
+    page.getByRole("button", { name: "任务与结果 · 1", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "任务与结果 · 1", exact: true })
+    .click();
+  await page.getByRole("button", { name: "任务详情", exact: true }).click();
+  await page
+    .locator(".task-tile-details")
+    .getByRole("button", { name: "复用设置", exact: true })
+    .click();
+  await page.getByRole("button", { name: "编辑风格", exact: true }).click();
+  await expect(
+    editor.getByRole("button", { name: "保存修改", exact: true }),
+  ).toHaveCount(0);
+  await editor
+    .getByRole("button", { name: "保存为我的风格", exact: true })
+    .click();
+  await expect(editor).toBeHidden();
+  const preserved = (
+    await (await page.request.get("/api/library/styles")).json()
+  ).styles.find((s: any) => s.name === "我的蓝色风格");
+  expect(preserved.text).toBe("个人修改后的风格描述");
+  await page.unroute("**/api/images/tasks?projectId=*");
+  await select.click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("我的蓝色风格", { exact: true })
+    .click();
+  await page.getByRole("button", { name: "编辑风格", exact: true }).click();
+  await editor
+    .getByLabel("风格描述", { exact: true })
+    .fill("保存失败也保留的编辑内容");
+  await page.route("**/api/library/styles", async (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({
+          status: 409,
+          json: { error: { code: "STYLE_CONFLICT" } },
+        })
+      : route.continue(),
+  );
+  await editor.getByRole("button", { name: "保存修改", exact: true }).click();
+  await expect(editor.getByRole("alert")).toBeVisible();
+  await expect(editor.getByLabel("风格描述", { exact: true })).toHaveValue(
+    "保存失败也保留的编辑内容",
+  );
+  await page.unroute("**/api/library/styles");
+  await editor.getByRole("button", { name: "保存修改", exact: true }).click();
+  await expect(editor).toBeHidden();
+  await page.getByRole("button", { name: "编辑风格", exact: true }).click();
+  await editor.getByRole("button", { name: "删除", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "请确认", exact: true })
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await expect(editor).toBeHidden();
+  await select.click();
+  await expect(
+    page
+      .locator(".ant-select-dropdown:visible")
+      .getByText("我的蓝色风格", { exact: true }),
+  ).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  const tasks = await (await page.request.get("/api/images/tasks")).json();
+  expect(tasks.tasks).toHaveLength(originalTasks.tasks.length);
+  await page.screenshot({ path: ".codex-temp/style-library.png" });
 });

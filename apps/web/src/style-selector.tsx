@@ -8,8 +8,14 @@ import {
   Input,
   Popover,
   Tooltip,
+  Notice,
+  useConfirm,
+  useFeedback,
 } from "@tuyile/ui";
-import { stylePresets } from "./creation-presets";
+import type { SavedStyle } from "@tuyile/contracts";
+import { useQuery } from "@tanstack/react-query";
+import { client } from "./api";
+import { useSessionState } from "./session-state";
 export function StyleSelector({
   style,
   onChange,
@@ -19,26 +25,114 @@ export function StyleSelector({
   onChange: (style: CreationStyle | undefined) => void;
   visible?: boolean;
 }) {
+  const state = useSessionState(),
+    api = client(state.session.csrfToken),
+    confirm = useConfirm(),
+    feedback = useFeedback();
+  const query = useQuery({
+    queryKey: state.key("styles"),
+    queryFn: ({ signal }) =>
+      api<{ styles: SavedStyle[] }>("/library/styles", undefined, signal),
+    refetchInterval: 15000,
+  });
+  const styles = query.data?.styles ?? [];
+  const [selectedId, setSelectedId] = useState("");
+  const selectedSnapshot = useRef<CreationStyle | undefined>(undefined);
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  const saving = useRef(false);
+  const saveId = useRef(crypto.randomUUID());
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [text, setText] = useState("");
   const container = useRef<HTMLDivElement>(null);
   const trigger = useRef<ComponentRef<typeof Button>>(null);
   const descriptionId = useId();
-  const original = stylePresets.find((p) => p.text && p.label === style?.name);
-  const exact = original?.text === style?.text ? original : undefined;
+  const [source, setSource] = useState<SavedStyle>();
+  const candidate =
+    (selectedSnapshot.current?.name === style?.name &&
+    selectedSnapshot.current?.text === style?.text
+      ? styles.find((p) => p.id === selectedId)
+      : undefined) ??
+    styles.find((p) => p.name === style?.name && p.text === style?.text);
+  const original = open ? source : candidate;
+  const exact =
+    candidate?.name === style?.name && candidate?.text === style?.text
+      ? candidate
+      : undefined;
   const current = style ? (exact?.id ?? "modified") : "none";
+  async function save(copy: boolean) {
+    if (saving.current) return;
+    saving.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const saved = await api<SavedStyle>("/library/styles", {
+        id:
+          !copy && original?.scope === "personal"
+            ? original.id
+            : saveId.current,
+        name: name.trim(),
+        text: text.trim(),
+        revision:
+          !copy && original?.scope === "personal" ? original.revision : 0,
+        published: false,
+      });
+      setSelectedId(saved.id);
+      selectedSnapshot.current = { name: saved.name, text: saved.text };
+      onChange({ name: saved.name, text: saved.text });
+      await state.queries.invalidateQueries({ queryKey: state.key("styles") });
+      setOpen(false);
+      feedback.success("风格已保存");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      saving.current = false;
+      setBusy(false);
+    }
+  }
+  async function remove() {
+    if (
+      !original ||
+      original.scope !== "personal" ||
+      saving.current ||
+      !(await confirm("删除这个个人风格？已有任务和当前创作不受影响。"))
+    )
+      return;
+    saving.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      await api(`/library/styles/${original.id}/delete`, {
+        revision: original.revision,
+      });
+      await state.queries.invalidateQueries({ queryKey: state.key("styles") });
+      setSelectedId("");
+      setOpen(false);
+      feedback.success("风格已删除");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      saving.current = false;
+      setBusy(false);
+    }
+  }
   useEffect(() => {
     if (!visible) setOpen(false);
   }, [visible]);
   function edit(next: boolean) {
+    if (busy) return;
     if (next) {
+      setSource(candidate);
+      setError("");
+      saveId.current = crypto.randomUUID();
       setName(style?.name ?? "自定义风格");
       setText(style?.text ?? "");
     }
     setOpen(next);
   }
   function close() {
+    if (busy) return;
     setOpen(false);
     if (style) trigger.current?.focus();
     else
@@ -54,37 +148,59 @@ export function StyleSelector({
   }
   return (
     <div className="style-selector" ref={container}>
+      {query.error && (
+        <Notice error>风格暂时无法加载，当前创作内容已保留。</Notice>
+      )}
       <ChoiceField
         label="风格"
         value={current}
-        options={[
-          ...stylePresets.map((p) => ({ value: p.id, label: p.label })),
+        disabled={busy}
+        options={[]}
+        groups={[
+          { value: "none", label: "无风格" },
+          {
+            label: "公共风格",
+            options: styles
+              .filter((p) => p.scope === "public")
+              .map((p) => ({ value: p.id, label: p.name })),
+          },
+          {
+            label: "我的风格",
+            options: styles
+              .filter((p) => p.scope === "personal")
+              .map((p) => ({ value: p.id, label: p.name })),
+          },
           ...(style && !exact
-            ? [
-                {
-                  value: "modified",
-                  label: `${style.name}${original ? " · 已修改" : ""}`,
-                },
-              ]
+            ? [{ value: "modified", label: `${style.name} · 本次创作` }]
             : []),
-          ...(style?.name !== "自定义风格"
-            ? [{ value: "new", label: "自定义风格" }]
-            : []),
+          { value: "new", label: "自定义风格" },
         ]}
         onValueChange={(key) => {
           if (key === "new") {
+            setSource(undefined);
+            setSelectedId("");
+            setError("");
+            saveId.current = crypto.randomUUID();
             setName("自定义风格");
             setText("");
             setOpen(true);
             return;
           }
           if (key === "modified") return;
-          const preset = stylePresets.find((p) => p.id === key);
+          if (key === "none") {
+            setSelectedId("");
+            setOpen(false);
+            onChange(undefined);
+            return;
+          }
+          const preset = styles.find((p) => p.id === key);
           if (preset) {
+            setSelectedId(preset.id);
+            selectedSnapshot.current = { name: preset.name, text: preset.text };
             setOpen(false);
             onChange(
               preset.text
-                ? { name: preset.label, text: preset.text }
+                ? { name: preset.name, text: preset.text }
                 : undefined,
             );
           }
@@ -102,6 +218,7 @@ export function StyleSelector({
               <Field
                 label="风格名称"
                 value={name}
+                disabled={busy}
                 maxLength={80}
                 onChange={(event) => setName(event.target.value)}
               />
@@ -111,35 +228,62 @@ export function StyleSelector({
                   id={descriptionId}
                   aria-label="风格描述"
                   value={text}
+                  disabled={busy}
                   rows={6}
                   maxLength={2000}
                   placeholder="描述画面质感、光线、色彩和构图"
                   onChange={(event) => setText(event.target.value)}
                 />
               </label>
-              <div className="style-editor-footer">
+              {error && <Notice error>{error}</Notice>}
+              <div className="style-editor-library-actions">
+                {original?.scope === "personal" && (
+                  <Button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void remove()}
+                  >
+                    删除
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  disabled={busy || !name.trim() || !text.trim()}
+                  onClick={() => void save(original?.scope !== "personal")}
+                >
+                  {original?.scope === "personal"
+                    ? "保存修改"
+                    : "保存为我的风格"}
+                </Button>
                 {original && (
                   <Button
                     type="button"
                     className="style-reset"
-                    disabled={name === original.label && text === original.text}
+                    disabled={
+                      busy || (name === original.name && text === original.text)
+                    }
                     onClick={() => {
-                      setName(original.label);
+                      setName(original.name);
                       setText(original.text);
                     }}
                   >
-                    恢复预设
+                    恢复原风格
                   </Button>
                 )}
-                <Button type="button" onClick={close}>
+              </div>
+              <div className="style-editor-footer">
+                <Button type="button" disabled={busy} onClick={close}>
                   取消
                 </Button>
                 <Button
                   type="button"
                   className="primary"
-                  disabled={!name.trim() || !text.trim()}
+                  disabled={busy || !name.trim() || !text.trim()}
                   onClick={() => {
-                    onChange({ name: name.trim(), text: text.trim() });
+                    const next = { name: name.trim(), text: text.trim() };
+                    setSelectedId(original?.id ?? "");
+                    selectedSnapshot.current = next;
+                    onChange(next);
                     close();
                   }}
                 >
@@ -149,7 +293,10 @@ export function StyleSelector({
             </div>
           }
         >
-          <Tooltip title={open ? undefined : "编辑风格"} trigger={["hover", "focus"]}>
+          <Tooltip
+            title={open ? undefined : "编辑风格"}
+            trigger={["hover", "focus"]}
+          >
             <Button
               ref={trigger}
               type="button"

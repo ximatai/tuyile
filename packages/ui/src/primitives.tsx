@@ -157,6 +157,7 @@ export function ChoiceField({
   value,
   defaultValue,
   options,
+  groups,
   onValueChange,
   disabled,
   hideLabel = false,
@@ -171,6 +172,7 @@ export function ChoiceField({
   value?: string;
   defaultValue?: string;
   options: { value: string; label: string; disabled?: boolean }[];
+  groups?: SelectProps["options"];
   onValueChange?: (value: string) => void;
   disabled?: boolean;
   hideLabel?: boolean;
@@ -204,7 +206,7 @@ export function ChoiceField({
       <Select
         id={id}
         value={current}
-        options={options}
+        options={groups ?? options}
         disabled={disabled}
         showSearch={showSearch}
         optionRender={optionRender}

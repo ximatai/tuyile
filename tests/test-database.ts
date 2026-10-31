@@ -48,6 +48,13 @@ export async function resetDatabase() {
     await owner.query(
       "TRUNCATE tuyile.sessions,tuyile.password_tokens,tuyile.workspace_members,tuyile.projects,tuyile.workspaces,tuyile.users,tuyile.login_limits,tuyile.image_provider_versions,tuyile.planning_provider_versions,tuyile.skill_versions,tuyile.tool_controls CASCADE",
     );
+    const stylesSql = await readFile(
+      new URL("../migrations/0019_creation_styles.sql", import.meta.url),
+      "utf8",
+    );
+    await owner.query(
+      stylesSql.slice(stylesSql.indexOf("INSERT INTO creation_styles")),
+    );
     await owner.query(
       "INSERT INTO tuyile.tool_controls(tool_id,version) VALUES('image.generate',1),('image.edit',1)",
     );

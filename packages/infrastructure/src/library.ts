@@ -5,6 +5,8 @@ import {
   type LibraryRepository,
 } from "@tuyile/core";
 import type {
+  StyleInput,
+  SavedStyle,
   Principal,
   PromptTemplateInput,
   ManagedPromptTemplate,
@@ -15,6 +17,14 @@ import type {
 } from "@tuyile/contracts";
 import { PgTransactions } from "./transactions.js";
 import { PgCreationContext } from "./creation/context.js";
+const styleRow = (r: any): SavedStyle => ({
+  id: r.id,
+  name: r.name,
+  text: r.text,
+  revision: r.revision,
+  published: r.published,
+  scope: r.workspace_id ? "personal" : "public",
+});
 const favorite = (r: any): Favorite => ({
   id: r.id,
   title: r.title,
@@ -36,6 +46,81 @@ class PgLibraryRepository
   extends PgCreationContext
   implements LibraryRepository
 {
+  async styles(p: Principal, managed: boolean) {
+    await this.auth(this.c, p, managed, false);
+    const rows = await this.c.query(
+      managed
+        ? "SELECT * FROM creation_styles WHERE workspace_id IS NULL AND NOT deleted ORDER BY created_at,id LIMIT 200"
+        : "SELECT * FROM creation_styles WHERE NOT deleted AND (workspace_id=$1 OR (workspace_id IS NULL AND published)) ORDER BY created_at,id LIMIT 400",
+      managed ? [] : [p.workspaceId],
+    );
+    return rows.rows.map(styleRow);
+  }
+  async saveStyle(p: Principal, input: StyleInput, shared: boolean) {
+    await this.auth(this.c, p, shared);
+    const owner = shared ? null : p.workspaceId;
+    await this.c.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [
+      "styles:" + (owner ?? "public"),
+    ]);
+    const existing = (
+      await this.c.query(
+        "SELECT workspace_id,deleted FROM creation_styles WHERE id=$1",
+        [input.id],
+      )
+    ).rows[0];
+    if (existing && (existing.workspace_id !== owner || existing.deleted))
+      throw new AppError("NOT_FOUND", 404);
+    if (input.revision === 0 && !existing) {
+      const count = await this.c.query(
+        "SELECT count(*) FROM creation_styles WHERE workspace_id IS NOT DISTINCT FROM $1::uuid AND NOT deleted",
+        [owner],
+      );
+      if (Number(count.rows[0].count) >= 200)
+        throw new AppError("STYLE_LIMIT", 409);
+    }
+    const args = [
+      input.id,
+      owner,
+      input.name,
+      input.text,
+      shared ? input.published : false,
+      input.revision,
+    ];
+    const row = (
+      await this.c.query(
+        input.revision === 0
+          ? "INSERT INTO creation_styles(id,workspace_id,name,text,published) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO NOTHING RETURNING *"
+          : "UPDATE creation_styles SET name=$3,text=$4,published=$5,revision=revision+1,updated_at=now() WHERE id=$1 AND workspace_id IS NOT DISTINCT FROM $2::uuid AND revision=$6 AND NOT deleted RETURNING *",
+        input.revision === 0 ? args.slice(0, 5) : args,
+      )
+    ).rows[0];
+    if (!row) throw new AppError("STYLE_CONFLICT", 409);
+    if (shared)
+      await this.c.query(
+        "INSERT INTO administration_audit(actor_id,action,values) VALUES($1,'style-save',$2)",
+        [
+          p.id,
+          { id: row.id, revision: row.revision, published: row.published },
+        ],
+      );
+    return styleRow(row);
+  }
+  async removeStyle(p: Principal, id: string, revision: number) {
+    await this.auth(this.c, p, false);
+    const existing = (
+      await this.c.query(
+        "SELECT revision FROM creation_styles WHERE id=$1 AND workspace_id=$2 AND NOT deleted FOR UPDATE",
+        [id, p.workspaceId],
+      )
+    ).rows[0];
+    if (!existing) throw new AppError("NOT_FOUND", 404);
+    if (existing.revision !== revision)
+      throw new AppError("STYLE_CONFLICT", 409);
+    await this.c.query(
+      "UPDATE creation_styles SET deleted=true,revision=revision+1,updated_at=now() WHERE id=$1 AND workspace_id=$2",
+      [id, p.workspaceId],
+    );
+  }
   async prompts(p: Principal, offset: number, categories: string[]) {
     await this.auth(this.c, p, false, false);
     return (

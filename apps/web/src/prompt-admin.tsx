@@ -1,3 +1,4 @@
+import { PublicStylesManager } from "./style-admin";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
@@ -130,6 +131,7 @@ export function PromptAdminPage() {
     <section className="prompt-admin-page">
       <div className="page-heading">
         <h1>提示池管理</h1>
+        <PublicStylesManager />
         <Link to="/prompts">查看提示池</Link>
       </div>
       <div className="prompt-admin-toolbar">

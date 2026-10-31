@@ -82,3 +82,17 @@ export interface ManagedPromptTemplatesPage {
   prompts: ManagedPromptTemplate[];
   hasMore: boolean;
 }
+
+export const styleInput = z
+  .object({
+    id: z.uuid(),
+    name: templateText(80),
+    text: templateText(2000),
+    revision: z.number().int().min(0).max(2147483646),
+    published: z.boolean().default(false),
+  })
+  .strict();
+export type StyleInput = z.infer<typeof styleInput>;
+export interface SavedStyle extends StyleInput {
+  scope: "public" | "personal";
+}

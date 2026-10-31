@@ -21,34 +21,6 @@ export const promptExamples = [
       "未来城市的雨后夜景，街道倒映霓虹，富有层次的建筑与灯光，电影感构图。",
   },
 ];
-export const stylePresets = [
-  { id: "none", label: "无风格", text: "" },
-  {
-    id: "photo",
-    label: "真实摄影",
-    text: "真实摄影，自然光线，细腻材质，准确的光影与丰富细节。",
-  },
-  {
-    id: "product",
-    label: "商业产品",
-    text: "高端商业产品摄影，精致棚拍布光，主体清晰，构图简洁。",
-  },
-  {
-    id: "illustration",
-    label: "精致插画",
-    text: "专业编辑插画，清晰造型，丰富而协调的配色，精致完成度。",
-  },
-  {
-    id: "poster",
-    label: "海报视觉",
-    text: "鲜明的海报构图，突出视觉焦点，预留排版空间，电影感配色。",
-  },
-  {
-    id: "avatar",
-    label: "头像角色",
-    text: "富有表现力的角色肖像，突出面部表情，干净背景，精致头像质感。",
-  },
-];
 export interface SizePreset {
   tier: string;
   ratio: string;

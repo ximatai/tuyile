@@ -3660,3 +3660,6 @@ h3 {
   overflow: auto;
   overscroll-behavior: contain;
 }
+
+.style-editor-library-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.style-editor-library-actions .style-reset { margin-left: auto; }

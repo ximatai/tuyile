@@ -1,4 +1,7 @@
 import {
+  styleInput,
+  type StyleInput,
+  type SavedStyle,
   favoriteInput,
   promptTemplateInput,
   promptCategoryFilter,
@@ -12,6 +15,13 @@ import {
   type PromptTemplate,
 } from "@tuyile/contracts";
 export interface LibraryRepository {
+  styles(p: Principal, managed: boolean): Promise<SavedStyle[]>;
+  saveStyle(
+    p: Principal,
+    input: StyleInput,
+    shared: boolean,
+  ): Promise<SavedStyle>;
+  removeStyle(p: Principal, id: string, revision: number): Promise<void>;
   prompts(
     p: Principal,
     offset: number,
@@ -48,6 +58,16 @@ export interface LibraryStore {
 }
 export class LibraryService {
   constructor(private readonly store: LibraryStore) {}
+  styles(p: Principal, managed = false) {
+    return this.store.read((r) => r.styles(p, managed));
+  }
+  saveStyle(p: Principal, input: StyleInput, shared = false) {
+    const parsed = styleInput.parse(input);
+    return this.store.write(p.id, (r) => r.saveStyle(p, parsed, shared));
+  }
+  removeStyle(p: Principal, id: string, revision: number) {
+    return this.store.write(p.id, (r) => r.removeStyle(p, id, revision));
+  }
   prompts(p: Principal, offset = 0, categories: string[] = []) {
     const parsed = promptCategoryFilter.parse(categories);
     return this.store.read((r) => r.prompts(p, offset, parsed));

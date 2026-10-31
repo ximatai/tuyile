@@ -712,3 +712,145 @@ it("filters favorite groups as a private union before pagination, including ungr
   expect(response.status).toBe(200);
   expect((await response.json()).favorites).toHaveLength(2);
 });
+
+it("persists public and private styles with authorization, revisions and immutable task snapshots", async () => {
+  const initial = await library.styles(f.principal);
+  expect(initial).toHaveLength(5);
+  const member = await f.service.createUser(f.principal, "style-member");
+  await finishTemporaryPassword(f.service, member);
+  const login = await f.service.login("style-member", testPassword),
+    p = (await f.service.authenticate(login.token)).user;
+  const app = createApp(
+    f.service,
+    f.store,
+    { origin: "http://127.0.0.1:5180", production: false },
+    async () => {},
+    undefined,
+    f.creation,
+    undefined,
+    canvas,
+    undefined,
+    library,
+  );
+  expect((await app.request("/api/library/styles")).status).toBe(401);
+  const memberSession = await f.service.authenticate(login.token);
+  const memberHeaders = {
+    cookie: `tuyile_session=${login.token}`,
+    Origin: "http://127.0.0.1:5180",
+    "Content-Type": "application/json",
+    "X-CSRF-Token": memberSession.csrfToken,
+  };
+  expect(
+    (await app.request("/api/admin/styles", { headers: memberHeaders })).status,
+  ).toBe(403);
+  expect(
+    (
+      await app.request("/api/admin/styles", {
+        method: "POST",
+        headers: memberHeaders,
+        body: JSON.stringify({
+          id: randomUUID(),
+          name: "禁止",
+          text: "禁止",
+          revision: 0,
+          published: true,
+        }),
+      })
+    ).status,
+  ).toBe(403);
+  expect(
+    (
+      await app.request("/api/library/styles", {
+        method: "POST",
+        headers: memberHeaders,
+        body: JSON.stringify({
+          id: randomUUID(),
+          name: "",
+          text: "",
+          revision: 0,
+        }),
+      })
+    ).status,
+  ).toBe(400);
+  const draft = {
+    id: randomUUID(),
+    name: "未上架风格",
+    text: "独立的公共风格描述",
+    revision: 0,
+    published: false,
+  };
+  await expect(library.saveStyle(p, draft, true)).rejects.toMatchObject({
+    code: "FORBIDDEN",
+  });
+  const shared = await library.saveStyle(f.principal, draft, true);
+  expect((await library.styles(p)).some((s) => s.id === shared.id)).toBe(false);
+  const published = await library.saveStyle(
+    f.principal,
+    { ...draft, published: true, revision: shared.revision },
+    true,
+  );
+  expect((await library.styles(p)).some((s) => s.id === published.id)).toBe(
+    true,
+  );
+  const personal = await library.saveStyle(p, {
+    ...draft,
+    id: randomUUID(),
+    name: "我的风格",
+    published: true,
+  });
+  expect(personal.scope).toBe("personal");
+  expect(personal.published).toBe(false);
+  expect(
+    (await library.styles(f.principal)).some((s) => s.id === personal.id),
+  ).toBe(false);
+  await expect(
+    library.saveStyle(f.principal, { ...draft, id: personal.id }, true),
+  ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  await expect(
+    library.removeStyle(f.principal, personal.id, personal.revision),
+  ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  await library.saveStyle(p, {
+    ...draft,
+    id: personal.id,
+    revision: personal.revision,
+    text: "更新后的个人风格",
+  });
+  await expect(
+    library.saveStyle(p, {
+      ...draft,
+      id: personal.id,
+      revision: personal.revision,
+    }),
+  ).rejects.toMatchObject({ code: "STYLE_CONFLICT" });
+  await expect(
+    library.removeStyle(p, personal.id, personal.revision),
+  ).rejects.toMatchObject({ code: "STYLE_CONFLICT" });
+  const snapshot = { name: published.name, text: published.text };
+  const task = await f.creation.submit(
+    f.principal,
+    f.input({ style: snapshot }),
+  );
+  await library.saveStyle(
+    f.principal,
+    {
+      ...draft,
+      revision: published.revision,
+      published: false,
+      text: "变更后的公共风格",
+    },
+    true,
+  );
+  expect((await f.repo.task(f.principal, task.id)).settings?.style).toEqual(
+    snapshot,
+  );
+  expect((await library.styles(p)).some((s) => s.id === published.id)).toBe(
+    false,
+  );
+  await library.removeStyle(p, personal.id, personal.revision + 1);
+  expect((await library.styles(p)).some((s) => s.id === personal.id)).toBe(
+    false,
+  );
+  await expect(library.styles(p, true)).rejects.toMatchObject({
+    code: "FORBIDDEN",
+  });
+});
