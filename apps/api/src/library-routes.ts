@@ -30,7 +30,15 @@ export function libraryRoutes(
     const rows = await library.favorites(
       c.get("session").user,
       pageOffset.parse(c.req.query("offset")),
-      z.string().max(60).optional().parse(c.req.query("group")),
+      z
+        .array(
+          z
+            .string()
+            .max(60)
+            .refine((value) => !value.includes("\0")),
+        )
+        .max(200)
+        .parse(c.req.queries("group") ?? []),
     );
     return c.json({ favorites: rows.slice(0, 50), hasMore: rows.length > 50 });
   });

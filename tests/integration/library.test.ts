@@ -653,3 +653,62 @@ it("searches the complete private project list before pagination and excludes de
   ]);
   expect(await f.service.projects(f.principal, 0, "unique old")).toEqual([]);
 });
+
+it("filters favorite groups as a private union before pagination, including ungrouped content", async () => {
+  const oldId = randomUUID();
+  await library.saveFavorite(f.principal, {
+    id: oldId,
+    title: "旧收藏",
+    groupName: "早期分组",
+    prompt: "旧收藏正文",
+  });
+  for (let i = 0; i < 51; i++)
+    await library.saveFavorite(f.principal, {
+      id: randomUUID(),
+      title: `分页收藏${i}`,
+      groupName: "其他",
+      prompt: "分页正文",
+    });
+  await library.saveFavorite(f.principal, {
+    id: randomUUID(),
+    title: "未分组收藏",
+    groupName: "",
+    prompt: "未分组正文",
+  });
+  expect(
+    (await library.favorites(f.principal)).some((f) => f.id === oldId),
+  ).toBe(false);
+  expect(
+    await library.favorites(f.principal, 0, ["早期分组", ""]),
+  ).toHaveLength(2);
+  expect(await library.groups(f.principal)).toEqual(["", "其他", "早期分组"]);
+  const created = await f.service.createUser(
+    f.principal,
+    "favorite-filter-member",
+  );
+  await finishTemporaryPassword(f.service, created, testPassword);
+  const login = await f.service.login("favorite-filter-member", testPassword),
+    other = (await f.service.authenticate(login.token)).user;
+  expect(await library.favorites(other, 0, ["早期分组", ""])).toEqual([]);
+  expect(await library.groups(other)).toEqual([]);
+  const app = createApp(
+    f.service,
+    f.store,
+    { origin: "http://127.0.0.1:5180", production: false },
+    async () => {},
+    undefined,
+    f.creation,
+    undefined,
+    canvas,
+    undefined,
+    library,
+  );
+  const response = await app.request(
+    "/api/library/favorites?group=" +
+      encodeURIComponent("早期分组") +
+      "&group=",
+    { headers: { cookie: `tuyile_session=${f.login.token}` } },
+  );
+  expect(response.status).toBe(200);
+  expect((await response.json()).favorites).toHaveLength(2);
+});

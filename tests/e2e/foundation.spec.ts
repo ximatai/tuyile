@@ -1897,7 +1897,7 @@ test("Gallery reuse, ZIP export, favorites, prompt application and project clean
   await expect(
     page
       .getByTestId("reference-upload")
-      .getByText("图库参考图", { exact: true }),
+      .getByRole("button", { name: "图库参考图", exact: true }),
   ).toBeVisible();
   await page.getByRole("link", { name: "提示池", exact: true }).click();
   await expect(
@@ -1930,7 +1930,10 @@ test("Gallery reuse, ZIP export, favorites, prompt application and project clean
   const favorite = page.locator(".favorite-card").filter({
     has: page.getByRole("heading", { name: "素材测试收藏", exact: true }),
   });
-  await favorite.getByRole("button", { name: "编辑收藏", exact: true }).click();
+  await favorite
+    .getByRole("button", { name: "收藏更多操作", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: "编辑收藏", exact: true }).click();
   await page.getByLabel("收藏标题", { exact: true }).fill("更新素材收藏");
   await page.getByLabel("收藏分组名称", { exact: true }).fill("归档");
   await page.getByRole("button", { name: "保存收藏", exact: true }).click();
@@ -1938,18 +1941,21 @@ test("Gallery reuse, ZIP export, favorites, prompt application and project clean
   await expect(
     page.getByRole("heading", { name: "更新素材收藏", exact: true }),
   ).toBeVisible();
-  await page.getByLabel("收藏分组", { exact: true }).click();
   await page
-    .locator(".ant-select-dropdown:visible")
-    .getByText("归档", { exact: true })
-    .click();
+    .getByRole("complementary", { name: "收藏分组", exact: true })
+    .getByRole("checkbox", { name: "归档", exact: true })
+    .check();
   await expect(page.locator(".favorite-card")).toHaveCount(1);
   await page.setViewportSize({ width: 1920, height: 1080 });
   await page.screenshot({
     path: ".codex-temp/m3-favorites-1920.png",
     animations: "disabled",
   });
-  await page.getByRole("button", { name: "移除收藏", exact: true }).click();
+  await page
+    .locator(".favorite-card")
+    .getByRole("button", { name: "收藏更多操作", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: "移除收藏", exact: true }).click();
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "确认", exact: true })
@@ -2832,4 +2838,169 @@ test("prompt use menu supports hover, complete project search and creating a des
   await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
     prompt,
   );
+});
+
+test("favorite library groups cards and reuses prompts, images and references through project menus", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const initialFavorites = (
+    await (await page.request.get("/api/library/favorites")).json()
+  ).favorites.length;
+  const session = await (await page.request.get("/api/auth/me")).json();
+  const headers = {
+    Origin: "http://127.0.0.1:5180",
+    "X-CSRF-Token": session.csrfToken,
+  };
+  for (const name of ["收藏画布目标", "收藏创作目标"])
+    expect(
+      (
+        await page.request.post("/api/projects", { headers, data: { name } })
+      ).status(),
+    ).toBe(201);
+  const png = await (
+    await import("sharp")
+  )
+    .default({
+      create: { width: 256, height: 256, channels: 3, background: "#0062b0" },
+    })
+    .png()
+    .toBuffer();
+  const uploaded = await (
+    await page.request.post("/api/images/uploads", {
+      headers: { ...headers, "Content-Type": "image/png" },
+      data: png,
+    })
+  ).json();
+  const assetId = uploaded.id;
+  for (const data of [
+    { id: randomUUID(), title: "场景图片", groupName: "图片组", assetId },
+    {
+      id: randomUUID(),
+      title: "收藏需求",
+      groupName: "提示词组",
+      prompt: "完整收藏提示词，不截断。",
+    },
+    {
+      id: randomUUID(),
+      title: "默认分组需求",
+      groupName: "",
+      prompt: "默认分组正文",
+    },
+  ])
+    expect(
+      (
+        await page.request.post("/api/library/favorites", { headers, data })
+      ).status(),
+    ).toBe(201);
+  await page.getByRole("link", { name: "收藏", exact: true }).click();
+  const panel = page.getByRole("complementary", {
+    name: "收藏分组",
+    exact: true,
+  });
+  await expect(page.getByLabel("目标项目", { exact: true })).toHaveCount(0);
+  await expect(page.locator(".favorite-card")).toHaveCount(
+    initialFavorites + 3,
+  );
+  for (const width of [1440, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    const left = await panel.boundingBox(),
+      right = await page
+        .getByRole("region", { name: "收藏列表", exact: true })
+        .boundingBox();
+    expect(left!.x + left!.width).toBeLessThan(right!.x);
+    const visual = page.locator(".favorite-visual").first();
+    const visualBox = await visual.boundingBox(),
+      imageBox = await visual.getByRole("img").boundingBox();
+    expect(imageBox!.height).toBeLessThanOrEqual(visualBox!.height + 1);
+    if (width === 1440)
+      await page.screenshot({
+        path: ".codex-temp/favorite-library-demo.png",
+        fullPage: false,
+      });
+  }
+
+  await panel.getByRole("checkbox", { name: "图片组", exact: true }).check();
+  await expect(page.locator(".favorite-card")).toHaveCount(1);
+  await panel.getByRole("checkbox", { name: "提示词组", exact: true }).check();
+  await expect(page.locator(".favorite-card")).toHaveCount(2);
+  await panel.getByRole("checkbox", { name: "图片组", exact: true }).uncheck();
+  await expect(page.locator(".favorite-card")).toHaveCount(1);
+  const promptCard = page
+    .locator(".favorite-card")
+    .filter({ hasText: "收藏需求" });
+  await promptCard
+    .getByRole("button", { name: "使用收藏", exact: true })
+    .click();
+  await page
+    .getByRole("menuitem", { name: "收藏创作目标", exact: true })
+    .click();
+  await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
+    "完整收藏提示词，不截断。",
+  );
+  await page.getByRole("link", { name: "收藏", exact: true }).click();
+  const imageCard = page
+    .locator(".favorite-card")
+    .filter({ hasText: "场景图片" });
+  await imageCard.getByRole("img", { name: "场景图片", exact: true }).click();
+  await expect(page.locator(".ant-image-preview")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".ant-image-preview")).toBeHidden();
+  await imageCard
+    .getByRole("button", { name: "使用收藏", exact: true })
+    .click();
+  await page
+    .getByRole("menuitem", { name: "收藏画布目标", exact: true })
+    .click();
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(1);
+  await page.getByRole("link", { name: "收藏", exact: true }).click();
+  await imageCard
+    .getByRole("button", { name: "使用收藏", exact: true })
+    .click();
+  await page
+    .locator(".prompt-use-popover:visible")
+    .getByText("用作参考", { exact: true })
+    .click();
+  await page
+    .getByRole("menuitem", { name: "收藏创作目标", exact: true })
+    .click();
+  await expect(
+    page
+      .getByTestId("reference-upload")
+      .getByRole("button", { name: "图库参考图", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "收藏", exact: true }).click();
+  await promptCard
+    .getByRole("button", { name: "收藏更多操作", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: "编辑收藏", exact: true }).click();
+  await page.getByLabel("收藏标题", { exact: true }).fill("修改后的收藏");
+  await page.getByRole("button", { name: "保存收藏", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "修改后的收藏", exact: true }),
+  ).toBeVisible();
+  await page
+    .locator(".favorite-card")
+    .filter({ hasText: "修改后的收藏" })
+    .getByRole("button", { name: "收藏更多操作", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: "移除收藏", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "请确认", exact: true })
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "修改后的收藏", exact: true }),
+  ).toHaveCount(0);
+  expect(
+    (await (await page.request.get("/api/images/usage")).json()).used,
+  ).toBe(0);
+  await page.getByRole("button", { name: "新增提示词", exact: true }).click();
+  await page.getByLabel("收藏标题", { exact: true }).fill("手动新增需求");
+  await page.getByLabel("收藏提示词", { exact: true }).fill("新增收藏正文");
+  await page.getByRole("button", { name: "保存收藏", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "手动新增需求", exact: true }),
+  ).toBeVisible();
 });

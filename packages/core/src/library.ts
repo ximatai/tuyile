@@ -29,7 +29,11 @@ export interface LibraryRepository {
   ): Promise<ManagedPromptTemplate>;
 
   assets(p: Principal, offset: number): Promise<GalleryAsset[]>;
-  favorites(p: Principal, offset: number, group?: string): Promise<Favorite[]>;
+  favorites(
+    p: Principal,
+    offset: number,
+    group?: string | string[],
+  ): Promise<Favorite[]>;
   groups(p: Principal): Promise<string[]>;
   saveFavorite(p: Principal, input: FavoriteInput): Promise<Favorite>;
   removeFavorite(p: Principal, id: string): Promise<void>;
@@ -69,7 +73,7 @@ export class LibraryService {
   assets(p: Principal, offset = 0) {
     return this.store.read((r) => r.assets(p, offset));
   }
-  favorites(p: Principal, offset = 0, group?: string) {
+  favorites(p: Principal, offset = 0, group?: string | string[]) {
     return this.store.read((r) => r.favorites(p, offset, group));
   }
   groups(p: Principal) {

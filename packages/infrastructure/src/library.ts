@@ -104,12 +104,16 @@ class PgLibraryRepository
       origin: r.task_id ? "generated" : "upload",
     }));
   }
-  async favorites(p: Principal, offset: number, group?: string) {
+  async favorites(p: Principal, offset: number, group?: string | string[]) {
     await this.auth(this.c, p, false, false);
     return (
       await this.c.query(
-        "SELECT * FROM library_favorites WHERE workspace_id=$1 AND ($3::text IS NULL OR group_name=$3) ORDER BY created_at DESC,id LIMIT 51 OFFSET $2",
-        [p.workspaceId, offset, group ?? null],
+        "SELECT * FROM library_favorites WHERE workspace_id=$1 AND (cardinality($3::text[])=0 OR group_name=ANY($3::text[])) ORDER BY created_at DESC,id LIMIT 51 OFFSET $2",
+        [
+          p.workspaceId,
+          offset,
+          group === undefined ? [] : Array.isArray(group) ? group : [group],
+        ],
       )
     ).rows.map(favorite);
   }

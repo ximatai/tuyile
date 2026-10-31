@@ -7,7 +7,16 @@ import {
   type FormEvent,
 } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
-import { Button, Field, Input, Menu, Modal, Notice, Popover } from "@tuyile/ui";
+import {
+  Button,
+  Field,
+  Input,
+  Menu,
+  Modal,
+  Notice,
+  Popover,
+  Radio,
+} from "@tuyile/ui";
 import type { Project, ProjectsPage } from "@tuyile/contracts";
 import { ArrowRight, Plus, Search } from "lucide-react";
 import { client } from "./api";
@@ -16,10 +25,16 @@ import { useSessionState } from "./session-state";
 export function PromptUseMenu({
   disabled,
   onUse,
+  onReference,
+  ariaLabel = "使用提示词",
 }: {
   disabled: boolean;
+  ariaLabel?: string;
   onUse: (projectId: string) => Promise<boolean>;
+  onReference?: (projectId: string) => Promise<boolean>;
 }) {
+  const [referenceMode, setReferenceMode] = useState(false);
+  const useDestination = referenceMode && onReference ? onReference : onUse;
   const formId = useId();
   const state = useSessionState(),
     api = client(state.session.csrfToken);
@@ -73,7 +88,7 @@ export function PromptUseMenu({
     pending.current = true;
     setBusy(true);
     try {
-      if (await onUse(id)) setOpen(false);
+      if (await useDestination(id)) setOpen(false);
     } finally {
       pending.current = false;
       setBusy(false);
@@ -103,10 +118,10 @@ export function PromptUseMenu({
           queryKey: state.key("prompt-use-projects"),
         }),
       ]);
-      if (await onUse(created.current.id)) {
+      if (await useDestination(created.current.id)) {
         setCreating(false);
         created.current = null;
-      } else setError("项目已创建，点击继续使用可重试带入提示词。");
+      } else setError("项目已创建，点击继续使用可重试。");
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -169,6 +184,21 @@ export function PromptUseMenu({
                 </Button>
               </div>
             </div>
+            {onReference && (
+              <Radio.Group
+                className="favorite-use-mode"
+                size="small"
+                optionType="button"
+                buttonStyle="solid"
+                value={referenceMode}
+                disabled={disabled || busy}
+                options={[
+                  { label: "加入画布", value: false },
+                  { label: "用作参考", value: true },
+                ]}
+                onChange={(event) => setReferenceMode(event.target.value)}
+              />
+            )}
             {searchOpen && (
               <Input
                 id={searchId}
@@ -214,7 +244,7 @@ export function PromptUseMenu({
         <Button
           ref={trigger}
           type="button"
-          aria-label="使用提示词"
+          aria-label={ariaLabel}
           aria-expanded={open}
           disabled={disabled || busy}
           onKeyDown={(event) => {
