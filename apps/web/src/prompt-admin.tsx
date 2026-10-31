@@ -29,7 +29,7 @@ export function PromptAdminPage() {
   return (
     <section className="prompt-admin-page">
       <div className="page-heading">
-        <h1>提示池管理</h1>
+        <h1>创作预设</h1>
         <Link to="/prompts">查看提示池</Link>
       </div>
       <Tabs

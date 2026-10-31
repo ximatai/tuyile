@@ -416,7 +416,7 @@ export function LibraryPage({ mode }: { mode: Mode }) {
         {mode === "prompts" && (
           <div className="prompt-project-picker">
             {state.session.user.role === "admin" && (
-              <Link to="/admin/prompts">管理提示词</Link>
+              <Link to="/admin/prompts">管理创作预设</Link>
             )}
           </div>
         )}

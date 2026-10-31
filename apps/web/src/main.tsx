@@ -298,7 +298,7 @@ function Shell() {
                 {
                   "/gallery": "图库",
                   "/prompts": "提示池",
-                  "/admin/prompts": "提示池管理",
+                  "/admin/prompts": "创作预设",
                   "/favorites": "收藏",
                   "/usage": "额度",
                   "/admin/users": "用户管理",

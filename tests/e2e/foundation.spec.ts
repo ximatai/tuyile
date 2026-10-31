@@ -2676,7 +2676,7 @@ test("managed prompt pool supports drafts, publication, cross-tab updates, reuse
     })
   ).json();
   await page.getByRole("link", { name: "提示池", exact: true }).click();
-  await page.getByRole("link", { name: "管理提示词", exact: true }).click();
+  await page.getByRole("link", { name: "管理创作预设", exact: true }).click();
   await page.getByRole("button", { name: "新增提示词", exact: true }).click();
   let drawer = page.getByRole("dialog", { name: "新增提示词", exact: true });
   await drawer.getByLabel("标题", { exact: true }).fill("公开模板验收");
