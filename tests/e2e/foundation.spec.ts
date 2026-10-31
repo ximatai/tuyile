@@ -961,7 +961,9 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   await expect(reopened.getByRole("tooltip")).toBeHidden();
   await expect(quotaTrigger).toBeFocused();
   await quotaTrigger.click();
-  await reopened.getByRole("button", { name: "关闭额度详情", exact: true }).click();
+  await reopened
+    .getByRole("button", { name: "关闭额度详情", exact: true })
+    .click();
   await expect(quotaTrigger).toBeFocused();
   await expect(quotaTrigger).toHaveAttribute("aria-expanded", "false");
   await reopened.getByRole("tab", { name: "Agent", exact: true }).click();
@@ -1617,6 +1619,76 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page);
+  // This scenario must also run alone, without the model-administration test.
+  const session = await (await page.request.get("/api/auth/me")).json();
+  const headers = {
+    Origin: "http://127.0.0.1:5180",
+    "X-CSRF-Token": session.csrfToken,
+  };
+  let catalog = await (
+    await page.request.get("/api/model-admin/catalog")
+  ).json();
+  if (!catalog.managed) {
+    expect(
+      (
+        await page.request.post("/api/model-admin/bootstrap", {
+          headers,
+          data: {},
+        })
+      ).ok(),
+    ).toBe(true);
+    catalog = await (await page.request.get("/api/model-admin/catalog")).json();
+  }
+  if (
+    !catalog.entries.some(
+      (entry: any) => entry.kind === "conversation" && entry.enabled,
+    )
+  ) {
+    const service = catalog.services.find(
+      (service: any) => service.mode === "fake",
+    );
+    expect(service).toBeTruthy();
+    expect(
+      (
+        await page.request.post(
+          `/api/model-admin/services/${service.id}/refresh`,
+          { headers, data: {} },
+        )
+      ).ok(),
+    ).toBe(true);
+    catalog = await (await page.request.get("/api/model-admin/catalog")).json();
+    expect(
+      (
+        await page.request.post("/api/model-admin/pools", {
+          headers,
+          data: {
+            revision: catalog.revision,
+            entries: [
+              ...catalog.entries,
+              {
+                id: randomUUID(),
+                serviceId: service.id,
+                modelId: "test-planner",
+                kind: "conversation",
+                enabled: true,
+                isDefault: true,
+                conversation: {
+                  supportsImages: true,
+                  responseMode: "json_object",
+                  maxOutputTokens: 4096,
+                  maxInputCharacters: 32000,
+                },
+              },
+            ],
+          },
+        })
+      ).ok(),
+    ).toBe(true);
+  }
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "我的项目", exact: true }),
+  ).toBeVisible();
   await page.getByRole("link", { name: "项目", exact: true }).click();
   await page.getByLabel("项目名称").fill("Agent 顺序创作");
   await page.getByRole("button", { name: "创建项目", exact: true }).click();
@@ -1639,9 +1711,8 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
   await expect(
     page.getByRole("button", { name: "灵感与风格", exact: true }),
   ).toBeFocused();
-  await page
-    .getByText("创作设置 · 通用创作 · test-image", { exact: true })
-    .click();
+  await page.getByRole("button", { name: "创作设置", exact: true }).click();
+  await page.getByRole("button", { name: "创作设置", exact: true }).click();
   const referenceBytes = await (
     await import("sharp")
   )
@@ -1663,11 +1734,24 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
   await page
     .getByLabel("告诉 Agent 你的想法", { exact: true })
     .fill("合成验收：先生成基准图，再参考基准图改图");
-  await page.getByRole("button", { name: "发送规划需求", exact: true }).click();
+  await page.getByRole("button", { name: "生成计划", exact: true }).click();
   await expect(page.getByLabel("计划步骤摘要")).toBeVisible({ timeout: 15000 });
-  await expect(page.locator(".agent-confirm-footer")).toContainText(
-    "确认后后台执行",
-  );
+  await expect(page.locator(".agent-confirm-footer")).toContainText("确认执行");
+  const executionHelp = page
+    .locator(".agent-confirm-footer")
+    .getByRole("button", { name: "执行说明", exact: true });
+  await executionHelp.click();
+  await expect(page.getByRole("tooltip")).toContainText("取消可能计费");
+  await executionHelp.press("Escape");
+
+  await expect(
+    page.getByLabel("告诉 Agent 你的想法", { exact: true }),
+  ).toBeHidden();
+  await page.getByRole("button", { name: "继续聊想法", exact: true }).click();
+  await expect(
+    page.getByLabel("告诉 Agent 你的想法", { exact: true }),
+  ).toHaveValue("合成验收：先生成基准图，再参考基准图改图");
+  await page.getByRole("button", { name: "继续聊想法", exact: true }).click();
   await expect(page.getByLabel("步骤 1 提示词", { exact: true })).toBeHidden();
   await page.getByRole("button", { name: "修改计划", exact: true }).click();
   await expect(page.getByLabel("步骤 1 提示词", { exact: true })).toBeVisible();
@@ -1833,6 +1917,10 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
     .getByRole("button", { name: "任务详情", exact: true })
     .click();
   await page.getByRole("button", { name: "复用设置", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "请确认", exact: true })
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
   await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
     dependentTask.prompt,
   );
@@ -2260,14 +2348,13 @@ test("administrators add a service and users select same-named models from the c
     timeout: 20000,
   });
   await page.getByRole("tab", { name: "Agent", exact: true }).click();
-  await page
-    .getByText("创作设置 · 通用创作 · test-image", { exact: true })
-    .click();
+  await page.getByRole("button", { name: "创作设置", exact: true }).click();
   await page.getByLabel("对话模型", { exact: true }).click();
   await page
     .locator(".ant-select-dropdown:visible")
     .getByText("test-planner · 备用测试服务", { exact: true })
     .click();
+  await page.getByRole("button", { name: "创作设置", exact: true }).click();
   await page
     .getByLabel("告诉 Agent 你的想法", { exact: true })
     .fill("Synthetic plan using selected service");
@@ -2276,7 +2363,7 @@ test("administrators add a service and users select same-named models from the c
       r.method() === "POST" &&
       new URL(r.url()).pathname === "/api/agent/planning",
   );
-  await page.getByRole("button", { name: "发送规划需求", exact: true }).click();
+  await page.getByRole("button", { name: "生成计划", exact: true }).click();
   await expect(page.getByLabel("计划步骤摘要")).toBeVisible({ timeout: 15000 });
   expect((await planningRequest).postDataJSON().conversationModelId).toBe(
     catalog.entries.find(

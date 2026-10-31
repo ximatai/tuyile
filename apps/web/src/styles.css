@@ -1086,14 +1086,33 @@ form {
   overflow: auto;
   padding: 2px 4px;
 }
+.agent-panel-empty .agent-conversation {
+  display: grid;
+  place-items: center;
+}
 .agent-intro {
-  padding: 10px 0;
-  color: #62748c;
-  line-height: 1.8;
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--muted);
+}
+.agent-intro-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 16px;
+  border-radius: 16px;
+  background: var(--focus-soft);
+  color: var(--brand-blue);
 }
 .agent-intro h2 {
-  font-size: 16px;
-  color: #24354a;
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: var(--ink);
+}
+.agent-intro p {
+  margin: 0;
+  font-size: 12px;
 }
 .agent-message {
   padding: 10px 0;
@@ -1139,18 +1158,36 @@ form {
 .agent-step .ant-select {
   width: 100%;
 }
+.creation-panel form.agent-compose[hidden] {
+  display: none;
+}
+.agent-panel .agent-followup-trigger {
+  display: flex;
+  justify-content: space-between;
+  flex-shrink: 0;
+  border: 0;
+  box-shadow: none;
+  background: var(--paper);
+  color: var(--muted);
+  font-size: 12px;
+}
+.agent-followup-trigger[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
 .creation-panel form.agent-compose {
   flex: none;
-  gap: 6px;
-  border-top: 1px solid #e6ecf4;
-  padding-top: 8px;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
 }
 .creation-panel .agent-compose fieldset {
   min-height: 0;
-  max-height: 250px;
+  max-height: min(48dvh, 360px);
   overflow: auto;
   display: grid;
-  gap: 8px;
+  gap: 12px;
 }
 .agent-options {
   display: grid;
@@ -1189,6 +1226,12 @@ form {
   gap: 6px;
   border-top: 1px solid #e6ecf4;
   padding-top: 8px;
+}
+.agent-confirm-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 .agent-confirm-footer .hint {
   font-size: 12px;
@@ -1453,18 +1496,47 @@ form {
 .agent-message p {
   margin: 6px 0;
 }
-.agent-compose .ant-collapse {
-  width: 100%;
-  font-size: 12px;
-}
-.agent-compose .ant-collapse-header {
-  padding: 6px 10px !important;
-}
-.agent-compose .ant-collapse-content-box {
-  padding: 10px !important;
-}
 .agent-compose .agent-references {
-  margin-top: 8px;
+  display: block;
+  margin: 0;
+}
+.agent-compose .reference-attachments {
+  width: 100%;
+  margin: 0;
+}
+.agent-compose-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.agent-settings-trigger.ant-btn {
+  padding-inline: 0;
+  border: 0;
+  box-shadow: none;
+  color: var(--muted);
+  background: transparent;
+}
+.agent-planning-quota {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.agent-settings-content {
+  width: 300px;
+  max-height: min(60dvh, 480px);
+  overflow: auto;
+  padding: 2px;
+}
+.agent-settings-content .image-controls {
+  margin-top: 16px;
+}
+.agent-compose .prompt-composer-compact textarea.ant-input {
+  min-height: 96px;
+}
+.agent-compose .agent-plan-submit {
+  width: 100%;
 }
 
 /* Calibrated against the approved OpenAI desktop targets (2026-10-30). */
@@ -2197,9 +2269,6 @@ h3 {
 .model-pool-entry {
   font-size: var(--text-body);
 }
-.agent-intro h2 {
-  font-size: 14px;
-}
 .agent-message {
   padding: 6px 0;
 }
@@ -2343,12 +2412,6 @@ h3 {
 }
 .output-grid .ant-image {
   width: 100%;
-}
-.agent-compose .image-controls {
-  margin-top: 10px;
-}
-.agent-compose .reference-attachments {
-  margin: 6px 0 0;
 }
 
 .direct-creation fieldset {

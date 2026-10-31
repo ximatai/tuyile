@@ -1,3 +1,4 @@
+import { ChevronDown, Settings2, Sparkles } from "lucide-react";
 import { useDraftValue } from "./project-draft";
 import { composeCreativePrompt } from "@tuyile/contracts";
 import { PromptComposer } from "./prompt-composer";
@@ -31,6 +32,7 @@ import {
   Field,
   Input,
   Notice,
+  Popover,
   Select,
   useConfirm,
 } from "@tuyile/ui";
@@ -238,11 +240,21 @@ export function AgentPanel({
     }
   }
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [composeOpen, setComposeOpen] = useState(false);
+  useEffect(() => {
+    if (plan) setComposeOpen(false);
+  }, [plan?.id]);
+  const settingsTrigger = useRef<React.ComponentRef<typeof Button>>(null);
+  useEffect(() => {
+    if (!visible || (plan && !composeOpen)) setSettingsOpen(false);
+  }, [visible, plan?.id, composeOpen]);
   const active = !!plan?.taskIds.some((id) =>
     tasks.some((t) => t.id === id && ["queued", "running"].includes(t.state)),
   );
   return (
-    <div className="agent-panel">
+    <div
+      className={`agent-panel ${!history.length ? "agent-panel-empty" : ""}`}
+    >
       {history.length > 0 && (
         <Button
           className="agent-clear-history"
@@ -255,7 +267,11 @@ export function AgentPanel({
       <div className="agent-conversation" aria-label="Agent 对话">
         {!history.length && !jobs.isPending && (
           <div className="agent-intro">
+            <div className="agent-intro-icon" aria-hidden="true">
+              <Sparkles size={26} />
+            </div>
             <h2>先聊想法，再确认创作</h2>
+            <p>确认计划后才会生成图片</p>
           </div>
         )}
         {jobs.hasNextPage && (
@@ -341,82 +357,32 @@ export function AgentPanel({
       {!pending && conversationUnavailable && (
         <Notice error>原对话模型已不可用，请重新选择或联系管理员。</Notice>
       )}
+      {plan && (
+        <Button
+          type="button"
+          className="agent-followup-trigger"
+          aria-expanded={composeOpen}
+          onClick={() => setComposeOpen(!composeOpen)}
+        >
+          继续聊想法
+          <ChevronDown size={15} aria-hidden="true" />
+        </Button>
+      )}
       <form
+        hidden={!!plan && !composeOpen}
         className="agent-compose"
         onSubmit={request}
         aria-label="请求 Agent 规划"
       >
         <ControlScope componentDisabled={busy || !!pending || uploadBusy}>
           <fieldset disabled={busy || !!pending || uploadBusy}>
-            <Collapse
-              size="small"
-              activeKey={settingsOpen ? ["settings"] : []}
-              onChange={(keys) => setSettingsOpen(keys.includes("settings"))}
-              items={[
-                {
-                  key: "settings",
-                  label: `创作设置 · ${skillId ? "已选技能" : "通用创作"} · ${usage?.modelOptions?.find((e) => e.id === model)?.modelId || model || "未配置模型"}`,
-                  children: (
-                    <>
-                      {" "}
-                      <div className="agent-options">
-                        {(!!modelPools.data?.conversation.length ||
-                          conversationModel) && (
-                          <ChoiceField
-                            label="对话模型"
-                            value={conversationModel}
-                            onValueChange={setConversationModel}
-                            options={[
-                              ...(conversationUnavailable
-                                ? [
-                                    {
-                                      value: conversationModel,
-                                      label: "原对话模型（已不可用）",
-                                      disabled: true,
-                                    },
-                                  ]
-                                : []),
-                              ...(modelPools.data?.conversation ?? []).map(
-                                (m) => ({
-                                  value: m.id,
-                                  label: `${m.modelId} · ${m.serviceName}`,
-                                }),
-                              ),
-                            ]}
-                          />
-                        )}
-                        <ChoiceField
-                          label="创作技能"
-                          value={skillId}
-                          onValueChange={setSkillId}
-                          options={[
-                            { value: "", label: "通用创作" },
-                            ...(skills.data?.skills ?? []).map((s) => ({
-                              value: s.id,
-                              label: `${s.name} v${s.version}`,
-                            })),
-                          ]}
-                        />
-                      </div>
-                      <ImageControls
-                        usage={usage}
-                        value={settings}
-                        onChange={setSettings}
-                        modelLabel="Agent 图片模型"
-                        count={false}
-                      />
-                    </>
-                  ),
-                },
-              ]}
-            />
             <PromptComposer
               value={prompt}
               onChange={setPrompt}
               style={style}
               onStyleChange={setStyle}
               label="告诉 Agent 你的想法"
-              rows={2}
+              rows={4}
               compact
               visible={visible}
             />
@@ -438,9 +404,106 @@ export function AgentPanel({
                 />
               )}
             </div>
+            <div className="agent-compose-toolbar">
+              <Popover
+                trigger="click"
+                placement="topRight"
+                title="创作设置"
+                open={settingsOpen}
+                onOpenChange={setSettingsOpen}
+                content={
+                  <div
+                    className="agent-settings-content"
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape") {
+                        event.stopPropagation();
+                        setSettingsOpen(false);
+                        settingsTrigger.current?.focus();
+                      }
+                    }}
+                  >
+                    <div className="agent-options">
+                      {(!!modelPools.data?.conversation.length ||
+                        conversationModel) && (
+                        <ChoiceField
+                          label="对话模型"
+                          value={conversationModel}
+                          onValueChange={setConversationModel}
+                          options={[
+                            ...(conversationUnavailable
+                              ? [
+                                  {
+                                    value: conversationModel,
+                                    label: "原对话模型（已不可用）",
+                                    disabled: true,
+                                  },
+                                ]
+                              : []),
+                            ...(modelPools.data?.conversation ?? []).map(
+                              (m) => ({
+                                value: m.id,
+                                label: `${m.modelId} · ${m.serviceName}`,
+                              }),
+                            ),
+                          ]}
+                        />
+                      )}
+                      <ChoiceField
+                        label="创作技能"
+                        value={skillId}
+                        onValueChange={setSkillId}
+                        options={[
+                          { value: "", label: "通用创作" },
+                          ...(skills.data?.skills ?? []).map((s) => ({
+                            value: s.id,
+                            label: `${s.name} v${s.version}`,
+                          })),
+                        ]}
+                      />
+                    </div>
+                    <ImageControls
+                      usage={usage}
+                      value={settings}
+                      onChange={setSettings}
+                      modelLabel="Agent 图片模型"
+                      count={false}
+                    />
+                  </div>
+                }
+              >
+                <Button
+                  type="button"
+                  className="agent-settings-trigger"
+                  ref={settingsTrigger}
+                  aria-expanded={settingsOpen}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      event.stopPropagation();
+                      setSettingsOpen(false);
+                    }
+                  }}
+                >
+                  <Settings2 size={15} aria-hidden="true" />
+                  创作设置
+                </Button>
+              </Popover>
+              <div className="agent-planning-quota hint">
+                <span>
+                  可规划 {planning.data?.available ?? "—"} 次
+                  {planning.data?.held
+                    ? ` · 待结算 ${planning.data.held} 次`
+                    : ""}
+                </span>
+                <HelpPopover title="规划与执行规则">
+                  规划开始调用时计次，确认计划后才生成图片并预留额度。额度不足时不降低规格。生图任务是后台执行，关闭页面不影响任务执行和费用核算。取消可能计费，后台中断不自动续跑。
+                </HelpPopover>
+              </div>
+            </div>
           </fieldset>
         </ControlScope>
         <Button
+          className="primary agent-plan-submit"
+          loading={busy}
           disabled={
             busy ||
             uploadBusy ||
@@ -453,49 +516,51 @@ export function AgentPanel({
                 composeCreativePrompt({ prompt, style }).length > 12000))
           }
         >
-          {pending ? "重试同一规划" : "发送规划需求"}
+          {pending ? "重试同一规划" : "生成计划"}
         </Button>
       </form>
-      <div className="agent-confirm-footer">
-        <div className="hint heading-with-help">
-          规划可用 {planning.data?.available ?? "—"} 次 · 预留{" "}
-          {planning.data?.held ?? "—"} 次
-          <HelpPopover title="规划与执行规则">
-            每次规划在开始调用时计次。计划确认后才生成图片，整单预留图片额度，不足时不自动降低规格；关页和普通退出登录不影响已接受的任务。
-          </HelpPopover>
+      {plan && (
+        <div className="agent-confirm-footer">
+          <div className="agent-confirm-summary">
+            <strong>
+              {plan.confirmed
+                ? active
+                  ? "计划正在后台执行"
+                  : "计划已确认"
+                : `本计划预留 ${total} 张图片`}
+            </strong>
+            <HelpPopover title="执行说明">
+              生图任务是后台执行，关闭页面不影响任务执行和费用核算。取消可能计费；后台中断不自动续跑，已保存图片保留。
+            </HelpPopover>
+          </div>
+          {!plan.confirmed && plan.document.steps.length > 0 ? (
+            <>
+              <span className="hint">
+                {usage?.available === null
+                  ? "图片不限额"
+                  : `可用 ${usage?.available ?? "—"} 张`}
+              </span>
+              <Button
+                className="primary"
+                type="submit"
+                form={`confirm-${plan.id}`}
+                disabled={busy || uploadBusy}
+              >
+                {busy ? "正在处理…" : "确认执行"}
+              </Button>
+            </>
+          ) : plan.confirmed ? (
+            <>
+              <Button
+                disabled={busy || !active}
+                onClick={() => void cancel("plans", plan.id)}
+              >
+                停止后续执行
+              </Button>
+            </>
+          ) : null}
         </div>
-        {plan && !plan.confirmed && plan.document.steps.length > 0 ? (
-          <>
-            <strong>本计划预留 {total} 张图片</strong>
-            <span className="hint">
-              {usage?.available === null
-                ? "图片不限额"
-                : `可用 ${usage?.available ?? "—"} 张`}
-            </span>
-            <Button
-              className="primary"
-              type="submit"
-              form={`confirm-${plan.id}`}
-              disabled={busy || uploadBusy}
-            >
-              {busy ? "正在处理…" : "确认执行"}
-            </Button>
-          </>
-        ) : plan?.confirmed ? (
-          <>
-            <strong>{active ? "计划正在后台执行" : "计划已确认"}</strong>
-            <Button
-              disabled={busy || !active}
-              onClick={() => void cancel("plans", plan.id)}
-            >
-              停止后续执行
-            </Button>
-          </>
-        ) : null}
-        <span className="hint">
-          确认后后台执行，取消可能仍计费；中断不自动续跑。
-        </span>
-      </div>
+      )}
     </div>
   );
 }
