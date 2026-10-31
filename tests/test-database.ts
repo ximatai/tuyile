@@ -56,6 +56,15 @@ export async function resetDatabase() {
       stylesSql.slice(stylesSql.indexOf("INSERT INTO creation_styles")),
     );
     await owner.query(
+      await readFile(
+        new URL(
+          "../migrations/0020_refine_default_styles.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    await owner.query(
       "INSERT INTO tuyile.tool_controls(tool_id,version) VALUES('image.generate',1),('image.edit',1)",
     );
     await owner.query(

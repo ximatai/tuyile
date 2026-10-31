@@ -854,3 +854,62 @@ it("persists public and private styles with authorization, revisions and immutab
     code: "FORBIDDEN",
   });
 });
+
+it("calibrates only untouched starter styles and keeps the migration repeatable", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const sql = await readFile(
+    new URL("../../migrations/0020_refine_default_styles.sql", import.meta.url),
+    "utf8",
+  );
+  const original = await library.styles(f.principal);
+  expect(original.map((s) => s.name)).toEqual([
+    "真实摄影",
+    "商品棚拍",
+    "平面插画",
+    "海报视觉",
+    "简洁 3D",
+  ]);
+  expect(original.every((s) => s.revision === 2)).toBe(true);
+  await f.pool.query(sql);
+  expect(await library.styles(f.principal)).toEqual(original);
+  // Simulate four different states when upgrading a deployment from migration 19.
+  const ids = original.map((s) => s.id);
+  await f.pool.query(
+    "UPDATE creation_styles SET name='真实摄影',text='真实摄影，自然光线，细腻材质，准确的光影与丰富细节。',revision=1 WHERE id=$1",
+    [ids[0]],
+  );
+  await f.pool.query(
+    "UPDATE creation_styles SET name='管理员的商品风格',text='管理员保留的独立内容',revision=1 WHERE id=$1",
+    [ids[1]],
+  );
+  await f.pool.query(
+    "UPDATE creation_styles SET name='精致插画',text='专业编辑插画，清晰造型，丰富而协调的配色，精致完成度。',revision=1,published=false WHERE id=$1",
+    [ids[2]],
+  );
+  await f.pool.query(
+    "UPDATE creation_styles SET name='海报视觉',text='鲜明的海报构图，突出视觉焦点，预留排版空间，电影感配色。',revision=3 WHERE id=$1",
+    [ids[3]],
+  );
+  const personal = await library.saveStyle(f.principal, {
+    id: randomUUID(),
+    name: "真实摄影",
+    text: "真实摄影，自然光线，细腻材质，准确的光影与丰富细节。",
+    revision: 0,
+    published: false,
+  });
+  await f.pool.query(sql);
+  const managed = await library.styles(f.principal, true);
+  expect(managed.find((s) => s.id === ids[0])).toEqual(original[0]);
+  expect(managed.find((s) => s.id === ids[1])?.text).toBe(
+    "管理员保留的独立内容",
+  );
+  expect(managed.find((s) => s.id === ids[2])).toMatchObject({
+    name: "精致插画",
+    published: false,
+    revision: 1,
+  });
+  expect(managed.find((s) => s.id === ids[3])?.revision).toBe(3);
+  expect(
+    (await library.styles(f.principal)).find((s) => s.id === personal.id),
+  ).toEqual(personal);
+});
