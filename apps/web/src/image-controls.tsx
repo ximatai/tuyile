@@ -1,5 +1,5 @@
 import { X, Upload as UploadIcon } from "lucide-react";
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { ImageUsage } from "@tuyile/contracts";
 import {
   Button,
@@ -38,6 +38,30 @@ export function ImageControls({
   labelPrefix?: string;
 }) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const customSizeRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const section = customSizeRef.current;
+    if (!advancedOpen || !section) return;
+    let frame = 0;
+    const reveal = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        section.scrollIntoView({
+          block: "nearest",
+          inline: "nearest",
+          behavior: "instant",
+        });
+      });
+    };
+    // Follow Collapse's height animation as well as the initial expansion.
+    const observer = new ResizeObserver(reveal);
+    observer.observe(section);
+    reveal();
+    return () => {
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+    };
+  }, [advancedOpen, value.modelKey]);
   const modelName = (key: string) => {
     if (!choices.some((option) => option.value === key))
       return "历史模型（已不可用）";
@@ -270,51 +294,55 @@ export function ImageControls({
         />
       </div>
       {!!cap && !cap.sizes.length && (
-        <Collapse
-          activeKey={advancedOpen ? ["advanced"] : []}
-          onChange={(keys) => setAdvancedOpen(keys.includes("advanced"))}
-          size="small"
-          ghost
-          items={[
-            {
-              key: "advanced",
-              label: "自定义尺寸",
-              forceRender: true,
-              children: (
-                <div className="parameter-grid">
-                  <Field
-                    label={label("宽度")}
-                    name="width"
-                    type="number"
-                    value={value.width}
-                    onChange={(e) => patch({ width: Number(e.target.value) })}
-                    min={256}
-                    max={Math.min(
-                      cap?.maxEdge ?? 8192,
-                      usage?.policy.maxEdge ?? 8192,
-                    )}
-                    step={16}
-                    required
-                  />
-                  <Field
-                    label={label("高度")}
-                    name="height"
-                    type="number"
-                    value={value.height}
-                    onChange={(e) => patch({ height: Number(e.target.value) })}
-                    min={256}
-                    max={Math.min(
-                      cap?.maxEdge ?? 8192,
-                      usage?.policy.maxEdge ?? 8192,
-                    )}
-                    step={16}
-                    required
-                  />
-                </div>
-              ),
-            },
-          ]}
-        />
+        <div ref={customSizeRef}>
+          <Collapse
+            activeKey={advancedOpen ? ["advanced"] : []}
+            onChange={(keys) => setAdvancedOpen(keys.includes("advanced"))}
+            size="small"
+            ghost
+            items={[
+              {
+                key: "advanced",
+                label: "自定义尺寸",
+                forceRender: true,
+                children: (
+                  <div className="parameter-grid">
+                    <Field
+                      label={label("宽度")}
+                      name="width"
+                      type="number"
+                      value={value.width}
+                      onChange={(e) => patch({ width: Number(e.target.value) })}
+                      min={256}
+                      max={Math.min(
+                        cap?.maxEdge ?? 8192,
+                        usage?.policy.maxEdge ?? 8192,
+                      )}
+                      step={16}
+                      required
+                    />
+                    <Field
+                      label={label("高度")}
+                      name="height"
+                      type="number"
+                      value={value.height}
+                      onChange={(e) =>
+                        patch({ height: Number(e.target.value) })
+                      }
+                      min={256}
+                      max={Math.min(
+                        cap?.maxEdge ?? 8192,
+                        usage?.policy.maxEdge ?? 8192,
+                      )}
+                      step={16}
+                      required
+                    />
+                  </div>
+                ),
+              },
+            ]}
+          />
+        </div>
       )}
     </div>
   );

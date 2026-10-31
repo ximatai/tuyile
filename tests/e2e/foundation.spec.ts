@@ -3222,3 +3222,43 @@ test("task recovery shares details and image actions without automatically gener
   await page.screenshot({ path: ".codex-temp/task-details-unified.png" });
   expect(dispatched).toBe(0);
 });
+
+test("custom size expansion reveals both fields in the editor scroll area", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 720 });
+  await login(page);
+  await page.getByLabel("项目名称", { exact: true }).fill("自定义尺寸滚动验收");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "自定义尺寸滚动验收" })
+    .click();
+  const prompt = page.getByLabel("创作需求", { exact: true });
+  await expect(prompt).toBeVisible();
+  const before = (await prompt.boundingBox())!.height;
+  await page.getByRole("button", { name: "自定义尺寸", exact: true }).click();
+  const width = page.getByLabel("宽度", { exact: true }),
+    height = page.getByLabel("高度", { exact: true });
+  await expect(width).toBeVisible();
+  await expect(height).toBeVisible();
+  await expect
+    .poll(async () =>
+      height.evaluate((el) => {
+        const scroll = el.closest("fieldset")!;
+        const box = el.getBoundingClientRect(),
+          bounds = scroll.getBoundingClientRect();
+        return box.bottom <= bounds.bottom && box.top >= bounds.top;
+      }),
+    )
+    .toBe(true);
+  expect(Math.abs((await prompt.boundingBox())!.height - before)).toBeLessThan(
+    1,
+  );
+  await expect(
+    page.getByRole("button", { name: "提交图片任务", exact: true }),
+  ).toBeVisible();
+  await page.screenshot({ path: ".codex-temp/custom-size-expanded.png" });
+  await page.getByRole("button", { name: "自定义尺寸", exact: true }).click();
+  await expect(height).toBeHidden();
+});
