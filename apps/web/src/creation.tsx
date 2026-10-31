@@ -693,6 +693,7 @@ function CreationEditor({
                     />
                   )}
                   <ImageControls
+                    disabled={busy || !!pending}
                     compact
                     usage={usage}
                     value={settings}

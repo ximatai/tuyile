@@ -34,9 +34,10 @@ import {
   Notice,
   Popover,
   Select,
+  Tooltip,
   useConfirm,
 } from "@tuyile/ui";
-import { HelpPopover, Excerpt } from "./interface-help";
+import { HelpPopover } from "./interface-help";
 import { ApiError, client } from "./api";
 import { useSessionState } from "./session-state";
 const states: Record<string, string> = {
@@ -137,6 +138,7 @@ export function AgentPanel({
     !!conversationModel &&
     !!modelPools.data &&
     !modelPools.data.conversation.some((m) => m.id === conversationModel);
+  const [planDirty, setPlanDirty] = useState(false);
   const history = jobs.data?.pages.flatMap((page) => page.jobs) ?? [];
   const selected = history.find((j) => j.id === current) ?? history[0],
     plan = selected?.plans.at(-1);
@@ -157,6 +159,10 @@ export function AgentPanel({
   async function request(event: React.FormEvent) {
     event.preventDefault();
     if (submitting.current || busy) return;
+    if (planDirty) {
+      setError("请先保存方案修改，再继续沟通。");
+      return;
+    }
     if (!pending && (!usage || issues.length)) {
       setError(issues.join(" ") || "请先配置图片模型。");
       return;
@@ -239,18 +245,32 @@ export function AgentPanel({
       setBusy(false);
     }
   }
+  const hasProposal = !!plan?.document.steps.length;
+  const composeForm = useRef<HTMLFormElement>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
   useEffect(() => {
-    if (plan) setComposeOpen(false);
-  }, [plan?.id]);
+    setComposeOpen(!hasProposal);
+    setPlanDirty(false);
+  }, [plan?.id, hasProposal]);
+  useEffect(() => {
+    if (composeOpen && visible && plan)
+      composeForm.current?.querySelector("textarea")?.focus();
+  }, [composeOpen, visible, plan?.id]);
   const settingsTrigger = useRef<React.ComponentRef<typeof Button>>(null);
   useEffect(() => {
-    if (!visible || (plan && !composeOpen)) setSettingsOpen(false);
-  }, [visible, plan?.id, composeOpen]);
+    if (!visible || (hasProposal && !composeOpen)) setSettingsOpen(false);
+  }, [visible, hasProposal, composeOpen]);
   const active = !!plan?.taskIds.some((id) =>
     tasks.some((t) => t.id === id && ["queued", "running"].includes(t.state)),
   );
+  const requestLabel = pending
+    ? "重试同一规划"
+    : plan
+      ? hasProposal
+        ? "更新方案"
+        : "发送回答"
+      : "生成计划";
   return (
     <div
       className={`agent-panel ${!history.length ? "agent-panel-empty" : ""}`}
@@ -298,20 +318,23 @@ export function AgentPanel({
                 ]}
               />
             )}
-            <div className="hint">
-              {states[job.state]} · {job.charged ? "已计 1 次规划" : "尚未计用"}
-            </div>
+            {job.state !== "succeeded" && (
+              <div className="hint">{states[job.state]}</div>
+            )}
             {job.errorCode && (
-              <Notice error>
-                {new ApiError(job.errorCode).message}（{job.errorCode}）
-              </Notice>
+              <Notice error>{new ApiError(job.errorCode).message}</Notice>
             )}
             {job.plans.at(-1) && (
               <>
-                <p>{job.plans.at(-1)!.document.message}</p>
+                {(job.id !== selected?.id ||
+                  !job.plans.at(-1)!.document.steps.length) && (
+                  <p className="agent-reply">
+                    {job.plans.at(-1)!.document.message}
+                  </p>
+                )}
                 {job.id !== selected?.id && (
                   <Button
-                    disabled={busy || !!pending}
+                    disabled={busy || !!pending || planDirty}
                     onClick={() => setCurrent(job.id)}
                   >
                     查看这个计划
@@ -329,7 +352,7 @@ export function AgentPanel({
             )}
           </article>
         ))}
-        {plan && (
+        {hasProposal && plan && (
           <PlanCard
             key={plan.id}
             plan={plan}
@@ -338,6 +361,10 @@ export function AgentPanel({
             references={references}
             busy={busy}
             setBusy={setBusy}
+            onDirtyChange={setPlanDirty}
+            onDiscuss={() => {
+              if (!planDirty) setComposeOpen(true);
+            }}
             onCount={setTotal}
             onRefresh={refresh}
           />
@@ -357,10 +384,12 @@ export function AgentPanel({
       {!pending && conversationUnavailable && (
         <Notice error>原对话模型已不可用，请重新选择或联系管理员。</Notice>
       )}
-      {plan && (
+      {hasProposal && (
         <Button
           type="button"
           className="agent-followup-trigger"
+          disabled={planDirty || busy || !!pending}
+          title={planDirty ? "先保存方案修改，再继续沟通" : undefined}
           aria-expanded={composeOpen}
           onClick={() => setComposeOpen(!composeOpen)}
         >
@@ -369,7 +398,8 @@ export function AgentPanel({
         </Button>
       )}
       <form
-        hidden={!!plan && !composeOpen}
+        ref={composeForm}
+        hidden={hasProposal && !composeOpen}
         className="agent-compose"
         onSubmit={request}
         aria-label="请求 Agent 规划"
@@ -462,6 +492,7 @@ export function AgentPanel({
                       />
                     </div>
                     <ImageControls
+                      disabled={busy || !!pending || uploadBusy}
                       usage={usage}
                       value={settings}
                       onChange={setSettings}
@@ -503,8 +534,11 @@ export function AgentPanel({
         </ControlScope>
         <Button
           className="primary agent-plan-submit"
+          aria-label={requestLabel}
+          title={planDirty ? "先保存方案修改，再继续沟通" : undefined}
           loading={busy}
           disabled={
+            planDirty ||
             busy ||
             uploadBusy ||
             !model ||
@@ -516,10 +550,10 @@ export function AgentPanel({
                 composeCreativePrompt({ prompt, style }).length > 12000))
           }
         >
-          {pending ? "重试同一规划" : "生成计划"}
+          {requestLabel}
         </Button>
       </form>
-      {plan && (
+      {hasProposal && plan && (
         <div className="agent-confirm-footer">
           <div className="agent-confirm-summary">
             <strong>
@@ -572,6 +606,8 @@ function PlanCard({
   busy,
   setBusy,
   onCount,
+  onDiscuss,
+  onDirtyChange,
   onRefresh,
 }: {
   plan: AgentPlanVersion;
@@ -581,6 +617,8 @@ function PlanCard({
   busy: boolean;
   setBusy: (v: boolean) => void;
   onCount: (v: number) => void;
+  onDiscuss: () => void;
+  onDirtyChange: (dirty: boolean) => void;
   onRefresh: () => Promise<void>;
 }) {
   const state = useSessionState(),
@@ -641,6 +679,8 @@ function PlanCard({
     [document, onCount],
   );
   function patch(index: number, change: Partial<AgentStep>) {
+    if (locallyConfirmed || plan.confirmed || busy || pending || confirmation)
+      return;
     setDocument((old) => ({
       ...old,
       steps: old.steps.map((step, i) => {
@@ -765,6 +805,61 @@ function PlanCard({
       setBusy(false);
     }
   }
+  function removeStep(index: number) {
+    setDocument((old) => ({
+      ...old,
+      steps: old.steps
+        .filter((_, i) => i !== index)
+        .map((step, i) =>
+          i === 0
+            ? {
+                ...step,
+                usePrevious: false,
+                tool:
+                  step.tool.version === 1 &&
+                  ["image.generate", "image.edit"].includes(step.tool.id)
+                    ? {
+                        id: step.referenceIds.length
+                          ? "image.edit"
+                          : "image.generate",
+                        version: 1,
+                      }
+                    : step.tool,
+              }
+            : step,
+        ),
+    }));
+  }
+  function addStep() {
+    setDocument((old) => {
+      const last = old.steps.at(-1)!;
+      return {
+        ...old,
+        steps: [
+          ...old.steps,
+          {
+            ...last,
+            title: `步骤 ${old.steps.length + 1}`,
+            referenceIds: [...last.referenceIds],
+            usePrevious: false,
+            tool:
+              last.tool.version === 1 &&
+              ["image.generate", "image.edit"].includes(last.tool.id)
+                ? {
+                    id: last.referenceIds.length
+                      ? "image.edit"
+                      : "image.generate",
+                    version: 1,
+                  }
+                : last.tool,
+          },
+        ],
+      };
+    });
+  }
+  const locked = busy || !!pending || !!confirmation;
+  const dirty = JSON.stringify(document) !== JSON.stringify(plan.document);
+  useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
   return (
     <form
       ref={card}
@@ -774,248 +869,277 @@ function PlanCard({
       aria-label="编辑 Agent 计划"
     >
       <div className="agent-plan-title">
-        <strong>创作计划 · v{plan.version}</strong>
+        <strong>
+          {document.steps.length === 1 ? document.steps[0]!.title : "创作方案"}
+        </strong>
         <span className={`plan-status ${confirmed ? "confirmed" : ""}`}>
           {confirmed ? "已确认" : "待确认"}
         </span>
       </div>
-      <Button
-        type="button"
-        className="plan-edit-toggle"
-        disabled={busy || (!confirmed && (!!pending || !!confirmation))}
-        onClick={() => setEditing((value) => !value)}
-      >
-        {editing ? "查看计划摘要" : confirmed ? "查看完整计划" : "修改计划"}
-      </Button>
-      {!editing && (
-        <ol className="agent-plan-summary" aria-label="计划步骤摘要">
-          {document.steps.map((step, index) => (
-            <li key={index}>
-              <span className="plan-step-number">{index + 1}</span>
-              <div className="plan-step-content">
-                <strong>
-                  {step.title}
-                  <span>{step.count} 张</span>
-                </strong>
-                <Excerpt rows={3}>{step.prompt}</Excerpt>
-                <small>
-                  {step.width} × {step.height} · {step.model} · {step.quality} ·{" "}
-                  {step.format.toUpperCase()}
-                </small>
-                {step.usePrevious && (
-                  <small className="plan-dependency">
-                    使用上一步第一张结果
-                  </small>
+      <p className="agent-proposal-description">{document.message}</p>
+      <div className="agent-proposal-actions">
+        {!confirmed && (
+          <Tooltip title={dirty ? "先保存修改，再继续沟通" : undefined}>
+            <span>
+              <Button
+                type="button"
+                disabled={locked || dirty}
+                onClick={onDiscuss}
+              >
+                调整方案
+              </Button>
+            </span>
+          </Tooltip>
+        )}
+        <Button
+          type="button"
+          className="plan-edit-toggle"
+          disabled={locked}
+          onClick={() => setEditing((value) => !value)}
+        >
+          {editing ? "返回方案" : confirmed ? "查看提示词" : "编辑提示词"}
+        </Button>
+      </div>
+      <ControlScope componentDisabled={locked || confirmed}>
+        <fieldset>
+          <ol className="agent-plan-summary" aria-label="计划步骤摘要">
+            {document.steps.map((step, index) => (
+              <li key={index}>
+                {document.steps.length > 1 && (
+                  <span className="plan-step-number">{index + 1}</span>
                 )}
-                {!!step.referenceIds.length && (
-                  <div className="plan-reference-previews">
-                    {step.referenceIds.map((id) => (
-                      <img
-                        key={id}
-                        src={`/api/images/assets/${id}/preview`}
-                        alt={`步骤 ${index + 1} 参考图`}
+                <div className="plan-step-content">
+                  {editing ? (
+                    <>
+                      <Field
+                        label={`步骤 ${index + 1} 名称`}
+                        value={step.title}
+                        maxLength={100}
+                        required
+                        onChange={(event) =>
+                          patch(index, { title: event.target.value })
+                        }
                       />
-                    ))}
+                      <label className="field">
+                        <span>步骤 {index + 1} 提示词</span>
+                        <Input.TextArea
+                          aria-label={`步骤 ${index + 1} 提示词`}
+                          value={step.prompt}
+                          rows={4}
+                          maxLength={12000}
+                          required
+                          onChange={(event) =>
+                            patch(index, { prompt: event.target.value })
+                          }
+                        />
+                      </label>
+                    </>
+                  ) : document.steps.length > 1 ? (
+                    <strong>{step.title}</strong>
+                  ) : null}
+                  <div className="plan-step-controls">
+                    <small className="plan-deliverable">
+                      {step.count} 张 ·{" "}
+                      {step.width === step.height
+                        ? "方形"
+                        : step.width > step.height
+                          ? "横版"
+                          : "竖版"}{" "}
+                      ·{" "}
+                      {
+                        { low: "快速草稿", medium: "标准", high: "高质量" }[
+                          step.quality
+                        ]
+                      }
+                    </small>
+                    <PlanStepParameters
+                      index={index}
+                      visible={visible}
+                      disabled={locked}
+                    >
+                      <ImageControls
+                        disabled={locked || confirmed}
+                        usage={usage}
+                        labelPrefix={`步骤 ${index + 1}`}
+                        modelLabel="模型"
+                        value={{
+                          ...step,
+                          modelKey: usage?.modelOptions
+                            ? (step.modelSelectionId ?? `historical:${plan.id}`)
+                            : step.model,
+                        }}
+                        onChange={(value) => {
+                          const selected = usage?.modelOptions?.find(
+                            (m) => m.id === value.modelKey,
+                          );
+                          patch(index, {
+                            width: value.width,
+                            height: value.height,
+                            quality: value.quality,
+                            format: value.format,
+                            count: value.count,
+                            model: selected?.modelId ?? value.modelKey,
+                            modelSelectionId: selected?.id,
+                          });
+                        }}
+                      />
+                      {!confirmed &&
+                        usage &&
+                        settingsIssues(
+                          usage,
+                          {
+                            ...step,
+                            modelKey: usage.modelOptions
+                              ? (step.modelSelectionId ??
+                                `historical:${plan.id}`)
+                              : step.model,
+                          },
+                          step.referenceIds.length + (step.usePrevious ? 1 : 0),
+                        ).map((issue) => (
+                          <Notice key={issue} error>
+                            {issue}
+                          </Notice>
+                        ))}
+                      <label className="field">
+                        <span>步骤 {index + 1} 参考图</span>
+                        <Select
+                          mode="multiple"
+                          value={step.referenceIds}
+                          onChange={(referenceIds) =>
+                            patch(index, { referenceIds })
+                          }
+                          options={[
+                            ...new Map(
+                              [
+                                ...references,
+                                ...step.referenceIds.map((id) => ({
+                                  id,
+                                  name: "计划参考图",
+                                })),
+                              ].map((r) => [
+                                r.id,
+                                { value: r.id, label: r.name },
+                              ]),
+                            ).values(),
+                          ]}
+                        />
+                      </label>
+                      {index > 0 && (
+                        <Checkbox
+                          checked={step.usePrevious}
+                          onChange={(e) =>
+                            patch(index, { usePrevious: e.target.checked })
+                          }
+                        >
+                          使用上一步第一张图片
+                        </Checkbox>
+                      )}
+                    </PlanStepParameters>
                   </div>
-                )}
-              </div>
-            </li>
-          ))}
-        </ol>
-      )}
+                  {step.usePrevious && (
+                    <small className="plan-dependency">
+                      使用上一步第一张结果
+                    </small>
+                  )}
+                  {!!step.referenceIds.length && (
+                    <div className="plan-reference-previews">
+                      {step.referenceIds.map((id) => (
+                        <img
+                          key={id}
+                          src={`/api/images/assets/${id}/preview`}
+                          alt={`步骤 ${index + 1} 参考图`}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  {editing && !confirmed && document.steps.length > 1 && (
+                    <Button type="button" onClick={() => removeStep(index)}>
+                      移除步骤
+                    </Button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ol>
+          {editing &&
+            !confirmed &&
+            document.steps.length > 0 &&
+            document.steps.length < 16 && (
+              <Button type="button" onClick={addStep}>
+                添加步骤
+              </Button>
+            )}
+        </fieldset>
+      </ControlScope>
       {error && !confirmed && <Notice error>{error}</Notice>}
       {(pending || confirmation) && !confirmed && (
         <p className="hint">
           正在确认这份版本；结果不明时再次点击确认可找回原提交。
         </p>
       )}
-      <div hidden={!editing}>
-        <ControlScope
-          componentDisabled={
-            !editing || busy || confirmed || !!pending || !!confirmation
-          }
-        >
-          <fieldset
-            disabled={
-              !editing || busy || confirmed || !!pending || !!confirmation
-            }
-          >
-            {document.steps.map((step, index) => (
-              <section className="agent-step" key={index}>
-                <Field
-                  label={`步骤 ${index + 1} 名称`}
-                  value={step.title}
-                  maxLength={100}
-                  required
-                  onChange={(e) => patch(index, { title: e.target.value })}
-                />
-                <label className="field">
-                  <span>步骤 {index + 1} 提示词</span>
-                  <Input.TextArea
-                    aria-label={`步骤 ${index + 1} 提示词`}
-                    value={step.prompt}
-                    rows={3}
-                    maxLength={12000}
-                    required
-                    onChange={(e) => patch(index, { prompt: e.target.value })}
-                  />
-                </label>
-                <ImageControls
-                  usage={usage}
-                  labelPrefix={`步骤 ${index + 1}`}
-                  modelLabel="模型"
-                  value={{
-                    ...step,
-                    modelKey: usage?.modelOptions
-                      ? (step.modelSelectionId ?? `historical:${plan.id}`)
-                      : step.model,
-                  }}
-                  onChange={(value) => {
-                    const selected = usage?.modelOptions?.find(
-                      (m) => m.id === value.modelKey,
-                    );
-                    patch(index, {
-                      width: value.width,
-                      height: value.height,
-                      quality: value.quality,
-                      format: value.format,
-                      count: value.count,
-                      model: selected?.modelId ?? value.modelKey,
-                      modelSelectionId: selected?.id,
-                    });
-                  }}
-                />
-                {!confirmed &&
-                  usage &&
-                  settingsIssues(
-                    usage,
-                    {
-                      ...step,
-                      modelKey: usage.modelOptions
-                        ? (step.modelSelectionId ?? `historical:${plan.id}`)
-                        : step.model,
-                    },
-                    step.referenceIds.length + (step.usePrevious ? 1 : 0),
-                  ).map((issue) => (
-                    <Notice key={issue} error>
-                      {issue}
-                    </Notice>
-                  ))}
-                <label className="field">
-                  <span>步骤 {index + 1} 参考图</span>
-                  <Select
-                    mode="multiple"
-                    value={step.referenceIds}
-                    onChange={(referenceIds) => patch(index, { referenceIds })}
-                    options={[
-                      ...new Map(
-                        [
-                          ...references,
-                          ...step.referenceIds.map((id) => ({
-                            id,
-                            name: "计划参考图",
-                          })),
-                        ].map((r) => [r.id, { value: r.id, label: r.name }]),
-                      ).values(),
-                    ]}
-                  />
-                </label>
-                {index > 0 && (
-                  <Checkbox
-                    checked={step.usePrevious}
-                    onChange={(e) =>
-                      patch(index, { usePrevious: e.target.checked })
-                    }
-                  >
-                    使用上一步第一张图片
-                  </Checkbox>
-                )}
-                <p className="hint">
-                  工具：{step.tool.id} v{step.tool.version}
-                </p>
-                <Button
-                  type="button"
-                  onClick={() =>
-                    setDocument((old) => ({
-                      ...old,
-                      steps: old.steps
-                        .filter((_, i) => i !== index)
-                        .map((s, i) =>
-                          i === 0
-                            ? {
-                                ...s,
-                                usePrevious: false,
-                                tool:
-                                  s.tool.version === 1 &&
-                                  ["image.generate", "image.edit"].includes(
-                                    s.tool.id,
-                                  )
-                                    ? {
-                                        id: s.referenceIds.length
-                                          ? "image.edit"
-                                          : "image.generate",
-                                        version: 1,
-                                      }
-                                    : s.tool,
-                              }
-                            : s,
-                        ),
-                    }))
-                  }
-                >
-                  移除步骤
-                </Button>
-              </section>
-            ))}
-            {document.steps.length > 0 && document.steps.length < 16 && (
-              <Button
-                type="button"
-                onClick={() =>
-                  setDocument((old) => ({
-                    ...old,
-                    steps: [
-                      ...old.steps,
-                      {
-                        ...old.steps.at(-1)!,
-                        title: `步骤 ${old.steps.length + 1}`,
-                        referenceIds: [...old.steps.at(-1)!.referenceIds],
-                        usePrevious: false,
-                        tool:
-                          old.steps.at(-1)!.tool.version === 1 &&
-                          ["image.generate", "image.edit"].includes(
-                            old.steps.at(-1)!.tool.id,
-                          )
-                            ? {
-                                id: old.steps.at(-1)!.referenceIds.length
-                                  ? "image.edit"
-                                  : "image.generate",
-                                version: 1,
-                              }
-                            : old.steps.at(-1)!.tool,
-                      },
-                    ],
-                  }))
-                }
-              >
-                添加步骤
-              </Button>
-            )}
-          </fieldset>
-        </ControlScope>
-        {editing && !confirmed && !confirmation && (
-          <Button
-            type="button"
-            disabled={
-              busy ||
-              (!pending &&
-                JSON.stringify(document) === JSON.stringify(plan.document))
-            }
-            onClick={() => void saveDraft()}
-          >
-            {pending ? "重试保存本次修改" : "保存计划修改"}
-          </Button>
-        )}
-      </div>
+      {!confirmed && !confirmation && (pending || dirty) && (
+        <Button type="button" disabled={busy} onClick={() => void saveDraft()}>
+          {pending ? "重试保存本次修改" : "保存计划修改"}
+        </Button>
+      )}
     </form>
+  );
+}
+
+function PlanStepParameters({
+  index,
+  visible,
+  disabled,
+  children,
+}: {
+  index: number;
+  visible: boolean;
+  disabled: boolean;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const trigger = useRef<React.ComponentRef<typeof Button>>(null);
+  useEffect(() => {
+    if (!visible || disabled) setOpen(false);
+  }, [visible, disabled]);
+  return (
+    <Popover
+      trigger="click"
+      placement="leftTop"
+      title="图片设置"
+      open={open}
+      onOpenChange={setOpen}
+      content={
+        <div
+          className="agent-settings-content"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              event.stopPropagation();
+              setOpen(false);
+              trigger.current?.focus();
+            }
+          }}
+        >
+          {children}
+        </div>
+      }
+    >
+      <Button
+        ref={trigger}
+        type="button"
+        disabled={disabled}
+        aria-label={`步骤 ${index + 1} 图片设置`}
+        aria-expanded={open}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.stopPropagation();
+            setOpen(false);
+          }
+        }}
+      >
+        <Settings2 size={15} aria-hidden="true" />
+        图片设置
+      </Button>
+    </Popover>
   );
 }

@@ -1753,7 +1753,7 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
   ).toHaveValue("合成验收：先生成基准图，再参考基准图改图");
   await page.getByRole("button", { name: "继续聊想法", exact: true }).click();
   await expect(page.getByLabel("步骤 1 提示词", { exact: true })).toBeHidden();
-  await page.getByRole("button", { name: "修改计划", exact: true }).click();
+  await page.getByRole("button", { name: "编辑提示词", exact: true }).click();
   await expect(page.getByLabel("步骤 1 提示词", { exact: true })).toBeVisible();
   expect(
     (
@@ -1766,13 +1766,22 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
     await page.request.get("/api/agent/usage")
   ).json();
   await page
+    .getByRole("button", { name: "步骤 1 图片设置", exact: true })
+    .click();
+  await page
     .getByRole("combobox", { name: "步骤 1 张数", exact: true })
     .click();
   await page
     .locator(".ant-select-dropdown:visible")
     .getByText("2 张", { exact: true })
     .click();
+  await page
+    .getByRole("button", { name: "步骤 1 图片设置", exact: true })
+    .click();
   await page.getByRole("button", { name: "添加步骤", exact: true }).click();
+  await page
+    .getByRole("button", { name: "步骤 2 图片设置", exact: true })
+    .click();
   await expect(page.locator(".ant-select-dropdown:visible")).toHaveCount(0);
   await page
     .getByRole("combobox", { name: "步骤 2 张数", exact: true })
@@ -1782,21 +1791,45 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
     .getByText("1 张", { exact: true })
     .click();
   await page.getByLabel("使用上一步第一张图片").check();
+  await page
+    .getByRole("button", { name: "步骤 2 图片设置", exact: true })
+    .click();
   await expect(
     page.getByText("本计划预留 3 张图片", { exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "保存计划修改", exact: true }).click();
-  await expect(page.getByText("创作计划 · v2", { exact: true })).toBeVisible();
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/agent/jobs?projectId=${projectId}`)
+          ).json()
+        ).jobs[0].plans.at(-1).version,
+    )
+    .toBe(2);
   await page.reload();
   await page.getByRole("tab", { name: "Agent", exact: true }).click();
   await expect(page.getByLabel("计划步骤摘要")).toBeVisible();
-  await page.getByRole("button", { name: "修改计划", exact: true }).click();
+  await page.getByRole("button", { name: "编辑提示词", exact: true }).click();
+  await page
+    .getByRole("button", { name: "步骤 1 图片设置", exact: true })
+    .click();
   await expect(
     page.locator(".field").filter({
       has: page.getByRole("combobox", { name: "步骤 1 张数", exact: true }),
     }),
   ).toContainText("2 张");
+  await page
+    .getByRole("button", { name: "步骤 1 图片设置", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "步骤 2 图片设置", exact: true })
+    .click();
   await expect(page.getByLabel("使用上一步第一张图片")).toBeChecked();
+  await page
+    .getByRole("button", { name: "步骤 2 图片设置", exact: true })
+    .click();
   expect(
     (
       await (
@@ -1804,7 +1837,7 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
       ).json()
     ).tasks,
   ).toEqual([]);
-  await page.getByRole("button", { name: "查看计划摘要", exact: true }).click();
+  await page.getByRole("button", { name: "返回方案", exact: true }).click();
   await expect(page.getByLabel("计划步骤摘要").locator("li")).toHaveCount(2);
   for (const viewport of [
     { width: 1920, height: 1080 },
@@ -4338,4 +4371,180 @@ test("task reuse confirms changes to saved generation parameters even when text 
   await confirmation.press("Escape");
   await expect(count.locator("..")).toContainText("2 张");
   await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue("");
+});
+
+test("Agent clarification stays conversational and proposals separate creative and technical details", async ({
+  page,
+}) => {
+  await login(page);
+  const session = await (await page.request.get("/api/auth/me")).json();
+  const project = await (
+    await page.request.post("/api/projects", {
+      headers: {
+        Origin: "http://127.0.0.1:5180",
+        "X-CSRF-Token": session.csrfToken,
+      },
+      data: { name: "澄清与方案验收" },
+    })
+  ).json();
+  const jobs: any[] = [];
+  const inputs: any[] = [];
+  await page.route("**/api/agent/jobs?**", (route) =>
+    route.fulfill({ json: { jobs } }),
+  );
+  await page.route("**/api/agent/planning", async (route) => {
+    const input = route.request().postDataJSON();
+    inputs.push(input);
+    const job = {
+      id: randomUUID(),
+      projectId: project.id,
+      requestKey: input.requestKey,
+      prompt: input.prompt,
+      state: "succeeded",
+      charged: true,
+      errorCode: null,
+      createdAt: new Date().toISOString(),
+      plans: [
+        {
+          id: randomUUID(),
+          jobId: "",
+          version: 1,
+          confirmed: false,
+          taskIds: [],
+          document: {
+            message:
+              inputs.length === 1
+                ? "用于朋友圈还是店内张贴？也可以先按当前方形规格看暖色视觉草稿。"
+                : "奶油暖色搭配咖啡杯主体，上方放开业标题，底部预留店名、日期与地址，不编造信息。",
+            steps:
+              inputs.length === 1
+                ? []
+                : [
+                    {
+                      title: "咖啡店开业海报",
+                      prompt: "暖色咖啡杯主体，开业标题，底部留白",
+                      model: input.model,
+                      modelSelectionId: input.modelSelectionId,
+                      width: input.width,
+                      height: input.height,
+                      quality: input.quality,
+                      format: input.format,
+                      count: 1,
+                      referenceIds: [],
+                      tool: { id: "image.generate", version: 1 },
+                      usePrevious: false,
+                    },
+                  ],
+          },
+        },
+      ],
+    };
+    job.plans[0].jobId = job.id;
+    jobs.unshift(job);
+    await route.fulfill({ status: 202, json: job });
+  });
+  await page.route("**/api/agent/jobs/*/revisions", async (route) => {
+    const job = jobs[0],
+      last = job.plans.at(-1);
+    const saved = {
+      ...last,
+      id: randomUUID(),
+      version: last.version + 1,
+      document: route.request().postDataJSON().document,
+    };
+    job.plans.push(saved);
+    await route.fulfill({ json: saved });
+  });
+  await page.goto(`/projects/${project.id}`);
+  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  const prompt = page.getByLabel("告诉 Agent 你的想法", { exact: true });
+  await prompt.fill("设计咖啡店开业海报");
+  await page.getByRole("button", { name: "生成计划", exact: true }).click();
+  await expect(
+    page.getByText(
+      "用于朋友圈还是店内张贴？也可以先按当前方形规格看暖色视觉草稿。",
+      { exact: true },
+    ),
+  ).toBeVisible();
+  await expect(prompt).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "确认执行", exact: true }),
+  ).toHaveCount(0);
+  await expect(page.locator(".agent-plan-form")).toHaveCount(0);
+  await prompt.fill("先按当前规格看草稿，店名和日期留空");
+  await page.getByRole("button", { name: "发送回答", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "确认执行", exact: true }),
+  ).toBeVisible();
+  expect(inputs[1].previousPlanId).toBe(jobs[1].plans[0].id);
+  await expect(page.locator(".agent-proposal-description")).toContainText(
+    "底部预留店名",
+  );
+  await expect(page.getByLabel("步骤 1 提示词", { exact: true })).toHaveCount(
+    0,
+  );
+  await page
+    .getByRole("button", { name: "步骤 1 图片设置", exact: true })
+    .click();
+  await expect(
+    page.getByRole("combobox", { name: "步骤 1 格式", exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "调整方案", exact: true }).click();
+  await expect(prompt).toBeFocused();
+  await expect(prompt).toHaveValue("先按当前规格看草稿，店名和日期留空");
+  await prompt.fill("保留布局，换成更年轻的配色");
+  await page
+    .getByRole("button", { name: "步骤 1 图片设置", exact: true })
+    .click();
+  await page
+    .getByRole("combobox", { name: "步骤 1 张数", exact: true })
+    .click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("2 张", { exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "步骤 1 图片设置", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "继续聊想法", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "调整方案", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "更新方案", exact: true }),
+  ).toBeDisabled();
+  expect(inputs).toHaveLength(2);
+  await page.getByRole("button", { name: "保存计划修改", exact: true }).click();
+  await page.getByRole("button", { name: "调整方案", exact: true }).click();
+  await expect(prompt).toHaveValue("保留布局，换成更年轻的配色");
+
+  await page.getByRole("button", { name: "更新方案", exact: true }).click();
+  await expect.poll(() => inputs.length).toBe(3);
+  expect(inputs[2].previousPlanId).toBe(jobs[1].plans.at(-1).id);
+  jobs[0].plans[0].confirmed = true;
+  await page.reload();
+  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await page
+    .getByRole("button", { name: "步骤 1 图片设置", exact: true })
+    .click();
+  await expect(
+    page.getByRole("combobox", { name: "步骤 1 张数", exact: true }),
+  ).toBeDisabled();
+  await page
+    .getByRole("button", { name: "步骤 1 图片设置", exact: true })
+    .click();
+  await page.getByRole("button", { name: "查看提示词", exact: true }).click();
+  await expect(
+    page.getByLabel("步骤 1 提示词", { exact: true }),
+  ).toBeDisabled();
+  expect(
+    (
+      await (
+        await page.request.get(`/api/images/tasks?projectId=${project.id}`)
+      ).json()
+    ).tasks,
+  ).toEqual([]);
 });

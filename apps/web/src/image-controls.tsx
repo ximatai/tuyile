@@ -28,6 +28,7 @@ export function ImageControls({
   count = true,
   compact = false,
   labelPrefix = "",
+  disabled = false,
 }: {
   usage?: ImageUsage;
   value: ImageSettings;
@@ -36,6 +37,7 @@ export function ImageControls({
   count?: boolean;
   compact?: boolean;
   labelPrefix?: string;
+  disabled?: boolean;
 }) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const customSizeRef = useRef<HTMLDivElement>(null);
@@ -90,6 +92,7 @@ export function ImageControls({
     (size) => !currentSize || size.ratio === currentSize.ratio,
   );
   const patch = (v: Partial<ImageSettings>) => {
+    if (disabled) return;
     if (v.modelKey && usage && v.modelKey !== value.modelKey) {
       const nextUsage = {
         ...usage,
@@ -152,6 +155,7 @@ export function ImageControls({
         patch({ quality: quality as ImageSettings["quality"] })
       }
       disabled={
+        disabled ||
         !qualities.length ||
         (qualities.length === 1 && qualities.includes(value.quality))
       }
@@ -170,6 +174,7 @@ export function ImageControls({
           label={label(modelLabel)}
           value={value.modelKey}
           disabled={
+            disabled ||
             !choices.length ||
             (choices.length === 1 && choices[0]?.value === value.modelKey)
           }
@@ -211,7 +216,9 @@ export function ImageControls({
         <ChoiceField
           label={label("比例")}
           value={currentSize?.ratio ?? "custom"}
-          disabled={!ratios.length || (ratios.length === 1 && !!currentSize)}
+          disabled={
+            disabled || !ratios.length || (ratios.length === 1 && !!currentSize)
+          }
           optionRender={(option) => ratioLabel(String(option.value))}
           labelRender={(option) => ratioLabel(String(option.value))}
           options={ratios
@@ -237,6 +244,7 @@ export function ImageControls({
           label={label("尺寸")}
           value={`${value.width}x${value.height}`}
           disabled={
+            disabled ||
             !sameRatioSizes.length ||
             (sameRatioSizes.length === 1 && !!currentSize)
           }
@@ -268,7 +276,9 @@ export function ImageControls({
           <ChoiceField
             label={label(labelPrefix ? "张数" : "图片张数")}
             value={String(value.count)}
-            disabled={usage?.policy.maxCount === 1 && value.count === 1}
+            disabled={
+              disabled || (usage?.policy.maxCount === 1 && value.count === 1)
+            }
             onValueChange={(count) => patch({ count: Number(count) })}
             options={Array.from(
               { length: usage?.policy.maxCount ?? 16 },
@@ -281,6 +291,7 @@ export function ImageControls({
           name="format"
           value={value.format}
           disabled={
+            disabled ||
             !formats.length ||
             (formats.length === 1 && formats.includes(value.format))
           }
@@ -309,6 +320,7 @@ export function ImageControls({
                   <div className="parameter-grid">
                     <Field
                       label={label("宽度")}
+                      disabled={disabled}
                       name="width"
                       type="number"
                       value={value.width}
@@ -323,6 +335,7 @@ export function ImageControls({
                     />
                     <Field
                       label={label("高度")}
+                      disabled={disabled}
                       name="height"
                       type="number"
                       value={value.height}

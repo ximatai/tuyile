@@ -417,6 +417,10 @@ it("retains original requests across clarification and pins inherited reference 
     new AbortController().signal,
   );
   const plan = (await agent.jobs(f.principal, f.project.id))[0].plans[0];
+  await expect(agent.confirm(f.principal, plan.id)).rejects.toMatchObject({
+    code: "PLAN_NOT_EXECUTABLE",
+  });
+  expect(await f.creation.tasks(f.principal, f.project.id)).toEqual([]);
   const next = await agent.request(f.principal, {
     ...request(),
     prompt: "蓝色",
