@@ -173,7 +173,7 @@ function Shell() {
       if (alive) blocker.proceed();
     })().catch((e) => {
       if (alive) {
-        setError(`未能保存画布，已留在当前项目。${e.message}`);
+        setError(`未能保存当前修改，已留在当前页面。${e.message}`);
         blocker.reset();
       }
     });

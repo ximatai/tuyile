@@ -7,6 +7,9 @@ import {
 } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { CreationStyle, ImageTask, SessionView } from "@tuyile/contracts";
+import { ProjectDraftStore } from "./project-draft-store";
+import { client } from "./api";
+import type { ProjectDraftSnapshot } from "@tuyile/contracts";
 import { EditorStore } from "./editor/store";
 export class SessionState {
   readonly queries = new QueryClient({
@@ -40,6 +43,49 @@ export class SessionState {
       });
     }
     return this.pendingLeave;
+  }
+  readonly projectDrafts = new Map<string, ProjectDraftStore>();
+  projectDraft(projectId: string) {
+    let store = this.projectDrafts.get(projectId);
+    if (!store) {
+      const api = client(this.session.csrfToken);
+      store = new ProjectDraftStore(
+        (signal) =>
+          api<ProjectDraftSnapshot>(
+            `/projects/${projectId}/draft`,
+            undefined,
+            signal,
+          ),
+        (input, signal) =>
+          api<ProjectDraftSnapshot>(
+            `/projects/${projectId}/draft`,
+            input,
+            signal,
+          ),
+      );
+      const draft = store;
+      store.subscribe(() => {
+        if (!draft.get().ready) return;
+        const doc = draft.get().document;
+        this.creativeDrafts.set(projectId, {
+          prompt: doc.direct.prompt,
+          style: doc.direct.style,
+          references: doc.referenceIds.map((id) => ({
+            id,
+            name: "草稿参考图",
+          })),
+        });
+        this.agentDrafts.set(projectId, {
+          prompt: doc.agent.prompt,
+          style: doc.agent.style,
+        });
+      });
+      this.projectDrafts.set(projectId, store);
+    }
+    return store;
+  }
+  async loadProjectDraft(projectId: string) {
+    await this.projectDraft(projectId).load();
   }
   readonly editors = new Map<string, EditorStore>();
   readonly agentDrafts = new Map<
@@ -92,10 +138,13 @@ export class SessionState {
     ];
   }
   async flush() {
+    for (const draft of this.projectDrafts.values())
+      if (draft.get().dirty) await draft.flush();
     for (const e of this.editors.values()) await e.flush();
   }
   dirty() {
     return (
+      [...this.projectDrafts.values()].some((draft) => draft.get().dirty) ||
       [...this.editors.values()].some((e) => e.get().dirty) ||
       [...this.navigationGuards].some((guard) => guard.isDirty())
     );
@@ -105,6 +154,8 @@ export class SessionState {
     this.queries.clear();
     this.editors.forEach((e) => e.dispose());
     this.editors.clear();
+    this.projectDrafts.forEach((draft) => draft.dispose());
+    this.projectDrafts.clear();
     this.creationDrafts.clear();
     this.creativeDrafts.clear();
     this.agentDrafts.clear();

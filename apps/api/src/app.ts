@@ -85,7 +85,7 @@ export function createApp(
       maxSize:
         c.req.path.startsWith("/api/model-admin/") ||
         c.req.path.startsWith("/api/agent/") ||
-        /^\/api\/projects\/[^/]+\/canvas/.test(c.req.path)
+        /^\/api\/projects\/[^/]+\/(canvas|draft)/.test(c.req.path)
           ? 1024 * 1024
           : c.req.path === "/api/images/uploads"
             ? 20 * 1024 * 1024

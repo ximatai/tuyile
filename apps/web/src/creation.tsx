@@ -1,3 +1,4 @@
+import { ProjectDraftBoundary, useProjectDraft } from "./project-draft";
 import { ResultImage } from "./result-image";
 import { TaskDetails, TaskProblem } from "./task-details";
 import { canReuseTask, taskStates as states } from "./task-presentation";
@@ -266,7 +267,14 @@ export function TaskResults({
     </div>
   );
 }
-export function CreationPage({
+export function CreationPage(props: { csrfToken: string; projectId: string }) {
+  return (
+    <ProjectDraftBoundary projectId={props.projectId}>
+      <CreationEditor {...props} />
+    </ProjectDraftBoundary>
+  );
+}
+function CreationEditor({
   csrfToken,
   projectId,
 }: {
@@ -274,24 +282,19 @@ export function CreationPage({
   projectId: string;
 }) {
   const sessionState = useSessionState();
+  const draftStore = useProjectDraft();
+  const initialDraft = draftStore.get().document;
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
-    [settings, setSettings] = useState<ImageSettings>({
-      modelKey: "",
-      width: 1024,
-      height: 1024,
-      quality: "medium",
-      format: "png",
-      count: 1,
-    }),
-    [prompt, setPrompt] = useState(
-      sessionState.creativeDrafts.get(projectId)?.prompt ?? "",
+    [settings, setSettings] = useState<ImageSettings>(
+      initialDraft.direct.settings,
     ),
+    [prompt, setPrompt] = useState(initialDraft.direct.prompt),
     [style, setStyle] = useState<CreationStyle | undefined>(
-      sessionState.creativeDrafts.get(projectId)?.style,
+      initialDraft.direct.style,
     ),
     [references, setReferences] = useState<{ id: string; name: string }[]>(
-      sessionState.creativeDrafts.get(projectId)?.references ?? [],
+      initialDraft.referenceIds.map((id) => ({ id, name: "草稿参考图" })),
     ),
     [canvasSelection, setCanvasSelection] = useState<
       { id: string; name: string }[]
@@ -306,6 +309,7 @@ export function CreationPage({
   useEffect(() => {
     const draft = transferredDraft.current;
     if (!draft) return;
+    setMode("direct");
     if (draft.task && canReuseTask(draft.task)) {
       setPrompt(draft.task.prompt);
       setStyle(draft.task.settings?.style);
@@ -355,7 +359,14 @@ export function CreationPage({
     setReferences(next);
     setError("");
   }
-  const [mode, setMode] = useState("direct");
+  const [mode, setMode] = useState(initialDraft.mode);
+  useEffect(() => {
+    draftStore.edit({
+      direct: { prompt, style, settings },
+      referenceIds: references.map((r) => r.id),
+      mode,
+    });
+  }, [draftStore, prompt, style, settings, references, mode]);
   const [phase, setPhase] = useState<GenerationPhase>("idle");
   const [submissionRejected, setSubmissionRejected] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -382,6 +393,27 @@ export function CreationPage({
   const generating = tasks.some(
     (t) => t.state === "running" || t.state === "queued",
   );
+  const sameActiveDraft = tasks.some((task) => {
+    if (
+      !["queued", "running"].includes(task.state) ||
+      task.prompt !== prompt.trim() ||
+      task.count !== settings.count
+    )
+      return false;
+    const saved = task.settings;
+    if (!saved) return true;
+    return (
+      (saved.modelSelectionId ?? task.model) === settings.modelKey &&
+      saved.width === settings.width &&
+      saved.height === settings.height &&
+      saved.quality === settings.quality &&
+      saved.format === settings.format &&
+      saved.style?.name === style?.name.trim() &&
+      saved.style?.text === style?.text.trim() &&
+      JSON.stringify(saved.referenceIds) ===
+        JSON.stringify(references.map((r) => r.id))
+    );
+  });
   const running = tasks.some((t) => t.state === "running");
   function showTasks() {
     setHistoryOpen(true);
@@ -413,7 +445,7 @@ export function CreationPage({
       const task = transferredDraft.current?.task;
       if (task && canReuseTask(task)) {
         setSettings(taskSettings(task, usage) ?? initialSettings(usage));
-      } else setSettings(initialSettings(usage));
+      } else if (!settings.modelKey) setSettings(initialSettings(usage));
     }
   }, [usage]);
   const issues = usage
@@ -512,7 +544,6 @@ export function CreationPage({
       const task = await client(csrfToken)<ImageTask>("/images/tasks", input);
       await acceptTask(task);
       setPending(null);
-      setPrompt("");
       setMobile("results");
       void refresh();
     } catch (e) {
@@ -538,6 +569,7 @@ export function CreationPage({
       void send(pending);
       return;
     }
+    if (sameActiveDraft) return;
     if (!usage || issues.length) {
       setError(issues.join(" "));
       return;
@@ -570,7 +602,6 @@ export function CreationPage({
       await acceptTask(task);
       setPending(null);
       setError("");
-      setPrompt("");
       setMobile("results");
       void refresh();
     } catch (e) {
@@ -643,7 +674,7 @@ export function CreationPage({
           <Tabs
             activeKey={mode}
             onChange={(next) => {
-              setMode(next);
+              setMode(next as "direct" | "agent");
             }}
             items={[
               { key: "direct", label: "直接创作" },
@@ -724,14 +755,14 @@ export function CreationPage({
                   aria-busy={
                     busy ||
                     (!pending &&
-                      !prompt.trim() &&
+                      (!prompt.trim() || sameActiveDraft) &&
                       generating &&
                       !taskQuery.error)
                   }
                   loading={
                     busy ||
                     (!pending &&
-                      !prompt.trim() &&
+                      (!prompt.trim() || sameActiveDraft) &&
                       generating &&
                       !taskQuery.error)
                   }
@@ -743,7 +774,8 @@ export function CreationPage({
                   disabled={
                     busy ||
                     !usage?.models.length ||
-                    (!pending && (!prompt.trim() || issues.length > 0))
+                    (!pending &&
+                      (!prompt.trim() || sameActiveDraft || issues.length > 0))
                   }
                 >
                   {busy
@@ -754,7 +786,7 @@ export function CreationPage({
                         : "正在上传参考图…"
                     : pending
                       ? "重试同一提交"
-                      : !prompt.trim() && generating
+                      : (!prompt.trim() || sameActiveDraft) && generating
                         ? taskQuery.error
                           ? "状态暂不可用"
                           : running

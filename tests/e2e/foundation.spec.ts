@@ -575,7 +575,9 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   await expect(
     page.getByRole("status", { name: "图片生成状态" }),
   ).toContainText(/正在生成图片|排队中/);
-  await expect(page.getByLabel("创作需求")).toHaveValue("");
+  await expect(page.getByLabel("创作需求")).toHaveValue(
+    "合成测试：关闭页面后继续执行",
+  );
   await expect(
     page.locator(".direct-creation .generation-submit-row > .primary"),
   ).toHaveClass(/ant-btn-loading/);
@@ -589,7 +591,11 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   expect(Math.abs(progressBefore.x - progressAfter.x)).toBeLessThan(2);
   expect(Math.abs(progressBefore.y - progressAfter.y)).toBeLessThan(2);
   await page.getByRole("button", { name: "查看任务", exact: true }).click();
-  await expect(page.getByText("合成测试：关闭页面后继续执行")).toBeVisible();
+  await expect(
+    page
+      .locator(".canvas-task-history")
+      .getByText("合成测试：关闭页面后继续执行", { exact: true }),
+  ).toBeVisible();
   const context = page.context();
   await page.close();
   const reopened = await context.newPage();
@@ -655,6 +661,10 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   await expect(taskDetails).toBeFocused();
   await taskDetails.click();
   await reopened.getByRole("button", { name: "复用设置", exact: true }).click();
+  await reopened
+    .getByRole("dialog", { name: "请确认", exact: true })
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
   await expect(reopened.getByLabel("创作需求")).toHaveValue(
     "合成测试：关闭页面后继续执行",
   );
@@ -771,7 +781,9 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   await reopened
     .getByRole("button", { name: "查找这次提交", exact: true })
     .click();
-  await expect(reopened.getByLabel("创作需求")).toHaveValue("");
+  await expect(reopened.getByLabel("创作需求")).toHaveValue(
+    "合成测试：注销后继续",
+  );
   expect(
     (
       await (
@@ -781,7 +793,11 @@ test("background creation survives refresh, page closure and ordinary logout, wi
       ).json()
     ).tasks,
   ).toHaveLength(2);
-  await expect(reopened.getByText("合成测试：注销后继续")).toBeVisible();
+  await expect(
+    reopened
+      .locator(".canvas-task-history")
+      .getByText("合成测试：注销后继续", { exact: true }),
+  ).toBeVisible();
   await reopened.reload();
   await logoutFromMenu(reopened);
   await expect(
@@ -882,6 +898,13 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   }
   await reopened.setViewportSize({ width: 1440, height: 900 });
   await reopened.getByLabel("创作需求").fill("合成测试：参考图");
+  await reopened
+    .getByRole("combobox", { name: "图片张数", exact: true })
+    .click();
+  await reopened
+    .locator(".ant-select-dropdown:visible")
+    .getByText("1 张", { exact: true })
+    .click();
   await reopened
     .getByRole("button", { name: "提交图片任务", exact: true })
     .click();
@@ -3767,12 +3790,18 @@ test("prompt bookmarks connect public browsing, private editing and protected cr
   await expect(
     page.getByRole("dialog", { name: "编辑收藏", exact: true }),
   ).toHaveCount(0);
-  await card.getByRole("button", { name: "使用提示词", exact: true }).click();
-  await page.getByRole("menuitem", { name: project.name, exact: true }).click();
+  await card
+    .getByRole("button", { name: "使用提示词", exact: true })
+    .press("ArrowRight");
+  await expect(
+    page.getByRole("menuitem", { name: project.name, exact: true }),
+  ).toBeVisible();
   await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "取消", exact: true })
-    .click();
+    .getByRole("menuitem", { name: project.name, exact: true })
+    .press("Enter");
+  await page
+    .getByRole("dialog", { name: "请确认", exact: true })
+    .press("Escape");
   await expect(page).toHaveURL(/\/prompts$/);
   await page.getByRole("link", { name: "项目", exact: true }).click();
   await page.locator(".project-card").filter({ hasText: project.name }).click();
@@ -3868,4 +3897,209 @@ test("prompt bookmarks connect public browsing, private editing and protected cr
     .click();
   await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`));
   await expect(prompt).toHaveValue(`历史任务${suffix}`);
+});
+
+test("server drafts persist direct and Agent inputs across refresh and login and protect concurrent edits", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const session = await (await page.request.get("/api/auth/me")).json();
+  const headers = {
+    Origin: "http://127.0.0.1:5180",
+    "X-CSRF-Token": session.csrfToken,
+  };
+  const project = await (
+    await page.request.post("/api/projects", {
+      headers,
+      data: { name: `服务端草稿 ${randomUUID().slice(0, 8)}` },
+    })
+  ).json();
+  const url = `/projects/${project.id}`;
+  await page.goto(url);
+  const prompt = page.getByLabel("创作需求", { exact: true });
+  await prompt.fill("刷新后应恢复的创作需求");
+  await page.getByRole("combobox", { name: "风格", exact: true }).click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("真实摄影", { exact: true })
+    .click();
+  await page.getByRole("combobox", { name: "图片张数", exact: true }).click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("2 张", { exact: true })
+    .click();
+  const png = await (
+    await import("sharp")
+  )
+    .default({
+      create: { width: 256, height: 256, channels: 3, background: "#0062b0" },
+    })
+    .png()
+    .toBuffer();
+  await page
+    .getByTestId("reference-upload")
+    .locator('input[type="file"]')
+    .setInputFiles({
+      name: "草稿参考.png",
+      mimeType: "image/png",
+      buffer: png,
+    });
+  await expect(
+    page.getByTestId("reference-upload").locator(".attachment"),
+  ).toHaveCount(1);
+  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  const agent = page.getByLabel("告诉 Agent 你的想法", { exact: true });
+  await agent.fill("独立保留的 Agent 想法");
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/projects/${project.id}/draft`)
+          ).json()
+        ).document,
+    )
+    .toMatchObject({
+      direct: {
+        prompt: "刷新后应恢复的创作需求",
+        settings: { count: 2 },
+        style: { name: "真实摄影" },
+      },
+      agent: { prompt: "独立保留的 Agent 想法" },
+      mode: "agent",
+    });
+  const saved = await (
+    await page.request.get(`/api/projects/${project.id}/draft`)
+  ).json();
+  expect(saved.document.referenceIds).toHaveLength(1);
+  await page.reload();
+  await expect(agent).toHaveValue("独立保留的 Agent 想法");
+  await expect(
+    page.getByRole("tab", { name: "Agent", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("tab", { name: "直接创作", exact: true }).click();
+  await expect(prompt).toHaveValue("刷新后应恢复的创作需求");
+  await expect(
+    page.getByRole("combobox", { name: "风格", exact: true }).locator(".."),
+  ).toContainText("真实摄影");
+  await expect(
+    page.getByRole("combobox", { name: "图片张数", exact: true }).locator(".."),
+  ).toContainText("2 张");
+  await expect(
+    page.getByTestId("reference-upload").locator(".attachment"),
+  ).toHaveCount(1);
+  await page.getByRole("link", { name: "项目", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "我的项目", exact: true }),
+  ).toBeVisible();
+  await logoutFromMenu(page);
+  await expect(
+    page.getByRole("button", { name: "登录", exact: true }),
+  ).toBeVisible();
+  await login(page);
+  await page.goto(url);
+  await expect(prompt).toHaveValue("刷新后应恢复的创作需求");
+  await expect(
+    page.getByTestId("reference-upload").locator(".attachment"),
+  ).toHaveCount(1);
+  const second = await page.context().newPage();
+  await second.goto(url);
+  const otherPrompt = second.getByLabel("创作需求", { exact: true });
+  await expect(otherPrompt).toHaveValue("刷新后应恢复的创作需求");
+  await prompt.fill("另一个标签页已保存");
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/projects/${project.id}/draft`)
+          ).json()
+        ).document.direct.prompt,
+    )
+    .toBe("另一个标签页已保存");
+  await otherPrompt.fill("冲突时必须保留的本地输入");
+  await expect(
+    second.getByText("草稿未保存：草稿已在其他页面更新，当前输入已保留。", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(otherPrompt).toHaveValue("冲突时必须保留的本地输入");
+  await second
+    .getByRole("button", { name: "加载最新草稿", exact: true })
+    .click();
+  await second
+    .getByRole("dialog", { name: "请确认", exact: true })
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await expect(otherPrompt).toHaveValue("另一个标签页已保存");
+  await prompt.fill("再次更新的服务器草稿");
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/projects/${project.id}/draft`)
+          ).json()
+        ).document.direct.prompt,
+    )
+    .toBe("再次更新的服务器草稿");
+  await otherPrompt.fill("明确选择保留的版本");
+  await expect(
+    second.getByRole("button", { name: "保留当前版本", exact: true }),
+  ).toBeVisible();
+  await second
+    .getByRole("button", { name: "保留当前版本", exact: true })
+    .click();
+  await second
+    .getByRole("dialog", { name: "请确认", exact: true })
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/projects/${project.id}/draft`)
+          ).json()
+        ).document.direct.prompt,
+    )
+    .toBe("明确选择保留的版本");
+  await expect(otherPrompt).toHaveValue("明确选择保留的版本");
+  expect(
+    (
+      await (
+        await page.request.get(`/api/images/tasks?projectId=${project.id}`)
+      ).json()
+    ).tasks,
+  ).toHaveLength(0);
+  await second.close();
+  // A failed save must leave the input intact and prevent route loss until retried.
+  await page.reload();
+  await expect(prompt).toHaveValue("明确选择保留的版本");
+  await page.route(`**/api/projects/${project.id}/draft`, (route) =>
+    route.request().method() === "POST" ? route.abort() : route.continue(),
+  );
+  await prompt.fill("网络失败后仍要保留的输入");
+  await expect(page.getByText(/草稿未保存：无法连接服务/)).toBeVisible();
+  await page.getByRole("link", { name: "项目", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`));
+  await expect(prompt).toHaveValue("网络失败后仍要保留的输入");
+  await expect(
+    page.getByText(/^未能保存当前修改，已留在当前页面/),
+  ).toBeVisible();
+  await page.unroute(`**/api/projects/${project.id}/draft`);
+  await page.getByRole("button", { name: "重试", exact: true }).click();
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/projects/${project.id}/draft`)
+          ).json()
+        ).document.direct.prompt,
+    )
+    .toBe("网络失败后仍要保留的输入");
+  await page.reload();
+  await expect(prompt).toHaveValue("网络失败后仍要保留的输入");
 });

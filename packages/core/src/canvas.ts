@@ -1,4 +1,7 @@
 import {
+  projectDraftSave,
+  type ProjectDraftSave,
+  type ProjectDraftSnapshot,
   canvasSave,
   type CanvasSave,
   type CanvasSnapshot,
@@ -8,6 +11,12 @@ import {
   type Project,
 } from "@tuyile/contracts";
 export interface CanvasRepository {
+  loadDraft(p: Principal, projectId: string): Promise<ProjectDraftSnapshot>;
+  saveDraft(
+    p: Principal,
+    projectId: string,
+    input: ProjectDraftSave,
+  ): Promise<ProjectDraftSnapshot>;
   removeProject(p: Principal, id: string): Promise<void>;
   load(p: Principal, projectId: string): Promise<CanvasSnapshot>;
   save(
@@ -28,6 +37,13 @@ export interface CanvasStore {
 }
 export class CanvasService {
   constructor(private readonly store: CanvasStore) {}
+  loadDraft(p: Principal, projectId: string) {
+    return this.store.read((r) => r.loadDraft(p, projectId));
+  }
+  saveDraft(p: Principal, projectId: string, input: ProjectDraftSave) {
+    const parsed = projectDraftSave.parse(input);
+    return this.store.write(p.id, (r) => r.saveDraft(p, projectId, parsed));
+  }
   removeProject(p: Principal, id: string) {
     return this.store.write(p.id, (r) => r.removeProject(p, id));
   }

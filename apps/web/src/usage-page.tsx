@@ -202,6 +202,7 @@ export function UsagePage({ csrfToken }: { csrfToken: string }) {
     try {
       if (!(await state.canLeave())) return;
       const input = referenceId ? { referenceIds: [referenceId] } : { task };
+      await state.loadProjectDraft(task.projectId);
       if (
         state.replacesCreativeDraft(task.projectId, input) &&
         !(await confirm("替换该项目当前的创作草稿？"))

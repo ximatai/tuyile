@@ -161,7 +161,10 @@ export function taskSettings(
 ): ImageSettings | null {
   if (!task.settings) return null;
   return {
-    ...task.settings,
+    width: task.settings.width,
+    height: task.settings.height,
+    quality: task.settings.quality,
+    format: task.settings.format,
     count: task.count,
     modelKey: usage.modelOptions
       ? (task.settings.modelSelectionId ?? `historical:${task.id}`)

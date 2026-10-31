@@ -348,6 +348,7 @@ class PgLibraryRepository
     return (
       await this.c.query(
         `SELECT 'canvas' kind,c.project_id id,p.name label,p.id project_id FROM canvas_references c JOIN projects p ON p.id=c.project_id WHERE c.workspace_id=$1 AND c.asset_id=$2
+   UNION ALL SELECT 'draft',d.project_id,'创作草稿',d.project_id FROM draft_references d WHERE d.workspace_id=$1 AND d.asset_id=$2
    UNION ALL SELECT 'task',t.id,'图片任务',t.project_id FROM image_references r JOIN image_tasks t ON t.id=r.task_id WHERE r.workspace_id=$1 AND r.asset_id=$2
    UNION ALL SELECT 'agent',j.id,'Agent 对话与计划',j.project_id FROM agent_references r JOIN planning_jobs j ON j.id=r.job_id WHERE r.workspace_id=$1 AND r.asset_id=$2
    UNION ALL SELECT 'favorite',f.id,f.title,NULL::uuid FROM library_favorites f WHERE f.workspace_id=$1 AND f.asset_id=$2

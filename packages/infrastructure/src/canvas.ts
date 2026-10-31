@@ -6,6 +6,10 @@ import {
   type CanvasRepository,
 } from "@tuyile/core";
 import {
+  emptyProjectDraft,
+  projectDraftDocument,
+  type ProjectDraftSave,
+  type ProjectDraftSnapshot,
   emptyCanvas,
   canvasDocument,
   type Principal,
@@ -37,6 +41,13 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
       ).rowCount
     )
       throw new AppError("PROJECT_BUSY", 409);
+    await this.c.query("DELETE FROM draft_references WHERE project_id=$1", [
+      id,
+    ]);
+    await this.c.query(
+      "DELETE FROM project_creation_drafts WHERE project_id=$1",
+      [id],
+    );
     await this.c.query("DELETE FROM canvas_references WHERE project_id=$1", [
       id,
     ]);
@@ -77,6 +88,82 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
     ).rows[0];
     if (!r) throw new AppError("NOT_FOUND", 404);
     return r;
+  }
+  async loadDraft(
+    p: Principal,
+    project: string,
+  ): Promise<ProjectDraftSnapshot> {
+    await this.project(p, project);
+    const row = (
+      await this.c.query(
+        "SELECT revision,document FROM project_creation_drafts WHERE project_id=$1",
+        [project],
+      )
+    ).rows[0];
+    return row
+      ? {
+          revision: row.revision,
+          document: projectDraftDocument.parse(row.document),
+        }
+      : { revision: 0, document: emptyProjectDraft() };
+  }
+  async saveDraft(
+    p: Principal,
+    project: string,
+    input: ProjectDraftSave,
+  ): Promise<ProjectDraftSnapshot> {
+    await this.project(p, project);
+    // Project lock also serializes creation with deletion and first-save races.
+    const locked = (
+      await this.c.query(
+        "SELECT id FROM projects WHERE workspace_id=$1 AND id=$2 AND deleted_at IS NULL FOR UPDATE",
+        [p.workspaceId, project],
+      )
+    ).rows[0];
+    if (!locked) throw new AppError("NOT_FOUND", 404);
+    const hash = createHash("sha256")
+      .update(JSON.stringify(input))
+      .digest("hex");
+    const old = (
+      await this.c.query(
+        "SELECT * FROM project_creation_drafts WHERE project_id=$1",
+        [project],
+      )
+    ).rows[0];
+    if (old?.request_key === input.requestKey) {
+      if (old.request_hash !== hash)
+        throw new AppError("IDEMPOTENCY_CONFLICT", 409);
+      return { revision: old.revision, document: old.document };
+    }
+    if ((old?.revision ?? 0) !== input.revision)
+      throw new AppError("DRAFT_CONFLICT", 409);
+    const assets = [...input.document.referenceIds].sort();
+    const ready = await this.c.query(
+      "SELECT id FROM image_assets WHERE workspace_id=$1 AND id=ANY($2::uuid[]) AND state='ready' ORDER BY id FOR UPDATE",
+      [p.workspaceId, assets],
+    );
+    if (ready.rowCount !== assets.length)
+      throw new AppError("REFERENCE_UNAVAILABLE", 409);
+    const revision = input.revision + 1;
+    await this.c.query(
+      "INSERT INTO project_creation_drafts(workspace_id,project_id,revision,document,request_key,request_hash) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(project_id) DO UPDATE SET revision=excluded.revision,document=excluded.document,request_key=excluded.request_key,request_hash=excluded.request_hash,updated_at=now()",
+      [
+        p.workspaceId,
+        project,
+        revision,
+        input.document,
+        input.requestKey,
+        hash,
+      ],
+    );
+    await this.c.query("DELETE FROM draft_references WHERE project_id=$1", [
+      project,
+    ]);
+    await this.c.query(
+      "INSERT INTO draft_references(workspace_id,project_id,asset_id) SELECT $1,$2,unnest($3::uuid[])",
+      [p.workspaceId, project, assets],
+    );
+    return { revision, document: input.document };
   }
   async load(p: Principal, project: string): Promise<CanvasSnapshot> {
     await this.project(p, project);

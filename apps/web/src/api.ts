@@ -1,5 +1,6 @@
 import type { ErrorResponse } from "@tuyile/contracts";
 const messages: Record<string, string> = {
+  DRAFT_CONFLICT: "草稿已在其他页面更新，当前输入已保留。",
   STYLE_CONFLICT: "风格已被修改，请重新打开后编辑。当前输入已保留。",
   STYLE_LIMIT: "最多保存 200 个风格，请先清理不再使用的风格。",
   PROMPT_TOO_LONG: "需求与风格合计不能超过 12000 字符，请精简后再提交。",
@@ -54,7 +55,7 @@ const messages: Record<string, string> = {
   PROVIDER_NOT_CONFIGURED: "尚未配置可用图片服务。",
   IDEMPOTENCY_CONFLICT: "同一提交标识对应了不同内容，请先核对历史任务。",
   REFERENCE_UNAVAILABLE: "参考图已不可用，请重新选择。",
-  ASSET_REFERENCED: "图片仍被画布、任务、对话或收藏引用，请先解除引用。",
+  ASSET_REFERENCED: "图片仍被草稿、画布、任务、对话或收藏引用，请先解除引用。",
   INVALID_IMAGE: "图片格式、大小或解码检查未通过。",
   DISK_LOW: "服务器可用磁盘空间不足，暂停新任务。",
   API_KEY_REQUIRED: "请提供 Key，或显式选择沿用当前服务的 Key。",

@@ -1,3 +1,4 @@
+import { useProjectDraft } from "./project-draft";
 import { composeCreativePrompt, type CreationStyle } from "@tuyile/contracts";
 import { PromptComposer } from "./prompt-composer";
 import { ImageControls, ReferenceAttachments } from "./image-controls";
@@ -69,22 +70,15 @@ export function AgentPanel({
 }) {
   const state = useSessionState(),
     api = client(state.session.csrfToken);
-  const [prompt, setPrompt] = useState(
-      state.agentDrafts.get(projectId)?.prompt ?? "",
+  const draftStore = useProjectDraft();
+  const initialDraft = draftStore.get().document.agent;
+  const [prompt, setPrompt] = useState(initialDraft.prompt),
+    [style, setStyle] = useState<CreationStyle | undefined>(initialDraft.style),
+    [skillId, setSkillId] = useState(initialDraft.skillId),
+    [settings, setSettings] = useState<ImageSettings>(initialDraft.settings),
+    [conversationModel, setConversationModel] = useState(
+      initialDraft.conversationModel,
     ),
-    [style, setStyle] = useState<CreationStyle | undefined>(
-      state.agentDrafts.get(projectId)?.style,
-    ),
-    [skillId, setSkillId] = useState(""),
-    [settings, setSettings] = useState<ImageSettings>({
-      modelKey: "",
-      width: 1024,
-      height: 1024,
-      quality: "medium",
-      format: "png",
-      count: 1,
-    }),
-    [conversationModel, setConversationModel] = useState(""),
     [current, setCurrent] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
@@ -93,6 +87,11 @@ export function AgentPanel({
   useEffect(() => {
     state.agentDrafts.set(projectId, { prompt, style });
   }, [state, projectId, prompt, style]);
+  useEffect(() => {
+    draftStore.edit({
+      agent: { prompt, style, settings, skillId, conversationModel },
+    });
+  }, [draftStore, prompt, style, settings, skillId, conversationModel]);
   const confirmHistory = useConfirm();
   const submitting = useRef(false);
   const jobs = useInfiniteQuery({
@@ -135,7 +134,7 @@ export function AgentPanel({
   useEffect(() => {
     if (usage?.models.length && !initialized.current) {
       initialized.current = true;
-      setSettings(initialSettings(usage));
+      if (!settings.modelKey) setSettings(initialSettings(usage));
     }
   }, [usage]);
   const model = settings.modelKey;
@@ -204,7 +203,6 @@ export function AgentPanel({
       setCurrent(job.id);
       setSettingsOpen(false);
       setPending(null);
-      setPrompt("");
       await refresh();
     } catch (e) {
       if (e instanceof ApiError && e.code !== "INTERNAL_ERROR")

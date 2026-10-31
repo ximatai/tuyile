@@ -242,6 +242,12 @@ export function LibraryPage({ mode }: { mode: Mode }) {
     },
     destination = project,
   ) {
+    try {
+      await state.loadProjectDraft(destination);
+    } catch (e) {
+      feedback.error((e as Error).message);
+      return false;
+    }
     if (
       state.replacesCreativeDraft(destination, input) &&
       !(await confirm(

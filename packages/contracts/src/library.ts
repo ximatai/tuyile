@@ -32,7 +32,7 @@ export interface GalleryAsset {
   origin: "upload" | "generated";
 }
 export interface AssetReference {
-  kind: "canvas" | "task" | "agent" | "favorite";
+  kind: "canvas" | "draft" | "task" | "agent" | "favorite";
   id: string;
   label: string;
   projectId: string | null;

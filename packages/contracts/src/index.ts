@@ -85,3 +85,4 @@ export * from "./administration.js";
 export * from "./model-catalog.js";
 
 export * from "./image-model-knowledge.js";
+export * from "./project-draft.js";
