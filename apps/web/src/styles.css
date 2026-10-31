@@ -3416,3 +3416,71 @@ h3 {
   background: var(--surface-muted, #f5f7fb);
   border-radius: 6px;
 }
+
+.prompt-library > .page-heading {
+  align-items: center;
+  margin-bottom: 24px;
+  gap: 24px;
+}
+.prompt-project-picker {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.prompt-project-picker .field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+.prompt-project-picker .field > label {
+  margin: 0;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.prompt-project-picker .ant-select {
+  width: 220px;
+}
+.prompt-library .prompt-grid {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+.prompt-library .prompt-card {
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+}
+.prompt-card-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.prompt-library .prompt-card h2 {
+  margin: 0;
+}
+.prompt-card-heading .eyebrow {
+  margin: 0;
+  flex-shrink: 0;
+}
+.prompt-library .prompt-card .content-excerpt {
+  line-height: 1.8;
+  margin-bottom: 20px;
+}
+.prompt-library .prompt-card .actions {
+  margin-top: auto;
+  justify-content: space-between;
+}
+.prompt-library .prompt-card .actions > button:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--brand-blue);
+}
+.prompt-bookmark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  padding: 0;
+}

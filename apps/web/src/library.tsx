@@ -21,8 +21,9 @@ import {
   Dropdown,
   Drawer,
   useConfirm,
+  Tooltip,
 } from "@tuyile/ui";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, Bookmark, ArrowRight } from "lucide-react";
 import { HelpPopover, Excerpt } from "./interface-help";
 import { ApiError, client } from "./api";
 import { useSessionState } from "./session-state";
@@ -312,8 +313,29 @@ export function LibraryPage({ mode }: { mode: Mode }) {
     favorites.error ||
     prompts.error ||
     groups.error;
+  const projectPicker = (
+    <>
+      <ChoiceField
+        label="目标项目"
+        value={project}
+        onValueChange={setTarget}
+        disabled={busy || !!pendingReuse}
+        options={allProjects.map((p) => ({ value: p.id, label: p.name }))}
+      />
+      {projects.hasNextPage && (
+        <Button disabled={busy} onClick={() => void projects.fetchNextPage()}>
+          加载更多目标项目
+        </Button>
+      )}
+      {mode === "prompts" && !project && !projects.isPending && (
+        <Link to="/projects">新建项目</Link>
+      )}
+    </>
+  );
   return (
-    <section className="library-page">
+    <section
+      className={`library-page${mode === "prompts" ? " prompt-library" : ""}`}
+    >
       <div className="page-heading">
         <div>
           <h1>
@@ -324,6 +346,9 @@ export function LibraryPage({ mode }: { mode: Mode }) {
                 : "我的收藏"}
           </h1>
         </div>
+        {mode === "prompts" && (
+          <div className="prompt-project-picker">{projectPicker}</div>
+        )}
       </div>
       {((!editing && error) || queryError) && (
         <Notice error>{error || queryError?.message}</Notice>
@@ -343,79 +368,74 @@ export function LibraryPage({ mode }: { mode: Mode }) {
           ))}
         </div>
       )}
-      <div className="library-toolbar">
-        <ChoiceField
-          label="目标项目"
-          value={project}
-          onValueChange={setTarget}
-          disabled={busy || !!pendingReuse}
-          options={allProjects.map((p) => ({ value: p.id, label: p.name }))}
-        />
-        {projects.hasNextPage && (
-          <Button disabled={busy} onClick={() => void projects.fetchNextPage()}>
-            加载更多目标项目
-          </Button>
-        )}
-        <Link to="/projects">管理项目</Link>
-        {mode === "gallery" && (
-          <>
-            <span>已选 {selected.length} 张</span>
-            <Button
-              disabled={busy || !selected.length}
-              onClick={() => void reuse(selected)}
-            >
-              {pendingReuse ? "重试本次复用" : "加入目标画布"}
-            </Button>
-            <Button
-              disabled={
-                busy ||
-                !!pendingReuse ||
-                selected.length < 1 ||
-                selected.length > 4
-              }
-              onClick={() => void openProjectDraft({ referenceIds: selected })}
-            >
-              设为参考图
-            </Button>
-            <Button
-              disabled={
-                busy ||
-                !!pendingReuse ||
-                selected.length < 1 ||
-                selected.length > 5
-              }
-              onClick={() => void exportImages()}
-            >
-              导出所选 ZIP
-            </Button>
-            <HelpPopover title="复用与导出">
-              跨项目复用不新增生图计次。参考图最多4张；每批导出最多5张、合计50MiB。
-            </HelpPopover>
-          </>
-        )}
-        {mode === "favorites" && (
-          <>
-            <ChoiceField
-              label="收藏分组"
-              value={group}
-              onValueChange={setGroup}
-              options={[
-                { value: "__all__", label: "全部分组" },
-                ...(groups.data?.groups ?? []).map((g) => ({
-                  value: `group:${g}`,
-                  label: g || "未分组",
-                })),
-              ]}
-            />
-            <Button
-              disabled={busy}
-              onClick={() => startFavorite({ title: "我的提示词", prompt: "" })}
-            >
-              新建提示词收藏
-            </Button>
-          </>
-        )}
-      </div>
+      {mode !== "prompts" && (
+        <div className="library-toolbar">
+          {projectPicker}
+          <Link to="/projects">管理项目</Link>
+          {mode === "gallery" && (
+            <>
+              <span>已选 {selected.length} 张</span>
+              <Button
+                disabled={busy || !selected.length}
+                onClick={() => void reuse(selected)}
+              >
+                {pendingReuse ? "重试本次复用" : "加入目标画布"}
+              </Button>
+              <Button
+                disabled={
+                  busy ||
+                  !!pendingReuse ||
+                  selected.length < 1 ||
+                  selected.length > 4
+                }
+                onClick={() =>
+                  void openProjectDraft({ referenceIds: selected })
+                }
+              >
+                设为参考图
+              </Button>
+              <Button
+                disabled={
+                  busy ||
+                  !!pendingReuse ||
+                  selected.length < 1 ||
+                  selected.length > 5
+                }
+                onClick={() => void exportImages()}
+              >
+                导出所选 ZIP
+              </Button>
+              <HelpPopover title="复用与导出">
+                跨项目复用不新增生图计次。参考图最多4张；每批导出最多5张、合计50MiB。
+              </HelpPopover>
+            </>
+          )}
+          {mode === "favorites" && (
+            <>
+              <ChoiceField
+                label="收藏分组"
+                value={group}
+                onValueChange={setGroup}
+                options={[
+                  { value: "__all__", label: "全部分组" },
+                  ...(groups.data?.groups ?? []).map((g) => ({
+                    value: `group:${g}`,
+                    label: g || "未分组",
+                  })),
+                ]}
+              />
+              <Button
+                disabled={busy}
+                onClick={() =>
+                  startFavorite({ title: "我的提示词", prompt: "" })
+                }
+              >
+                新建提示词收藏
+              </Button>
+            </>
+          )}
+        </div>
+      )}
       <Drawer
         title="编辑收藏"
         open={!!editing}
@@ -611,30 +631,42 @@ export function LibraryPage({ mode }: { mode: Mode }) {
       )}
       {mode === "prompts" && (
         <div className="prompt-grid">
+          {!prompts.isPending &&
+            !prompts.error &&
+            !prompts.data?.prompts.length && (
+              <div className="empty">暂无提示词</div>
+            )}
           {prompts.data?.prompts.map((p) => (
             <article className="prompt-card" key={p.id}>
-              <span className="eyebrow">{p.category}</span>
-              <h2>{p.title}</h2>
+              <div className="prompt-card-heading">
+                <h2>{p.title}</h2>
+                <span className="eyebrow">{p.category}</span>
+              </div>
               <Excerpt>{p.prompt}</Excerpt>
               <div className="actions">
                 <Button
-                  disabled={busy}
+                  disabled={busy || !project}
+                  aria-label="用于目标项目"
                   onClick={() => void openProjectDraft({ prompt: p.prompt })}
                 >
-                  用于目标项目
+                  使用 <ArrowRight size={14} aria-hidden="true" />
                 </Button>
-                <Button
-                  disabled={busy}
-                  onClick={() =>
-                    startFavorite({
-                      title: p.title,
-                      prompt: p.prompt,
-                      groupName: p.category,
-                    })
-                  }
-                >
-                  收藏提示词
-                </Button>
+                <Tooltip title="收藏">
+                  <Button
+                    className="prompt-bookmark"
+                    aria-label="收藏提示词"
+                    disabled={busy}
+                    onClick={() =>
+                      startFavorite({
+                        title: p.title,
+                        prompt: p.prompt,
+                        groupName: p.category,
+                      })
+                    }
+                  >
+                    <Bookmark size={16} aria-hidden="true" />
+                  </Button>
+                </Tooltip>
               </div>
             </article>
           ))}

@@ -2585,3 +2585,65 @@ test("usage dashboard summarizes quotas and refreshes task details without a dup
     page.getByRole("img", { name: "上传图片 256 × 256", exact: true }),
   ).toBeVisible();
 });
+
+test("prompt library keeps project selection compact and reuses full prompts", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const session = await (await page.request.get("/api/auth/me")).json();
+  const headers = {
+    Origin: "http://127.0.0.1:5180",
+    "X-CSRF-Token": session.csrfToken,
+  };
+  const projects = [];
+  for (const name of ["Prompt first", "Prompt target"]) {
+    const response = await page.request.post("/api/projects", {
+      headers,
+      data: { name },
+    });
+    expect(response.status()).toBe(201);
+    projects.push(await response.json());
+  }
+  await page.getByRole("link", { name: "提示池", exact: true }).click();
+  const heading = page.getByRole("heading", { name: "提示池", exact: true });
+  const picker = page.getByLabel("目标项目", { exact: true });
+  await expect(picker).toBeVisible();
+  await picker.click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("Prompt target", { exact: true })
+    .click();
+  const card = page.locator(".prompt-card").first();
+  const prompt = (await (await page.request.get("/api/library/prompts")).json())
+    .prompts[0];
+  await card.getByRole("button", { name: "收藏提示词", exact: true }).click();
+  const drawer = page.getByRole("dialog", { name: "编辑收藏", exact: true });
+  await expect(drawer.getByLabel("收藏标题", { exact: true })).toHaveValue(
+    prompt.title,
+  );
+  await drawer.getByRole("button", { name: "保存收藏", exact: true }).click();
+  await expect(drawer).toBeHidden();
+  for (const width of [1440, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    const titleBox = await heading.boundingBox(),
+      pickerBox = await picker.boundingBox();
+    expect(
+      Math.abs(
+        titleBox!.y +
+          titleBox!.height / 2 -
+          pickerBox!.y -
+          pickerBox!.height / 2,
+      ),
+    ).toBeLessThan(12);
+    const buttons = await page
+      .locator(".prompt-card .actions")
+      .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().bottom));
+    expect(Math.max(...buttons) - Math.min(...buttons)).toBeLessThan(2);
+  }
+  await card.getByRole("button", { name: "用于目标项目", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/projects/${projects[1].id}$`));
+  await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
+    prompt.prompt,
+  );
+});
