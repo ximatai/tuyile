@@ -917,14 +917,26 @@ it("calibrates only untouched starter styles and keeps the migration repeatable"
 it("picks only personal text favorites before pagination and exposes only published recommendations", async () => {
   const base = { source: "favorites" as const, offset: 0, search: "" };
   expect((await library.promptPicker(f.principal, base)).items).toEqual([]);
+  const initial = await library.promptPicker(f.principal, {
+    ...base,
+    source: "recommended",
+  });
+  expect(initial.items).toHaveLength(36);
+  expect(initial.groups).toHaveLength(10);
+  expect(initial.items.slice(0, 3).map((p) => p.id)).toEqual([
+    "brand-banner",
+    "illustration-scene",
+    "product-studio",
+  ]);
   expect(
     (
       await library.promptPicker(f.principal, {
         ...base,
         source: "recommended",
+        search: "电商白底主图",
       })
-    ).items.map((p) => p.id),
-  ).toEqual(["brand-banner", "illustration-scene", "product-studio"]);
+    ).items,
+  ).toHaveLength(1);
   const asset = await f.creation.upload(f.principal, f.png);
   await f.pool.query(
     "INSERT INTO library_favorites(id,workspace_id,title,group_name,prompt) SELECT gen_random_uuid(),$1,'提示词'||n,CASE WHEN n%2=0 THEN 'A组' ELSE 'B组' END,'完整正文'||n FROM generate_series(1,55) n",
@@ -1006,10 +1018,39 @@ it("picks only personal text favorites before pagination and exposes only publis
     featured: false,
     revision: unchanged.revision,
   });
+  const unfeatured = await library.promptPicker(member, {
+    ...base,
+    source: "recommended",
+  });
+  expect(unfeatured.items.some((p) => p.id === saved.id)).toBe(true);
+  expect(unfeatured.items.findIndex((p) => p.id === saved.id)).toBeGreaterThan(
+    2,
+  );
+  await f.pool.query(
+    "INSERT INTO prompt_templates(id,title,category,prompt,published,featured) SELECT 'picker-public-'||n,'公共分页'||n,'分页分类','公共完整正文'||n,true,n<=2 FROM generate_series(1,60) n",
+  );
+  const publicFirst = await library.promptPicker(member, {
+    ...base,
+    source: "recommended",
+    group: "分页分类",
+  });
+  const publicSecond = await library.promptPicker(member, {
+    ...base,
+    source: "recommended",
+    group: "分页分类",
+    offset: 50,
+  });
+  expect(publicFirst.items).toHaveLength(50);
+  expect(publicFirst.hasMore).toBe(true);
+  expect(publicFirst.items.slice(0, 2).map((p) => p.id)).toEqual([
+    "picker-public-1",
+    "picker-public-2",
+  ]);
+  expect(publicSecond.items).toHaveLength(10);
+  expect(publicSecond.hasMore).toBe(false);
   expect(
-    (
-      await library.promptPicker(member, { ...base, source: "recommended" })
-    ).items.some((p) => p.id === saved.id),
-  ).toBe(false);
+    new Set([...publicFirst.items, ...publicSecond.items].map((p) => p.id))
+      .size,
+  ).toBe(60);
   expect((await f.repo.usage(f.principal)).used).toBe(0);
 });

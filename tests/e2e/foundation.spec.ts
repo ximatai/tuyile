@@ -3494,6 +3494,17 @@ test("prompt shortcuts prefer text favorites and browse in place without changin
   await expect(
     picker.getByRole("tab", { name: "推荐提示词", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
+  await expect(picker.locator(".prompt-picker-item")).toHaveCount(36);
+  await expect(picker.locator(".prompt-picker-item").first()).toContainText(
+    "品牌宣传构图",
+  );
+  await picker
+    .getByRole("textbox", { name: "搜索提示词", exact: true })
+    .fill("电商白底主图");
+  await expect(picker.locator(".prompt-picker-item")).toHaveCount(1);
+  await expect(picker.locator(".prompt-picker-item")).toContainText(
+    "电商白底主图",
+  );
   await picker.getByRole("tab", { name: "我的收藏", exact: true }).click();
   await expect(
     picker.getByText("还没有收藏提示词", { exact: true }),
@@ -3645,7 +3656,8 @@ test("prompt shortcuts prefer text favorites and browse in place without changin
   const recommended = await (
     await page.request.get("/api/library/prompt-picker?source=recommended")
   ).json();
-  expect(recommended.items.some((p: any) => p.id === "product-studio")).toBe(
-    false,
-  );
+  expect(recommended.items).toHaveLength(36);
+  expect(
+    recommended.items.findIndex((p: any) => p.id === "product-studio"),
+  ).toBeGreaterThanOrEqual(2);
 });

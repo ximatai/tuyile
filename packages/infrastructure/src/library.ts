@@ -60,7 +60,7 @@ class PgLibraryRepository
       await this.c.query(
         input.source === "favorites"
           ? "SELECT id,title,prompt,group_name FROM library_favorites WHERE workspace_id=$1 AND prompt IS NOT NULL AND ($3='' OR strpos(lower(title||' '||prompt),lower($3))>0) AND ($4::text IS NULL OR group_name=$4) ORDER BY created_at DESC,id LIMIT 51 OFFSET $2"
-          : "SELECT id,title,prompt,category AS group_name FROM prompt_templates WHERE published AND featured AND $1::uuid IS NOT NULL AND ($3='' OR strpos(lower(title||' '||prompt),lower($3))>0) AND ($4::text IS NULL OR category=$4) ORDER BY created_at,id LIMIT 51 OFFSET $2",
+          : "SELECT id,title,prompt,category AS group_name FROM prompt_templates WHERE published AND $1::uuid IS NOT NULL AND ($3='' OR strpos(lower(title||' '||prompt),lower($3))>0) AND ($4::text IS NULL OR category=$4) ORDER BY featured DESC,created_at,id LIMIT 51 OFFSET $2",
         args,
       )
     ).rows.map((r) => ({
@@ -76,7 +76,7 @@ class PgLibraryRepository
       await this.c.query(
         source === "favorites"
           ? "SELECT DISTINCT group_name AS name FROM library_favorites WHERE workspace_id=$1 AND prompt IS NOT NULL ORDER BY name LIMIT 200"
-          : "SELECT DISTINCT category AS name FROM prompt_templates WHERE published AND featured AND $1::uuid IS NOT NULL ORDER BY name LIMIT 200",
+          : "SELECT DISTINCT category AS name FROM prompt_templates WHERE published AND $1::uuid IS NOT NULL ORDER BY name LIMIT 200",
         [p.workspaceId],
       )
     ).rows.map((r) => r.name as string);
