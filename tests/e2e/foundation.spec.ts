@@ -643,6 +643,10 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     .getByRole("button", { name: "任务详情", exact: true })
     .first();
   await taskDetails.click();
+  await reopened
+    .locator(".task-tile-details .ant-collapse-header")
+    .first()
+    .click();
   await expect(reopened.locator(".task-tile-details")).toContainText(
     "合成风格：柔和自然光",
   );
@@ -676,8 +680,13 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   await expect(reopened.locator(".ant-image-preview")).toBeHidden();
   await reopened.locator(".task-tile-images figure").first().hover();
   await reopened
-    .getByRole("button", { name: "继续修改", exact: true })
+    .locator(".task-tile-images")
     .first()
+    .getByRole("button", { name: "更多图片操作", exact: true })
+    .first()
+    .click();
+  await reopened
+    .getByRole("menuitem", { name: "作为参考图", exact: true })
     .click();
   await expect(
     reopened
@@ -813,8 +822,13 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   ).toBeVisible();
   await reopened.locator(".task-tile-images figure").first().hover();
   await reopened
-    .getByRole("button", { name: "继续修改", exact: true })
+    .locator(".task-tile-images")
     .first()
+    .getByRole("button", { name: "更多图片操作", exact: true })
+    .first()
+    .click();
+  await reopened
+    .getByRole("menuitem", { name: "作为参考图", exact: true })
     .click();
   const referenceItems = reopened
     .getByTestId("reference-upload")
@@ -3068,4 +3082,143 @@ test("operation feedback is transient, replaces previous messages and leaves for
   await expect(toast.getByRole("alert")).toHaveCount(0);
   await expect(toast).toHaveCount(1);
   await expect(toast).toHaveCount(0, { timeout: 5000 });
+});
+
+test("task recovery shares details and image actions without automatically generating", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const session = await (await page.request.get("/api/auth/me")).json();
+  const headers = {
+    Origin: "http://127.0.0.1:5180",
+    "X-CSRF-Token": session.csrfToken,
+  };
+  const project = await (
+    await page.request.post("/api/projects", {
+      headers,
+      data: { name: "Task recovery synthetic" },
+    })
+  ).json();
+  const response = await page.request.post("/api/images/tasks", {
+    headers,
+    data: {
+      projectId: project.id,
+      requestKey: randomUUID(),
+      prompt: "合成任务：保留完整需求",
+      model: "test-image",
+      count: 1,
+      width: 256,
+      height: 256,
+      quality: "medium",
+      format: "png",
+      referenceIds: [],
+    },
+  });
+  expect(response.status()).toBe(202);
+  let completed: any;
+  await expect
+    .poll(async () => {
+      const data = await (
+        await page.request.get(`/api/images/tasks?projectId=${project.id}`)
+      ).json();
+      completed = data.tasks[0];
+      return completed?.state;
+    })
+    .toBe("succeeded");
+  let mode = "failed";
+  let dispatched = 0;
+  page.on("request", (request) => {
+    if (
+      request.method() === "POST" &&
+      new URL(request.url()).pathname === "/api/images/tasks"
+    )
+      dispatched++;
+  });
+  await page.route("**/api/images/tasks?**", async (route) => {
+    const task =
+      mode === "failed"
+        ? {
+            ...completed,
+            state: "failed",
+            used: 0,
+            outputs: [],
+            errorCode: "UPSTREAM_RATE_LIMIT",
+          }
+        : mode === "unknown"
+          ? {
+              ...completed,
+              state: "partial",
+              pendingReview: true,
+              errorCode: "RESULT_UNKNOWN",
+            }
+          : completed;
+    await route.fulfill({ json: { tasks: [task], hasMore: false } });
+  });
+  await page.getByRole("link", { name: "额度", exact: true }).click();
+  await page
+    .getByRole("button", { name: "查看任务详情", exact: true })
+    .first()
+    .click();
+  const drawer = page.getByRole("dialog", { name: "任务详情", exact: true });
+  await expect(drawer).toContainText("模型服务繁忙");
+  await expect(drawer).not.toContainText("UPSTREAM_RATE_LIMIT");
+  await drawer.getByRole("button", { name: "复用设置", exact: true }).click();
+  await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
+    completed.prompt,
+  );
+  expect(dispatched).toBe(0);
+  await page
+    .locator(".canvas-task-history > .ant-collapse-item > .ant-collapse-header")
+    .click();
+  await page
+    .getByRole("button", { name: "任务详情", exact: true })
+    .first()
+    .click();
+  await expect(page.locator(".task-tile-details")).toContainText(
+    "合成任务：保留完整需求",
+  );
+  await page.keyboard.press("Escape");
+  mode = "unknown";
+  await page.getByRole("link", { name: "额度", exact: true }).click();
+  await page.getByRole("button", { name: "刷新额度", exact: true }).click();
+  await page
+    .getByRole("button", { name: "查看任务详情", exact: true })
+    .first()
+    .click();
+  await expect(drawer).toContainText("不要重复生成");
+  await expect(
+    drawer.getByRole("button", { name: "复用设置", exact: true }),
+  ).toHaveCount(0);
+  // Already saved images remain useful even when another output needs review.
+  await drawer
+    .getByRole("button", { name: "更多图片操作", exact: true })
+    .click();
+  await expect(
+    page.getByRole("menuitem", { name: "预览", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "复用设置", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("menuitem", { name: "作为参考图", exact: true }).click();
+  await expect(
+    page.getByTestId("reference-upload").locator(".attachment"),
+  ).toHaveCount(1);
+  expect(dispatched).toBe(0);
+  mode = "success";
+  await page.getByRole("link", { name: "额度", exact: true }).click();
+  await page.getByRole("button", { name: "刷新额度", exact: true }).click();
+  await page
+    .getByRole("button", { name: "查看任务详情", exact: true })
+    .first()
+    .click();
+  await drawer
+    .getByRole("button", { name: "更多图片操作", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: "预览", exact: true }).click();
+  await expect(page.locator(".ant-image-preview")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".ant-image-preview")).toBeHidden();
+  await page.screenshot({ path: ".codex-temp/task-details-unified.png" });
+  expect(dispatched).toBe(0);
 });

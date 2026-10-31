@@ -1,6 +1,8 @@
+import { ResultImage } from "./result-image";
+import { TaskDetails, TaskProblem } from "./task-details";
+import { canReuseTask, taskStates as states } from "./task-presentation";
 import { useAdaptivePromptHeight } from "./use-adaptive-prompt-height";
-import { Download, ImagePlus, MoreHorizontal, Info } from "lucide-react";
-import { Excerpt } from "./interface-help";
+import { Info } from "lucide-react";
 import { composeCreativePrompt, type CreationStyle } from "@tuyile/contracts";
 import { HelpPopover } from "./interface-help";
 import { PromptComposer } from "./prompt-composer";
@@ -31,26 +33,16 @@ import {
 import type { ImageInput, ImageTask, ImageUsage } from "@tuyile/contracts";
 import {
   Tabs,
-  Dropdown,
-  Tooltip,
   Collapse,
   Popover,
   Button,
   Notice,
   useConfirm,
+  useFeedback,
   Input,
-  Image,
   ControlScope,
 } from "@tuyile/ui";
 import { client, ApiError } from "./api";
-const states: Record<string, string> = {
-  queued: "排队中",
-  running: "执行中",
-  succeeded: "已完成",
-  partial: "部分完成",
-  failed: "未完成",
-  cancelled: "已取消",
-};
 function TaskTile({
   task: t,
   busy,
@@ -84,63 +76,21 @@ function TaskTile({
       <div className="output-grid task-tile-images">
         {t.outputs.length ? (
           t.outputs.map((a) => (
-            <figure key={a.id}>
-              {a.deleted ? (
-                <div className="task-tile-placeholder">原图已删除</div>
-              ) : (
-                <>
-                  <Image
-                    src={`/api/images/assets/${a.id}/preview`}
-                    alt={`已保存图片，${a.width} × ${a.height}`}
-                    loading="lazy"
-                    preview={{
-                      src: `/api/images/assets/${a.id}/original`,
-                      motionName: "",
-                    }}
-                  />
-                  <div className="task-tile-actions">
-                    <Tooltip title="下载">
-                      <a
-                        className="task-tile-icon"
-                        aria-label="下载原图"
-                        href={`/api/images/assets/${a.id}/download`}
-                      >
-                        <Download size={16} />
-                      </a>
-                    </Tooltip>
-                    {onReference && (
-                      <Tooltip title="引用">
-                        <Button
-                          type="button"
-                          aria-label="继续修改"
-                          onClick={() => onReference(a.id)}
-                        >
-                          <ImagePlus size={16} />
-                        </Button>
-                      </Tooltip>
-                    )}
-                    <Dropdown
-                      trigger={["click"]}
-                      menu={{
-                        items: [
-                          {
-                            key: "delete",
-                            label: "删除原图",
-                            danger: true,
-                            disabled: busy,
-                          },
-                        ],
-                        onClick: () => onRemove(a.id),
-                      }}
-                    >
-                      <Button type="button" aria-label="更多图片操作">
-                        <MoreHorizontal size={16} />
-                      </Button>
-                    </Dropdown>
-                  </div>
-                </>
-              )}
-            </figure>
+            <ResultImage
+              key={a.id}
+              asset={a}
+              busy={busy}
+              onRemove={onRemove}
+              onReference={onReference}
+              onReuse={
+                onReuse && canReuseTask(t)
+                  ? () => {
+                      setDetailsOpen(false);
+                      onReuse(t);
+                    }
+                  : undefined
+              }
+            />
           ))
         ) : (
           <div className="task-tile-placeholder">
@@ -166,64 +116,18 @@ function TaskTile({
           classNames={{ root: "task-details-popover" }}
           content={
             <div className="task-tile-details" onKeyDown={closeDetails}>
-              <div className="task-detail-heading">
-                <span title={t.model}>{t.model}</span>
-                <time
-                  dateTime={t.createdAt}
-                  title={new Date(t.createdAt).toLocaleString("zh-CN")}
-                >
-                  {new Date(t.createdAt).toLocaleString("zh-CN", {
-                    month: "2-digit",
-                    day: "2-digit",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </time>
-              </div>
-              <div className="task-detail-specs">
-                {[
-                  ...new Set(t.outputs.map((a) => `${a.width} × ${a.height}`)),
-                ].map((size) => (
-                  <span key={size}>{size}</span>
-                ))}
-                <span>
-                  {t.used}/{t.count} 张
-                </span>
-              </div>
-              <div className="task-detail-body">
-                <p className="task-detail-prompt">{t.prompt}</p>
-                {t.settings?.style && (
-                  <div className="task-detail-style">
-                    <strong>{t.settings.style.name}</strong>
-                    <p>{t.settings.style.text}</p>
-                    <Collapse
-                      ghost
-                      size="small"
-                      items={[
-                        {
-                          key: "prompt",
-                          label: "实际提交提示词",
-                          children: <p>{t.finalPrompt}</p>,
-                        },
-                      ]}
-                    />
-                  </div>
-                )}
-              </div>
-              {t.settings && onReuse && t.outputs.length > 0 && (
-                <div className="task-detail-footer">
-                  <Button
-                    type="button"
-                    disabled={!!t.pendingReview || active}
-                    onClick={() => {
-                      setDetailsOpen(false);
-                      onReuse(t);
-                    }}
-                  >
-                    复用设置
-                  </Button>
-                </div>
-              )}
+              <TaskDetails
+                showProblem={false}
+                task={t}
+                onReuse={
+                  onReuse
+                    ? (task) => {
+                        setDetailsOpen(false);
+                        onReuse(task);
+                      }
+                    : undefined
+                }
+              />
             </div>
           }
         >
@@ -238,16 +142,7 @@ function TaskTile({
           </Button>
         </Popover>
       </div>
-      {t.pendingReview && (
-        <Notice>结果待核验，额度仍预留。请联系管理员，不要重复生成。</Notice>
-      )}
-      {t.errorCode && !t.pendingReview && (
-        <Notice error>
-          {t.errorCode === "WORKER_INTERRUPTED"
-            ? "后台执行中断，已保存图片仍可查看。"
-            : `任务未全部完成（${t.errorCode}），已保存图片保留。`}
-        </Notice>
-      )}
+      <TaskProblem task={t} />
       {active && (
         <Button disabled={busy || t.cancelRequested} onClick={onCancel}>
           {t.cancelRequested ? "正在取消…" : "取消任务"}
@@ -272,6 +167,7 @@ export function TaskResults({
   onReference?: (id: string) => void;
 }) {
   const confirm = useConfirm();
+  const feedback = useFeedback();
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   async function cancel(id: string) {
@@ -279,9 +175,10 @@ export function TaskResults({
     setError("");
     try {
       await client(csrfToken)(`/images/tasks/${id}/cancel`, {});
+      feedback.success("已请求取消");
       refresh();
     } catch (e) {
-      setError((e as Error).message);
+      feedback.error((e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -297,6 +194,7 @@ export function TaskResults({
     setError("");
     try {
       await client(csrfToken)(`/images/assets/${id}/delete`, {});
+      feedback.success("原图已删除");
       refresh();
     } catch (e) {
       setError((e as Error).message);
@@ -339,92 +237,19 @@ export function TaskResults({
                 {t.used} / {t.count} 张{t.held ? ` · ${t.held} 张预留` : ""}
               </span>
             </div>
-            <div className="task-prompt">
-              <Excerpt rows={2}>{t.prompt}</Excerpt>
-            </div>
-            {t.settings?.style && (
-              <Collapse
-                ghost
-                size="small"
-                items={[
-                  {
-                    key: "style",
-                    label: `风格 · ${t.settings.style.name}`,
-                    children: (
-                      <>
-                        <p>{t.settings.style.text}</p>
-                        <strong>实际提交提示词</strong>
-                        <p>{t.finalPrompt}</p>
-                      </>
-                    ),
-                  },
-                ]}
-              />
-            )}
-            <div className="task-meta">
-              <div
-                className="hint"
-                title={`${t.model} · ${new Date(t.createdAt).toLocaleString("zh-CN")}`}
-              >
-                {t.model} · {new Date(t.createdAt).toLocaleString("zh-CN")}
-              </div>
-              {t.settings && onReuse && t.outputs.length > 0 && (
-                <Button
-                  type="button"
-                  disabled={
-                    t.pendingReview || ["queued", "running"].includes(t.state)
-                  }
-                  onClick={() => onReuse(t)}
-                >
-                  复用设置
-                </Button>
-              )}
-            </div>
-            {t.pendingReview && (
-              <Notice>
-                上游结果暂不确定，相关额度仍预留。请联系管理员核验，不要重复生成。
-              </Notice>
-            )}
-            {t.errorCode && !t.pendingReview && (
-              <Notice error>
-                {t.errorCode === "WORKER_INTERRUPTED"
-                  ? "后台执行中断，已保存图片仍可查看。"
-                  : `任务未全部完成（${t.errorCode}）。已保存的图片会保留。`}
-              </Notice>
-            )}
+            <TaskDetails task={t} onReuse={onReuse} />
             <div className="output-grid">
               {t.outputs.map((a) => (
-                <figure key={a.id}>
-                  {a.deleted ? (
-                    <p>原图已删除</p>
-                  ) : (
-                    <>
-                      <Image
-                        src={`/api/images/assets/${a.id}/preview`}
-                        alt={`已保存图片，${a.width} × ${a.height}`}
-                        loading="lazy"
-                        preview={{
-                          src: `/api/images/assets/${a.id}/original`,
-                          motionName: "",
-                        }}
-                      />
-                      <figcaption>
-                        {a.width} × {a.height}
-                        <a href={`/api/images/assets/${a.id}/download`}>
-                          下载原图
-                        </a>
-                      </figcaption>
-                      {onReference && (
-                        <Button type="button" onClick={() => onReference(a.id)}>
-                          继续修改
-                        </Button>
-                      )}
-                      <Button disabled={busy} onClick={() => void remove(a.id)}>
-                        删除原图
-                      </Button>
-                    </>
-                  )}
-                </figure>
+                <ResultImage
+                  key={a.id}
+                  asset={a}
+                  busy={busy}
+                  onRemove={(id) => void remove(id)}
+                  onReference={onReference}
+                  onReuse={
+                    onReuse && canReuseTask(t) ? () => onReuse(t) : undefined
+                  }
+                />
               ))}
             </div>
             {["queued", "running"].includes(t.state) && (
@@ -472,6 +297,16 @@ export function CreationPage({
   useEffect(() => {
     const draft = transferredDraft.current;
     if (!draft) return;
+    if (draft.task && canReuseTask(draft.task)) {
+      setPrompt(draft.task.prompt);
+      setStyle(draft.task.settings?.style);
+      setReferences(
+        draft.task.settings!.referenceIds.map((id) => ({
+          id,
+          name: "任务参考图",
+        })),
+      );
+    }
     if (draft.prompt !== undefined) setPrompt(draft.prompt);
     if (draft.referenceIds)
       setReferences(
@@ -566,7 +401,10 @@ export function CreationPage({
   useEffect(() => {
     if (usage && usage.models.length && !initialized.current) {
       initialized.current = true;
-      setSettings(initialSettings(usage));
+      const task = transferredDraft.current?.task;
+      if (task && canReuseTask(task)) {
+        setSettings(taskSettings(task, usage) ?? initialSettings(usage));
+      } else setSettings(initialSettings(usage));
     }
   }, [usage]);
   const issues = usage

@@ -3608,3 +3608,55 @@ h3 {
   background: #fffafa;
   border-color: #f0d7d7;
 }
+
+.task-shared-details {
+  display: grid;
+  gap: 12px;
+}
+.task-shared-details h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+.task-shared-details p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 0;
+}
+.task-shared-details > .ant-btn {
+  justify-self: start;
+}
+.result-image {
+  position: relative;
+  margin: 0;
+  min-width: 0;
+}
+.result-image-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+}
+.result-image-actions > a,
+.result-image-actions > button {
+  width: 32px;
+  height: 32px;
+  background: #fffffff2;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
+  padding: 0;
+  min-width: 32px;
+}
+
+.result-image-actions svg {
+  flex-shrink: 0;
+}
+.task-tile-details {
+  max-height: min(600px, 70vh);
+  overflow: auto;
+  overscroll-behavior: contain;
+}

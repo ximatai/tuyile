@@ -1,5 +1,8 @@
+import { TaskDetails } from "./task-details";
+import { ResultImage } from "./result-image";
+import { canReuseTask, taskStates as states } from "./task-presentation";
 import { useState, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { ImageTask, ImageUsage } from "@tuyile/contracts";
 import {
@@ -11,25 +14,16 @@ import {
   Descriptions,
   Table,
   Drawer,
-  Image,
   Button,
   Notice,
   Tag,
   Tooltip,
 } from "@tuyile/ui";
-import { RefreshCw, Info, Download, ArrowUpRight } from "lucide-react";
+import { RefreshCw, Info, ArrowUpRight } from "lucide-react";
 import { useSessionState } from "./session-state";
 import { client } from "./api";
 import { formatStorage, quotaPercentage } from "./usage-metrics";
 
-const states = {
-  queued: "排队中",
-  running: "执行中",
-  succeeded: "已完成",
-  partial: "部分完成",
-  failed: "未完成",
-  cancelled: "已取消",
-};
 function TaskStatus({ task }: { task: ImageTask }) {
   return (
     <Tag
@@ -45,7 +39,7 @@ function TaskStatus({ task }: { task: ImageTask }) {
                 : "default"
       }
     >
-      {task.pendingReview ? "结果待确认" : states[task.state]}
+      {task.pendingReview ? "结果待核验" : states[task.state]}
     </Tag>
   );
 }
@@ -191,6 +185,34 @@ function Overview({ usage }: { usage: ImageUsage }) {
 
 export function UsagePage({ csrfToken }: { csrfToken: string }) {
   const feedback = useFeedback();
+  const navigate = useNavigate();
+  const [transferring, setTransferring] = useState(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  async function continueTask(task: ImageTask, referenceId?: string) {
+    if (transferring || (!referenceId && !canReuseTask(task))) return;
+    setTransferring(true);
+    try {
+      if (!(await state.canLeave())) return;
+      await api(`/projects/${task.projectId}`);
+      await state.flush();
+      if (!mounted.current) return;
+      state.creationDrafts.set(
+        task.projectId,
+        referenceId ? { referenceIds: [referenceId] } : { task },
+      );
+      navigate(`/projects/${task.projectId}`);
+    } catch (e) {
+      if (mounted.current) feedback.error((e as Error).message);
+    } finally {
+      if (mounted.current) setTransferring(false);
+    }
+  }
   const state = useSessionState(),
     api = client(csrfToken);
   const [error, setError] = useState(""),
@@ -382,83 +404,27 @@ export function UsagePage({ csrfToken }: { csrfToken: string }) {
           <div className="usage-task-details">
             <div className="usage-task-heading">
               <TaskStatus task={task} />
-              <span>
-                {task.used} / {task.count} 张
-                {task.held ? ` · ${task.held} 张待结算` : ""}
-              </span>
             </div>
-            <Descriptions
-              size="small"
-              column={1}
-              items={[
-                {
-                  key: "time",
-                  label: "提交时间",
-                  children: taskTime(task.createdAt),
-                },
-                { key: "model", label: "图片模型", children: task.model },
-                ...(task.settings
-                  ? [
-                      {
-                        key: "size",
-                        label: "图片规格",
-                        children: `${task.settings.width} × ${task.settings.height} · ${task.settings.format.toUpperCase()}`,
-                      },
-                    ]
-                  : []),
-              ]}
+            <TaskDetails
+              task={task}
+              onReuse={(t) => {
+                if (!transferring) void continueTask(t);
+              }}
             />
-            <div>
-              <h3>创作需求</h3>
-              <p className="usage-task-prompt">{task.prompt || "未填写"}</p>
-            </div>
-            {task.settings?.style && (
-              <Collapse
-                ghost
-                size="small"
-                items={[
-                  {
-                    key: "style",
-                    label: `风格 · ${task.settings.style.name}`,
-                    children: task.settings.style.text,
-                  },
-                ]}
-              />
-            )}
-            {task.pendingReview && (
-              <Notice>结果暂不确定，额度仍在预留，请联系管理员确认。</Notice>
-            )}
-            {task.errorCode && !task.pendingReview && (
-              <Notice error>任务未全部完成，已保存的图片仍可查看。</Notice>
-            )}
             {!!task.outputs.length && (
               <div className="usage-result-grid">
                 {task.outputs.map((output) => (
-                  <figure key={output.id}>
-                    {output.deleted ? (
-                      <div className="usage-deleted-image">原图已删除</div>
-                    ) : (
-                      <>
-                        <Image
-                          src={`/api/images/assets/${output.id}/preview`}
-                          alt={`已保存图片，${output.width} × ${output.height}`}
-                          preview={{
-                            src: `/api/images/assets/${output.id}/original`,
-                            motionName: "",
-                          }}
-                        />
-                        <Tooltip title="下载原图">
-                          <a
-                            className="usage-image-download"
-                            aria-label="下载原图"
-                            href={`/api/images/assets/${output.id}/download`}
-                          >
-                            <Download size={16} />
-                          </a>
-                        </Tooltip>
-                      </>
-                    )}
-                  </figure>
+                  <ResultImage
+                    key={output.id}
+                    asset={output}
+                    busy={transferring}
+                    onReference={(id) => void continueTask(task, id)}
+                    onReuse={
+                      canReuseTask(task)
+                        ? () => void continueTask(task)
+                        : undefined
+                    }
+                  />
                 ))}
               </div>
             )}

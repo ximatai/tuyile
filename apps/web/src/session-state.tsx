@@ -6,7 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { SessionView } from "@tuyile/contracts";
+import type { ImageTask, SessionView } from "@tuyile/contracts";
 import { EditorStore } from "./editor/store";
 export class SessionState {
   readonly queries = new QueryClient({
@@ -44,7 +44,7 @@ export class SessionState {
   readonly editors = new Map<string, EditorStore>();
   readonly creationDrafts = new Map<
     string,
-    { prompt?: string; referenceIds?: string[] }
+    { prompt?: string; referenceIds?: string[]; task?: ImageTask }
   >();
   constructor(readonly session: SessionView) {}
   key(...parts: string[]) {
