@@ -133,23 +133,41 @@ export function PromptUseMenu({
           <div className="prompt-use-content" onKeyDown={escape}>
             <div className="prompt-use-heading">
               <h3>我的项目</h3>
-              <Button
-                type="button"
-                aria-label="搜索项目"
-                aria-expanded={searchOpen}
-                aria-controls={searchOpen ? searchId : undefined}
-                className="prompt-use-search-toggle"
-                disabled={disabled || busy}
-                onClick={() => {
-                  setSearchOpen((value) => !value);
-                  if (searchOpen) {
-                    setSearch("");
-                    setTerm("");
-                  }
-                }}
-              >
-                <Search size={15} />
-              </Button>
+              <div className="prompt-use-heading-actions">
+                <Button
+                  className="prompt-use-icon"
+                  aria-label="新建项目"
+                  title="新建项目"
+                  type="button"
+                  disabled={disabled || busy}
+                  onClick={() => {
+                    setOpen(false);
+                    setCreating(true);
+                    setName("");
+                    setError("");
+                    created.current = null;
+                  }}
+                >
+                  <Plus size={14} />
+                </Button>
+                <Button
+                  type="button"
+                  aria-label="搜索项目"
+                  aria-expanded={searchOpen}
+                  aria-controls={searchOpen ? searchId : undefined}
+                  className="prompt-use-icon"
+                  disabled={disabled || busy}
+                  onClick={() => {
+                    setSearchOpen((value) => !value);
+                    if (searchOpen) {
+                      setSearch("");
+                      setTerm("");
+                    }
+                  }}
+                >
+                  <Search size={15} />
+                </Button>
+              </div>
             </div>
             {searchOpen && (
               <Input
@@ -190,21 +208,6 @@ export function PromptUseMenu({
                 </Button>
               )}
             </div>
-            <Button
-              className="prompt-use-create"
-              type="button"
-              disabled={disabled || busy}
-              onClick={() => {
-                setOpen(false);
-                setCreating(true);
-                setName("");
-                setError("");
-                created.current = null;
-              }}
-            >
-              <Plus size={14} />
-              新建项目
-            </Button>
           </div>
         }
       >
