@@ -4477,6 +4477,9 @@ test("Agent clarification stays conversational and proposals separate creative a
     page.getByRole("button", { name: "确认执行", exact: true }),
   ).toBeVisible();
   expect(inputs[1].previousPlanId).toBe(jobs[1].plans[0].id);
+  await expect(
+    page.getByRole("button", { name: "查看方案", exact: true }),
+  ).toHaveCount(0);
   await expect(page.locator(".agent-proposal-description")).toContainText(
     "底部预留店名",
   );

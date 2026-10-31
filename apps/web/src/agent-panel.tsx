@@ -332,14 +332,15 @@ export function AgentPanel({
                     {job.plans.at(-1)!.document.message}
                   </p>
                 )}
-                {job.id !== selected?.id && (
-                  <Button
-                    disabled={busy || !!pending || planDirty}
-                    onClick={() => setCurrent(job.id)}
-                  >
-                    查看这个计划
-                  </Button>
-                )}
+                {job.id !== selected?.id &&
+                  !!job.plans.at(-1)!.document.steps.length && (
+                    <Button
+                      disabled={busy || !!pending || planDirty}
+                      onClick={() => setCurrent(job.id)}
+                    >
+                      查看方案
+                    </Button>
+                  )}
               </>
             )}
             {["queued", "running"].includes(job.state) && (
