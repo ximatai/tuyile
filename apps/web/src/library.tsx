@@ -22,10 +22,11 @@ import {
   Dropdown,
   Drawer,
   useConfirm,
-  Tooltip,
   Image,
+  AutoComplete,
 } from "@tuyile/ui";
-import { MoreHorizontal, Bookmark, Plus } from "lucide-react";
+import { MoreHorizontal, Plus } from "lucide-react";
+import { PromptFavorite, refreshPrompts } from "./prompt-favorite";
 import { PromptUseMenu } from "./prompt-use-menu";
 import { HelpPopover, Excerpt } from "./interface-help";
 import { ApiError, client } from "./api";
@@ -53,6 +54,12 @@ export function LibraryPage({ mode }: { mode: Mode }) {
     [references, setReferences] = useState<AssetReference[]>([]),
     [pendingReuse, setPendingReuse] = useState<ReuseRequest | null>(null);
   const [promptCategories, setPromptCategories] = useState<string[]>([]);
+  const [search, setSearch] = useState("");
+  const [term, setTerm] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setTerm(search.trim()), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
   const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
   const mounted = useRef(true);
   useEffect(() => {
@@ -84,11 +91,11 @@ export function LibraryPage({ mode }: { mode: Mode }) {
     enabled: mode === "gallery",
   });
   const favorites = useInfiniteQuery({
-    queryKey: state.key("favorites", JSON.stringify(selectedGroups)),
+    queryKey: state.key("favorites", JSON.stringify(selectedGroups), term),
     initialPageParam: 0,
     queryFn: ({ signal, pageParam }) =>
       api<{ favorites: Favorite[]; hasMore: boolean }>(
-        `/library/favorites?${new URLSearchParams([["offset", String(pageParam)], ...selectedGroups.map((group) => ["group", group])])}`,
+        `/library/favorites?${new URLSearchParams([["offset", String(pageParam)], ["search", term], ...selectedGroups.map((group) => ["group", group])])}`,
         undefined,
         signal,
       ),
@@ -101,11 +108,15 @@ export function LibraryPage({ mode }: { mode: Mode }) {
       api<{ groups: string[] }>("/library/groups", undefined, signal),
   });
   const prompts = useInfiniteQuery({
-    queryKey: state.key("prompt-templates", JSON.stringify(promptCategories)),
+    queryKey: state.key(
+      "prompt-templates",
+      JSON.stringify(promptCategories),
+      term,
+    ),
     initialPageParam: 0,
     queryFn: ({ signal, pageParam }) =>
       api<PromptTemplatesPage>(
-        `/library/prompts?${new URLSearchParams([["offset", String(pageParam)], ...promptCategories.map((category) => ["category", category])])}`,
+        `/library/prompts?${new URLSearchParams([["offset", String(pageParam)], ["search", term], ...promptCategories.map((category) => ["category", category])])}`,
         undefined,
         signal,
       ),
@@ -130,12 +141,9 @@ export function LibraryPage({ mode }: { mode: Mode }) {
     project = target || allProjects[0]?.id || "",
     allAssets = assets.data?.pages.flatMap((p) => p.assets) ?? [];
   async function refresh() {
+    await refreshPrompts(state);
     await Promise.all([
       state.queries.invalidateQueries({ queryKey: state.key("gallery") }),
-      state.queries.invalidateQueries({ queryKey: state.key("favorites") }),
-      state.queries.invalidateQueries({
-        queryKey: state.key("favorite-groups"),
-      }),
       state.queries.invalidateQueries({ queryKey: state.key("usage") }),
     ]);
   }
@@ -195,7 +203,7 @@ export function LibraryPage({ mode }: { mode: Mode }) {
     });
   }
   async function removeFavorite(id: string) {
-    if (!(await confirm("移除这条收藏？原图和生图计次不变。"))) return;
+    if (!(await confirm("移除这条收藏？"))) return;
     await run(async () => {
       await api(`/library/favorites/${id}/delete`, {});
       await refresh();
@@ -234,6 +242,15 @@ export function LibraryPage({ mode }: { mode: Mode }) {
     },
     destination = project,
   ) {
+    if (
+      state.replacesCreativeDraft(destination, input) &&
+      !(await confirm(
+        input.prompt !== undefined
+          ? "用选中的提示词替换当前内容？"
+          : "替换该项目当前的参考图？",
+      ))
+    )
+      return false;
     return run(async () => {
       if (pendingReuse) throw new Error("请先重试上次加入画布的操作。");
       if (!destination) throw new Error("请先创建或选择目标项目。");
@@ -396,30 +413,43 @@ export function LibraryPage({ mode }: { mode: Mode }) {
                 : "我的收藏"}
           </h1>
         </div>
-        {mode === "favorites" && (
-          <Button
-            type="button"
-            className="primary"
-            disabled={busy}
-            onClick={() =>
-              startFavorite({
-                title: "我的提示词",
-                prompt: "",
-                groupName: selectedGroups.length === 1 ? selectedGroups[0] : "",
-              })
-            }
-          >
-            <Plus size={15} />
-            新增提示词
-          </Button>
-        )}
-        {mode === "prompts" && (
-          <div className="prompt-project-picker">
-            {state.session.user.role === "admin" && (
-              <Link to="/admin/prompts">管理创作预设</Link>
-            )}
-          </div>
-        )}
+        <div className="actions library-heading-actions">
+          {mode !== "gallery" && (
+            <Input
+              aria-label="搜索提示词"
+              placeholder="搜索标题或正文"
+              maxLength={100}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="library-prompt-search"
+            />
+          )}
+          {mode === "favorites" && (
+            <Button
+              type="button"
+              className="primary"
+              disabled={busy}
+              onClick={() =>
+                startFavorite({
+                  title: "我的提示词",
+                  prompt: "",
+                  groupName:
+                    selectedGroups.length === 1 ? selectedGroups[0] : "",
+                })
+              }
+            >
+              <Plus size={15} />
+              新增提示词
+            </Button>
+          )}
+          {mode === "prompts" && (
+            <div className="prompt-project-picker">
+              {state.session.user.role === "admin" && (
+                <Link to="/admin/prompts">管理创作预设</Link>
+              )}
+            </div>
+          )}
+        </div>
       </div>
       {((!editing && error) || queryError) && (
         <Notice error>{error || queryError?.message}</Notice>
@@ -528,15 +558,31 @@ export function LibraryPage({ mode }: { mode: Mode }) {
                 setEditing({ ...editing, title: e.target.value })
               }
             />
-            <Field
-              label="收藏分组名称"
-              value={editing.groupName}
-              maxLength={60}
-              disabled={busy || !!pendingFavorite.current}
-              onChange={(e) =>
-                setEditing({ ...editing, groupName: e.target.value })
-              }
-            />
+            <label className="field">
+              <span>分组</span>
+              <AutoComplete
+                placement="topLeft"
+                filterOption={(input, option) =>
+                  String(option?.value ?? "")
+                    .toLowerCase()
+                    .includes(input.toLowerCase())
+                }
+                value={editing.groupName}
+                disabled={busy || !!pendingFavorite.current}
+                options={(groups.data?.groups ?? [])
+                  .filter(Boolean)
+                  .map((value) => ({ value }))}
+                onChange={(value) =>
+                  setEditing({ ...editing, groupName: value })
+                }
+              >
+                <Input
+                  aria-label="收藏分组名称"
+                  maxLength={60}
+                  placeholder="选择或输入分组"
+                />
+              </AutoComplete>
+            </label>
             {editing.prompt !== undefined && (
               <label className="field">
                 <span>收藏提示词</span>
@@ -714,9 +760,11 @@ export function LibraryPage({ mode }: { mode: Mode }) {
             <div className="prompt-grid">
               {!prompts.isPending && !prompts.error && !allPrompts.length && (
                 <div className="empty">
-                  {promptCategories.length
-                    ? "该分类下暂无提示词"
-                    : "暂无提示词"}
+                  {term
+                    ? "没有匹配的提示词"
+                    : promptCategories.length
+                      ? "该分类下暂无提示词"
+                      : "暂无提示词"}
                 </div>
               )}
               {allPrompts.map((p) => (
@@ -733,22 +781,13 @@ export function LibraryPage({ mode }: { mode: Mode }) {
                         openProjectDraft({ prompt: p.prompt }, destination)
                       }
                     />
-                    <Tooltip title="收藏">
-                      <Button
-                        className="prompt-bookmark"
-                        aria-label="收藏提示词"
-                        disabled={busy}
-                        onClick={() =>
-                          startFavorite({
-                            title: p.title,
-                            prompt: p.prompt,
-                            groupName: p.category,
-                          })
-                        }
-                      >
-                        <Bookmark size={16} aria-hidden="true" />
-                      </Button>
-                    </Tooltip>
+                    <PromptFavorite
+                      sourceId={p.id}
+                      favoriteId={p.favoriteId}
+                      title={p.title}
+                      prompt={p.prompt}
+                      groupName={p.category}
+                    />
                   </div>
                 </article>
               ))}
@@ -916,7 +955,11 @@ export function LibraryPage({ mode }: { mode: Mode }) {
               !favorites.error &&
               !favorites.data?.pages.some((p) => p.favorites.length) && (
                 <div className="empty">
-                  {selectedGroups.length ? "这个分组还没有收藏" : "还没有收藏"}
+                  {term
+                    ? "没有匹配的收藏"
+                    : selectedGroups.length
+                      ? "这个分组还没有收藏"
+                      : "还没有收藏"}
                 </div>
               )}
           </div>

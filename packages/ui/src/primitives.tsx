@@ -239,7 +239,7 @@ export {
   Form,
   ConfigProvider as ControlScope,
 } from "antd";
-export { Select } from "antd";
+export { Select, AutoComplete } from "antd";
 export {
   Drawer,
   Card,

@@ -6,7 +6,7 @@ import {
   type ReactNode,
 } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ImageTask, SessionView } from "@tuyile/contracts";
+import type { CreationStyle, ImageTask, SessionView } from "@tuyile/contracts";
 import { EditorStore } from "./editor/store";
 export class SessionState {
   readonly queries = new QueryClient({
@@ -42,10 +42,46 @@ export class SessionState {
     return this.pendingLeave;
   }
   readonly editors = new Map<string, EditorStore>();
+  readonly agentDrafts = new Map<
+    string,
+    { prompt: string; style?: CreationStyle }
+  >();
+  readonly creativeDrafts = new Map<
+    string,
+    {
+      prompt: string;
+      style?: CreationStyle;
+      references: { id: string; name: string }[];
+    }
+  >();
   readonly creationDrafts = new Map<
     string,
     { prompt?: string; referenceIds?: string[]; task?: ImageTask }
   >();
+  replacesCreativeDraft(
+    projectId: string,
+    input: { prompt?: string; referenceIds?: string[]; task?: ImageTask },
+  ) {
+    const current = this.creativeDrafts.get(projectId);
+    if (!current) return false;
+    const prompt = input.task?.prompt ?? input.prompt;
+    const referenceIds =
+      input.task?.settings?.referenceIds ?? input.referenceIds;
+    const style = input.task?.settings?.style;
+    return !!(
+      (current.prompt.trim() &&
+        prompt !== undefined &&
+        current.prompt !== prompt) ||
+      (referenceIds !== undefined &&
+        current.references.length &&
+        JSON.stringify(current.references.map((r) => r.id)) !==
+          JSON.stringify(referenceIds)) ||
+      (input.task &&
+        current.style &&
+        (current.style.name !== style?.name ||
+          current.style.text !== style?.text))
+    );
+  }
   constructor(readonly session: SessionView) {}
   key(...parts: string[]) {
     return [
@@ -70,6 +106,8 @@ export class SessionState {
     this.editors.forEach((e) => e.dispose());
     this.editors.clear();
     this.creationDrafts.clear();
+    this.creativeDrafts.clear();
+    this.agentDrafts.clear();
     this.navigationGuards.clear();
   }
 }

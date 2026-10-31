@@ -23,7 +23,7 @@ export async function resetDatabase() {
   await migrate(urls.owner);
   const { pool: owner } = createDatabase(urls.owner);
   try {
-    await owner.query("TRUNCATE tuyile.prompt_templates");
+    await owner.query("TRUNCATE tuyile.prompt_templates CASCADE");
     const templatesSql = await readFile(
       new URL("../migrations/0016_prompt_templates.sql", import.meta.url),
       "utf8",

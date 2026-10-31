@@ -31,6 +31,7 @@ const favorite = (r: any): Favorite => ({
   title: r.title,
   groupName: r.group_name,
   ...(r.asset_id ? { assetId: r.asset_id } : { prompt: r.prompt }),
+  ...(r.source_prompt_id ? { sourcePromptId: r.source_prompt_id } : {}),
   createdAt: r.created_at.toISOString(),
 });
 const managedPrompt = (r: any): ManagedPromptTemplate => ({
@@ -60,11 +61,12 @@ class PgLibraryRepository
       await this.c.query(
         input.source === "favorites"
           ? "SELECT id,title,prompt,group_name FROM library_favorites WHERE workspace_id=$1 AND prompt IS NOT NULL AND ($3='' OR strpos(lower(title||' '||prompt),lower($3))>0) AND ($4::text IS NULL OR group_name=$4) ORDER BY created_at DESC,id LIMIT 51 OFFSET $2"
-          : "SELECT id,title,prompt,category AS group_name FROM prompt_templates WHERE published AND $1::uuid IS NOT NULL AND ($3='' OR strpos(lower(title||' '||prompt),lower($3))>0) AND ($4::text IS NULL OR category=$4) ORDER BY featured DESC,created_at,id LIMIT 51 OFFSET $2",
+          : "SELECT id,title,prompt,category AS group_name,(SELECT f.id FROM library_favorites f WHERE f.workspace_id=$1 AND f.source_prompt_id=prompt_templates.id) AS favorite_id FROM prompt_templates WHERE published AND $1::uuid IS NOT NULL AND ($3='' OR strpos(lower(title||' '||prompt),lower($3))>0) AND ($4::text IS NULL OR category=$4) ORDER BY featured DESC,created_at,id LIMIT 51 OFFSET $2",
         args,
       )
     ).rows.map((r) => ({
       id: r.id,
+      ...(r.favorite_id ? { favoriteId: r.favorite_id } : {}),
       title: r.title,
       prompt: r.prompt,
       groupName: r.group_name,
@@ -156,12 +158,17 @@ class PgLibraryRepository
       [id, p.workspaceId],
     );
   }
-  async prompts(p: Principal, offset: number, categories: string[]) {
+  async prompts(
+    p: Principal,
+    offset: number,
+    categories: string[],
+    search = "",
+  ) {
     await this.auth(this.c, p, false, false);
     return (
       await this.c.query(
-        "SELECT id,title,category,prompt FROM prompt_templates WHERE published AND (cardinality($2::text[])=0 OR category=ANY($2::text[])) ORDER BY created_at,id LIMIT 51 OFFSET $1",
-        [offset, categories],
+        "SELECT id,title,category,prompt,(SELECT f.id FROM library_favorites f WHERE f.workspace_id=$3 AND f.source_prompt_id=prompt_templates.id) AS \"favoriteId\" FROM prompt_templates WHERE published AND (cardinality($2::text[])=0 OR category=ANY($2::text[])) AND ($4='' OR strpos(lower(title||' '||prompt),lower($4))>0) ORDER BY featured DESC,created_at,id LIMIT 51 OFFSET $1",
+        [offset, categories, p.workspaceId, search],
       )
     ).rows;
   }
@@ -225,15 +232,21 @@ class PgLibraryRepository
       origin: r.task_id ? "generated" : "upload",
     }));
   }
-  async favorites(p: Principal, offset: number, group?: string | string[]) {
+  async favorites(
+    p: Principal,
+    offset: number,
+    group?: string | string[],
+    search = "",
+  ) {
     await this.auth(this.c, p, false, false);
     return (
       await this.c.query(
-        "SELECT * FROM library_favorites WHERE workspace_id=$1 AND (cardinality($3::text[])=0 OR group_name=ANY($3::text[])) ORDER BY created_at DESC,id LIMIT 51 OFFSET $2",
+        "SELECT * FROM library_favorites WHERE workspace_id=$1 AND (cardinality($3::text[])=0 OR group_name=ANY($3::text[])) AND ($4='' OR strpos(lower(title||' '||coalesce(prompt,'')),lower($4))>0) ORDER BY created_at DESC,id LIMIT 51 OFFSET $2",
         [
           p.workspaceId,
           offset,
           group === undefined ? [] : Array.isArray(group) ? group : [group],
+          search,
         ],
       )
     ).rows.map(favorite);
@@ -249,6 +262,39 @@ class PgLibraryRepository
   }
   async saveFavorite(p: Principal, input: FavoriteInput) {
     await this.auth(this.c, p);
+    if (input.sourcePromptId) {
+      const existing = (
+        await this.c.query(
+          "SELECT * FROM library_favorites WHERE workspace_id=$1 AND source_prompt_id=$2",
+          [p.workspaceId, input.sourcePromptId],
+        )
+      ).rows[0];
+      if (existing) return favorite(existing);
+      if (!existing) {
+        const source = (
+          await this.c.query(
+            "SELECT * FROM prompt_templates WHERE id=$1 AND published",
+            [input.sourcePromptId],
+          )
+        ).rows[0];
+        if (!source) throw new AppError("NOT_FOUND", 404);
+        const created = (
+          await this.c.query(
+            "INSERT INTO library_favorites(id,workspace_id,title,group_name,prompt,source_prompt_id) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING RETURNING *",
+            [
+              input.id,
+              p.workspaceId,
+              source.title,
+              source.category,
+              source.prompt,
+              input.sourcePromptId,
+            ],
+          )
+        ).rows[0];
+        if (!created) throw new AppError("NOT_FOUND", 404);
+        return favorite(created);
+      }
+    }
     if (
       input.assetId &&
       !(
@@ -261,7 +307,7 @@ class PgLibraryRepository
       throw new AppError("REFERENCE_UNAVAILABLE", 409);
     const row = (
       await this.c.query(
-        "INSERT INTO library_favorites(id,workspace_id,title,group_name,asset_id,prompt) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO UPDATE SET title=excluded.title,group_name=excluded.group_name,asset_id=excluded.asset_id,prompt=excluded.prompt WHERE library_favorites.workspace_id=excluded.workspace_id RETURNING *",
+        "INSERT INTO library_favorites(id,workspace_id,title,group_name,asset_id,prompt,source_prompt_id) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(id) DO UPDATE SET title=excluded.title,group_name=excluded.group_name,asset_id=excluded.asset_id,prompt=excluded.prompt WHERE library_favorites.workspace_id=excluded.workspace_id RETURNING *",
         [
           input.id,
           p.workspaceId,
@@ -269,6 +315,7 @@ class PgLibraryRepository
           input.groupName,
           input.assetId ?? null,
           input.prompt ?? null,
+          input.sourcePromptId ?? null,
         ],
       )
     ).rows[0];

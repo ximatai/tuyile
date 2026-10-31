@@ -1054,3 +1054,73 @@ it("picks only personal text favorites before pagination and exposes only publis
   ).toBe(60);
   expect((await f.repo.usage(f.principal)).used).toBe(0);
 });
+
+it("bookmarks public sources once, preserves private edits and snapshots, and searches before pagination", async () => {
+  const source = (await library.prompts(f.principal))[0]!;
+  const input = {
+    id: randomUUID(),
+    sourcePromptId: source.id,
+    title: "untrusted title",
+    prompt: "untrusted body",
+    groupName: "untrusted",
+  };
+  const [a, b] = await Promise.all([
+    library.saveFavorite(f.principal, input),
+    library.saveFavorite(f.principal, { ...input, id: randomUUID() }),
+  ]);
+  expect(a.id).toBe(b.id);
+  expect(a.title).toBe(source.title);
+  expect(a.prompt).toBe(source.prompt);
+  expect(a.groupName).toBe(source.category);
+  expect(
+    (await library.promptPage(f.principal)).prompts.find(
+      (p) => p.id === source.id,
+    )?.favoriteId,
+  ).toBe(a.id);
+  expect(
+    (
+      await library.promptPicker(f.principal, {
+        source: "recommended",
+        offset: 0,
+        search: "",
+      })
+    ).items.find((p) => p.id === source.id)?.favoriteId,
+  ).toBe(a.id);
+  const edited = await library.saveFavorite(f.principal, {
+    id: a.id,
+    groupName: a.groupName,
+    prompt: "个人修改 保留正文",
+    title: "个人版本",
+  });
+  expect(edited.prompt).toBe("个人修改 保留正文");
+  const managed = (await library.managedPrompts(f.principal)).find(
+    (p) => p.id === source.id,
+  )!;
+  await library.savePrompt(f.principal, {
+    id: managed.id,
+    title: managed.title,
+    category: managed.category,
+    revision: managed.revision,
+    prompt: "公共已更新",
+    published: false,
+  });
+  const retry = await library.saveFavorite(f.principal, {
+    ...input,
+    id: randomUUID(),
+  });
+  expect(retry.prompt).toBe(edited.prompt);
+  expect(await library.favorites(f.principal, 0, [], "保留正文")).toHaveLength(
+    1,
+  );
+  expect(
+    await library.favorites(f.principal, 0, ["不存在"], "保留正文"),
+  ).toHaveLength(0);
+  expect(
+    await library.promptPage(f.principal, 0, [], source.prompt),
+  ).toMatchObject({ prompts: [] });
+  await library.removeFavorite(f.principal, a.id);
+  await expect(
+    library.saveFavorite(f.principal, { ...input, id: randomUUID() }),
+  ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  expect((await f.repo.usage(f.principal)).used).toBe(0);
+});

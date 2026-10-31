@@ -69,8 +69,12 @@ export function AgentPanel({
 }) {
   const state = useSessionState(),
     api = client(state.session.csrfToken);
-  const [prompt, setPrompt] = useState(""),
-    [style, setStyle] = useState<CreationStyle | undefined>(),
+  const [prompt, setPrompt] = useState(
+      state.agentDrafts.get(projectId)?.prompt ?? "",
+    ),
+    [style, setStyle] = useState<CreationStyle | undefined>(
+      state.agentDrafts.get(projectId)?.style,
+    ),
     [skillId, setSkillId] = useState(""),
     [settings, setSettings] = useState<ImageSettings>({
       modelKey: "",
@@ -86,6 +90,9 @@ export function AgentPanel({
     [error, setError] = useState(""),
     [pending, setPending] = useState<PlanningRequest | null>(null),
     [total, setTotal] = useState(0);
+  useEffect(() => {
+    state.agentDrafts.set(projectId, { prompt, style });
+  }, [state, projectId, prompt, style]);
   const confirmHistory = useConfirm();
   const submitting = useRef(false);
   const jobs = useInfiniteQuery({

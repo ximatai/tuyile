@@ -3687,3 +3687,13 @@ h3 {
 .prompt-picker .ant-tabs-nav { margin-bottom: 10px; }
 
 .prompt-picker-filters.single-filter { grid-template-columns: 1fr; }
+
+.library-prompt-search { max-width: 360px; margin-bottom: 16px; }
+.prompt-composer { position: relative; }
+.prompt-save-current { position: absolute; right: 0; top: -4px; }
+.prompt-save-current .button { width: 28px; height: 28px; padding: 5px; }
+.prompt-picker-item { position: relative; padding-right: 38px; }
+.prompt-picker-item > span { position: absolute; right: 4px; top: 7px; }
+.prompt-picker-item > span { opacity: 0; }
+.prompt-picker-item:hover > span, .prompt-picker-item:focus-within > span { opacity: 1; }
+.library-heading-actions .library-prompt-search { width: 260px; margin-bottom: 0; }

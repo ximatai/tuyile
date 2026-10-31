@@ -4,13 +4,20 @@ export const favoriteInput = z
     id: z.uuid(),
     title: z.string().trim().min(1).max(100),
     groupName: z.string().trim().max(60).default(""),
+    sourcePromptId: z
+      .string()
+      .regex(/^[a-z0-9][a-z0-9-]{0,79}$/)
+      .optional(),
     assetId: z.uuid().optional(),
     prompt: z.string().trim().min(1).max(12000).optional(),
   })
   .strict()
-  .refine((v) => !!v.assetId !== !!v.prompt, {
-    message: "Choose an image or a prompt",
-  });
+  .refine(
+    (v) => !!v.assetId !== !!v.prompt && (!v.sourcePromptId || !!v.prompt),
+    {
+      message: "Choose an image or a prompt",
+    },
+  );
 export type FavoriteInput = z.infer<typeof favoriteInput>;
 export interface Favorite extends FavoriteInput {
   createdAt: string;
@@ -31,6 +38,7 @@ export interface AssetReference {
   projectId: string | null;
 }
 export interface PromptTemplate {
+  favoriteId?: string;
   id: string;
   title: string;
   category: string;
@@ -117,6 +125,7 @@ export const promptPickerQuery = z
   .strict();
 export type PromptPickerQuery = z.infer<typeof promptPickerQuery>;
 export interface PromptPickerItem {
+  favoriteId?: string;
   id: string;
   title: string;
   prompt: string;

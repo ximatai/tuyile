@@ -284,14 +284,23 @@ export function CreationPage({
       format: "png",
       count: 1,
     }),
-    [prompt, setPrompt] = useState(""),
-    [style, setStyle] = useState<CreationStyle | undefined>(),
-    [references, setReferences] = useState<{ id: string; name: string }[]>([]),
+    [prompt, setPrompt] = useState(
+      sessionState.creativeDrafts.get(projectId)?.prompt ?? "",
+    ),
+    [style, setStyle] = useState<CreationStyle | undefined>(
+      sessionState.creativeDrafts.get(projectId)?.style,
+    ),
+    [references, setReferences] = useState<{ id: string; name: string }[]>(
+      sessionState.creativeDrafts.get(projectId)?.references ?? [],
+    ),
     [canvasSelection, setCanvasSelection] = useState<
       { id: string; name: string }[]
     >([]),
     [pending, setPending] = useState<ImageInput | null>(null),
     [mobile, setMobile] = useState("create");
+  useEffect(() => {
+    sessionState.creativeDrafts.set(projectId, { prompt, style, references });
+  }, [sessionState, projectId, prompt, style, references]);
   const confirmDraft = useConfirm();
   const transferredDraft = useRef(sessionState.creationDrafts.get(projectId));
   useEffect(() => {

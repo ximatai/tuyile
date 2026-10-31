@@ -1,3 +1,4 @@
+import { PromptFavorite } from "./prompt-favorite";
 import { StyleSelector } from "./style-selector";
 import { composeCreativePrompt, type CreationStyle } from "@tuyile/contracts";
 import { WandSparkles } from "lucide-react";
@@ -57,6 +58,7 @@ export function PromptComposer({
         onChoose={applyPrompt}
         visible={visible && (!compact || assistOpen)}
       />
+      {compact && <PromptFavorite prompt={value} />}
       <StyleSelector
         style={style}
         onChange={onStyleChange}
@@ -70,7 +72,9 @@ export function PromptComposer({
       className={`prompt-composer ${compact ? "prompt-composer-compact" : ""}`}
     >
       <label className="field" htmlFor={id}>
-        <span className={compact ? "sr-only" : undefined}>{label}</span>
+        <span className={compact ? "sr-only" : "prompt-composer-heading"}>
+          {label}
+        </span>
         <Input.TextArea
           ref={textarea}
           id={id}
@@ -85,6 +89,11 @@ export function PromptComposer({
           placeholder="描述主体、场景、光线、构图和关键细节"
         />
       </label>
+      {!compact && (
+        <div className="prompt-save-current">
+          <PromptFavorite prompt={value} />
+        </div>
+      )}
       {compact ? (
         <Popover
           trigger="click"

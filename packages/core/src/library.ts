@@ -37,6 +37,7 @@ export interface LibraryRepository {
     p: Principal,
     offset: number,
     categories: string[],
+    search?: string,
   ): Promise<PromptTemplate[]>;
   promptCategories(p: Principal): Promise<string[]>;
   managedPrompts(
@@ -54,6 +55,7 @@ export interface LibraryRepository {
     p: Principal,
     offset: number,
     group?: string | string[],
+    search?: string,
   ): Promise<Favorite[]>;
   groups(p: Principal): Promise<string[]>;
   saveFavorite(p: Principal, input: FavoriteInput): Promise<Favorite>;
@@ -94,10 +96,10 @@ export class LibraryService {
     const parsed = promptCategoryFilter.parse(categories);
     return this.store.read((r) => r.prompts(p, offset, parsed));
   }
-  promptPage(p: Principal, offset = 0, categories: string[] = []) {
+  promptPage(p: Principal, offset = 0, categories: string[] = [], search = "") {
     const parsed = promptCategoryFilter.parse(categories);
     return this.store.read(async (r) => {
-      const rows = await r.prompts(p, offset, parsed);
+      const rows = await r.prompts(p, offset, parsed, search);
       return {
         prompts: rows.slice(0, 50),
         hasMore: rows.length > 50,
@@ -115,8 +117,8 @@ export class LibraryService {
   assets(p: Principal, offset = 0) {
     return this.store.read((r) => r.assets(p, offset));
   }
-  favorites(p: Principal, offset = 0, group?: string | string[]) {
-    return this.store.read((r) => r.favorites(p, offset, group));
+  favorites(p: Principal, offset = 0, group?: string | string[], search = "") {
+    return this.store.read((r) => r.favorites(p, offset, group, search));
   }
   groups(p: Principal) {
     return this.store.read((r) => r.groups(p));

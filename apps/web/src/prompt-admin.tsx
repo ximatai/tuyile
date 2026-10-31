@@ -1,3 +1,4 @@
+import { refreshPrompts } from "./prompt-favorite";
 import { PublicStylesManager } from "./style-admin";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
@@ -138,6 +139,7 @@ function PromptTemplatesManager() {
     try {
       await api<ManagedPromptTemplate>("/admin/prompts", parsed.data);
       setDraft(null);
+      await refreshPrompts(state);
       await Promise.all([
         state.queries.invalidateQueries({
           queryKey: state.key("admin-prompts"),
@@ -190,7 +192,7 @@ function PromptTemplatesManager() {
                 <Tag color={r.published ? "success" : "default"}>
                   {r.published ? "已上架" : "未上架"}
                 </Tag>
-                {r.featured && <Tag color="blue">推荐</Tag>}
+                {r.featured && <Tag color="blue">优先展示</Tag>}
               </>
             ),
           },
@@ -280,7 +282,7 @@ function PromptTemplatesManager() {
                 setDraft({ ...draft, featured: e.target.checked })
               }
             >
-              设为推荐提示词
+              优先展示
             </Checkbox>
             <Checkbox
               checked={draft.published}

@@ -1839,6 +1839,32 @@ test("Gallery reuse, ZIP export, favorites, prompt application and project clean
     .locator(".project-card")
     .filter({ hasText: "素材复用目标" })
     .getAttribute("href");
+  if (
+    !(await (await page.request.get("/api/library/assets")).json()).assets
+      .length
+  ) {
+    const session = await (await page.request.get("/api/auth/me")).json();
+    const png = await (
+      await import("sharp")
+    )
+      .default({
+        create: { width: 256, height: 256, channels: 3, background: "#0062b0" },
+      })
+      .png()
+      .toBuffer();
+    expect(
+      (
+        await page.request.post("/api/images/uploads", {
+          headers: {
+            Origin: "http://127.0.0.1:5180",
+            "X-CSRF-Token": session.csrfToken,
+            "Content-Type": "image/png",
+          },
+          data: png,
+        })
+      ).status(),
+    ).toBe(201);
+  }
   const before = await (await page.request.get("/api/images/usage")).json();
   await page.getByRole("link", { name: "图库", exact: true }).click();
   await expect(
@@ -1852,7 +1878,9 @@ test("Gallery reuse, ZIP export, favorites, prompt application and project clean
   await page.getByLabel("收藏分组名称", { exact: true }).fill("验收分组");
   await page.getByRole("button", { name: "保存收藏", exact: true }).click();
   await expect(page.locator(".ant-drawer:visible")).toHaveCount(0);
-  await expect(page.getByText("已收藏", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("status").filter({ hasText: /^已收藏$/ }),
+  ).toBeVisible();
   await card.getByRole("button", { name: "图片更多操作", exact: true }).click();
   await page.getByRole("menuitem", { name: "删除原图", exact: true }).click();
   await page
@@ -1919,11 +1947,13 @@ test("Gallery reuse, ZIP export, favorites, prompt application and project clean
   await template
     .getByRole("button", { name: "收藏提示词", exact: true })
     .click();
-  await page.getByLabel("收藏标题", { exact: true }).fill("提示收藏验收");
-  await page.getByLabel("收藏分组名称", { exact: true }).fill("写作");
-  await page.getByRole("button", { name: "保存收藏", exact: true }).click();
+  await expect(
+    template.getByRole("button", { name: "已收藏提示词", exact: true }),
+  ).toBeDisabled();
   await expect(page.locator(".ant-drawer:visible")).toHaveCount(0);
-  await expect(page.getByText("已收藏", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("status").filter({ hasText: /^已收藏$/ }),
+  ).toBeVisible();
   const prompt = (await (await page.request.get("/api/library/prompts")).json())
     .prompts[0].prompt;
   await template
@@ -2623,13 +2653,13 @@ test("prompt library keeps project selection compact and reuses full prompts", a
   const card = page.locator(".prompt-card").first();
   const prompt = (await (await page.request.get("/api/library/prompts")).json())
     .prompts[0];
-  await card.getByRole("button", { name: "收藏提示词", exact: true }).click();
-  const drawer = page.getByRole("dialog", { name: "编辑收藏", exact: true });
-  await expect(drawer.getByLabel("收藏标题", { exact: true })).toHaveValue(
-    prompt.title,
-  );
-  await drawer.getByRole("button", { name: "保存收藏", exact: true }).click();
-  await expect(drawer).toBeHidden();
+  if (
+    await card.getByRole("button", { name: "收藏提示词", exact: true }).count()
+  )
+    await card.getByRole("button", { name: "收藏提示词", exact: true }).click();
+  await expect(
+    card.getByRole("button", { name: "已收藏提示词", exact: true }),
+  ).toBeDisabled();
   for (const width of [1440, 1920]) {
     await page.setViewportSize({ width, height: 900 });
     const rowSpreads = await page
@@ -2708,10 +2738,9 @@ test("managed prompt pool supports drafts, publication, cross-tab updates, reuse
   await template
     .getByRole("button", { name: "收藏提示词", exact: true })
     .click();
-  await viewer.getByRole("button", { name: "保存收藏", exact: true }).click();
   await expect(
-    viewer.getByRole("dialog", { name: "编辑收藏", exact: true }),
-  ).toBeHidden();
+    template.getByRole("button", { name: "已收藏提示词", exact: true }),
+  ).toBeDisabled();
   await template
     .getByRole("button", { name: "使用提示词", exact: true })
     .click();
@@ -3470,6 +3499,17 @@ test("prompt shortcuts prefer text favorites and browse in place without changin
     Origin: "http://127.0.0.1:5180",
     "X-CSRF-Token": session.csrfToken,
   };
+  for (;;) {
+    const current = await (
+      await page.request.get("/api/library/favorites")
+    ).json();
+    if (!current.favorites.length) break;
+    for (const item of current.favorites)
+      await page.request.post(`/api/library/favorites/${item.id}/delete`, {
+        headers,
+        data: {},
+      });
+  }
   const project = await (
     await page.request.post("/api/projects", {
       headers,
@@ -3659,10 +3699,10 @@ test("prompt shortcuts prefer text favorites and browse in place without changin
   await row.getByRole("button", { name: "编辑", exact: true }).click();
   const editor = page.getByRole("dialog", { name: "编辑提示词", exact: true });
   await expect(
-    editor.getByRole("checkbox", { name: "设为推荐提示词", exact: true }),
+    editor.getByRole("checkbox", { name: "优先展示", exact: true }),
   ).toBeChecked();
   await editor
-    .getByRole("checkbox", { name: "设为推荐提示词", exact: true })
+    .getByRole("checkbox", { name: "优先展示", exact: true })
     .uncheck();
   await editor.getByRole("button", { name: "保存", exact: true }).click();
   await expect(editor).toBeHidden();
@@ -3673,4 +3713,159 @@ test("prompt shortcuts prefer text favorites and browse in place without changin
   expect(
     recommended.items.findIndex((p: any) => p.id === "product-studio"),
   ).toBeGreaterThanOrEqual(2);
+});
+
+test("prompt bookmarks connect public browsing, private editing and protected creation drafts", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const session = await (await page.request.get("/api/auth/me")).json();
+  const headers = {
+    Origin: "http://127.0.0.1:5180",
+    "X-CSRF-Token": session.csrfToken,
+  };
+  const suffix = randomUUID().slice(0, 8),
+    title = `链路提示${suffix}`,
+    body = `完整链路正文 ${suffix}`;
+  const source = await page.request.post("/api/admin/prompts", {
+    headers,
+    data: {
+      id: `flow-${suffix}`,
+      title,
+      category: "链路",
+      prompt: body,
+      published: true,
+      revision: 0,
+    },
+  });
+  expect(source.status()).toBe(201);
+  const project = await (
+    await page.request.post("/api/projects", {
+      headers,
+      data: { name: `草稿保护${suffix}` },
+    })
+  ).json();
+  await page.goto(`/projects/${project.id}`);
+  const prompt = page.getByLabel("创作需求", { exact: true });
+  await prompt.fill("当前未提交草稿");
+  await page.getByLabel("风格", { exact: true }).click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("海报视觉", { exact: true })
+    .click();
+  await page.getByRole("link", { name: "提示池", exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "搜索提示词", exact: true })
+    .fill(suffix);
+  const card = page.locator(".prompt-card").filter({ hasText: title });
+  await expect(card).toHaveCount(1);
+  await card.getByRole("button", { name: "收藏提示词", exact: true }).click();
+  await expect(
+    card.getByRole("button", { name: "已收藏提示词", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("dialog", { name: "编辑收藏", exact: true }),
+  ).toHaveCount(0);
+  await card.getByRole("button", { name: "使用提示词", exact: true }).click();
+  await page.getByRole("menuitem", { name: project.name, exact: true }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "取消", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/prompts$/);
+  await page.getByRole("link", { name: "项目", exact: true }).click();
+  await page.locator(".project-card").filter({ hasText: project.name }).click();
+  await expect(prompt).toHaveValue("当前未提交草稿");
+  await expect(
+    page.getByLabel("风格", { exact: true }).locator(".."),
+  ).toContainText("海报视觉");
+  await page.getByRole("button", { name: "更多提示词", exact: true }).click();
+  const picker = page.locator(".prompt-picker:visible");
+  await picker
+    .getByRole("textbox", { name: "搜索提示词", exact: true })
+    .fill(suffix);
+  await expect(picker.locator(".prompt-picker-item")).toHaveCount(1);
+  await picker.locator(".content-excerpt").click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await expect(prompt).toHaveValue(body);
+  await prompt.fill(`自定义收藏正文 ${suffix}`);
+  await page
+    .locator(".prompt-save-current")
+    .getByRole("button", { name: "收藏提示词", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "收藏提示词", exact: true });
+  await dialog.getByLabel("标题", { exact: true }).fill(`我的版本${suffix}`);
+  await dialog.getByRole("button", { name: "收藏", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await page.getByRole("button", { name: "更多提示词", exact: true }).click();
+  await expect(
+    picker.getByRole("button", { name: `选用 我的版本${suffix}`, exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.getByRole("link", { name: "收藏", exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "搜索提示词", exact: true })
+    .fill(suffix);
+  await expect(page.locator(".favorite-prompt-card")).toHaveCount(2);
+  const personal = page
+    .locator(".favorite-prompt-card")
+    .filter({ hasText: `我的版本${suffix}` });
+  await personal
+    .getByRole("button", { name: "收藏更多操作", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: "编辑收藏", exact: true }).click();
+  await page.getByLabel("收藏分组名称", { exact: true }).fill("链路");
+  await page.getByRole("button", { name: "保存收藏", exact: true }).click();
+  await expect(
+    page.getByRole("dialog", { name: "编辑收藏", exact: true }),
+  ).toBeHidden();
+  await expect(personal).toContainText("链路");
+  const submitted = await page.request.post("/api/images/tasks", {
+    headers,
+    data: {
+      projectId: project.id,
+      requestKey: randomUUID(),
+      prompt: `历史任务${suffix}`,
+      model: "test-image",
+      count: 1,
+      width: 256,
+      height: 256,
+      quality: "medium",
+      format: "png",
+      referenceIds: [],
+    },
+  });
+  expect(submitted.status()).toBe(202);
+  await page.getByRole("link", { name: "额度", exact: true }).click();
+  await page
+    .getByRole("region", { name: "使用记录", exact: true })
+    .getByRole("button", { name: "查看任务详情", exact: true })
+    .first()
+    .click();
+  const taskDetails = page.getByRole("dialog", {
+    name: "任务详情",
+    exact: true,
+  });
+  await expect(taskDetails).toContainText(`历史任务${suffix}`);
+  await taskDetails
+    .getByRole("button", { name: "复用设置", exact: true })
+    .click();
+  await page
+    .getByRole("dialog", { name: "请确认", exact: true })
+    .getByRole("button", { name: "取消", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/usage$/);
+  await taskDetails
+    .getByRole("button", { name: "复用设置", exact: true })
+    .click();
+  await page
+    .getByRole("dialog", { name: "请确认", exact: true })
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`));
+  await expect(prompt).toHaveValue(`历史任务${suffix}`);
 });

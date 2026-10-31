@@ -78,6 +78,7 @@ export function libraryRoutes(
         )
         .max(200)
         .parse(c.req.queries("group") ?? []),
+      promptPickerQuery.shape.search.parse(c.req.query("search")),
     );
     return c.json({ favorites: rows.slice(0, 50), hasMore: rows.length > 50 });
   });
@@ -90,6 +91,7 @@ export function libraryRoutes(
         c.get("session").user,
         pageOffset.parse(c.req.query("offset")),
         c.req.queries("category") ?? [],
+        promptPickerQuery.shape.search.parse(c.req.query("search")),
       ),
     );
   });

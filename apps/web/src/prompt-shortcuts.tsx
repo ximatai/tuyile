@@ -5,6 +5,7 @@ import { Button, ChoiceField, Input, Notice, Popover, Tabs } from "@tuyile/ui";
 import { ChevronDown, Search } from "lucide-react";
 import { client } from "./api";
 import { useSessionState } from "./session-state";
+import { PromptFavorite } from "./prompt-favorite";
 import { Excerpt } from "./interface-help";
 export function PromptShortcuts({
   onChoose,
@@ -59,6 +60,7 @@ export function PromptShortcuts({
     initialPageParam: 0,
     staleTime: 0,
     enabled: open,
+    refetchInterval: open ? 15000 : false,
     queryFn: ({ signal, pageParam }) => {
       const params = new URLSearchParams({
         source,
@@ -241,6 +243,15 @@ export function PromptShortcuts({
                     </span>
                   </Button>
                   <Excerpt rows={2}>{item.prompt}</Excerpt>
+                  {source === "recommended" && (
+                    <PromptFavorite
+                      sourceId={item.id}
+                      favoriteId={item.favoriteId}
+                      title={item.title}
+                      prompt={item.prompt}
+                      groupName={item.groupName}
+                    />
+                  )}
                 </article>
               ))}
               {query.hasNextPage && (

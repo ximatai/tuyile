@@ -7,6 +7,7 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { ImageTask, ImageUsage } from "@tuyile/contracts";
 import {
   useFeedback,
+  useConfirm,
   Card,
   Statistic,
   Progress,
@@ -185,6 +186,7 @@ function Overview({ usage }: { usage: ImageUsage }) {
 
 export function UsagePage({ csrfToken }: { csrfToken: string }) {
   const feedback = useFeedback();
+  const confirm = useConfirm();
   const navigate = useNavigate();
   const [transferring, setTransferring] = useState(false);
   const mounted = useRef(true);
@@ -199,13 +201,16 @@ export function UsagePage({ csrfToken }: { csrfToken: string }) {
     setTransferring(true);
     try {
       if (!(await state.canLeave())) return;
+      const input = referenceId ? { referenceIds: [referenceId] } : { task };
+      if (
+        state.replacesCreativeDraft(task.projectId, input) &&
+        !(await confirm("替换该项目当前的创作草稿？"))
+      )
+        return;
       await api(`/projects/${task.projectId}`);
       await state.flush();
       if (!mounted.current) return;
-      state.creationDrafts.set(
-        task.projectId,
-        referenceId ? { referenceIds: [referenceId] } : { task },
-      );
+      state.creationDrafts.set(task.projectId, input);
       navigate(`/projects/${task.projectId}`);
     } catch (e) {
       if (mounted.current) feedback.error((e as Error).message);

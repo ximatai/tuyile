@@ -72,3 +72,43 @@ it("shares one confirmation across repeated navigation attempts and retries afte
   expect(confirmations).toBe(2);
   state.clear();
 });
+
+it("keeps creation drafts per project and clears private drafts at session end", () => {
+  const state = new SessionState(session);
+  state.creativeDrafts.set("first", {
+    prompt: "私人草稿",
+    style: { name: "个人风格", text: "保持风格" },
+    references: [{ id: "asset", name: "参考图" }],
+  });
+  state.creativeDrafts.set("second", { prompt: "另一个项目", references: [] });
+  state.agentDrafts.set("first", { prompt: "规划草稿" });
+  expect(state.creativeDrafts.get("first")?.prompt).toBe("私人草稿");
+  expect(state.creativeDrafts.get("second")?.prompt).toBe("另一个项目");
+  state.clear();
+  expect(state.creativeDrafts.size).toBe(0);
+  expect(state.agentDrafts.size).toBe(0);
+});
+
+it("protects existing prompt, style and reference drafts against cross-page replacements", () => {
+  const state = new SessionState(session);
+  state.creativeDrafts.set("project", {
+    prompt: "原需求",
+    style: { name: "风格", text: "风格正文" },
+    references: [{ id: "reference", name: "参考" }],
+  });
+  expect(state.replacesCreativeDraft("project", { prompt: "新需求" })).toBe(
+    true,
+  );
+  expect(state.replacesCreativeDraft("project", { prompt: "原需求" })).toBe(
+    false,
+  );
+  expect(
+    state.replacesCreativeDraft("project", { referenceIds: ["reference"] }),
+  ).toBe(false);
+  expect(state.replacesCreativeDraft("project", { referenceIds: [] })).toBe(
+    true,
+  );
+  expect(state.replacesCreativeDraft("other", { prompt: "新需求" })).toBe(
+    false,
+  );
+});
