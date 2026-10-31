@@ -3506,3 +3506,51 @@ h3 {
 .prompt-admin-page > .ant-table-wrapper {
   margin-bottom: 16px;
 }
+
+.prompt-browser {
+  display: grid;
+  grid-template-columns: 152px minmax(0, 1fr);
+  align-items: start;
+  gap: 20px;
+}
+.prompt-categories {
+  position: sticky;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+}
+.prompt-categories h2 {
+  font-size: var(--text-body);
+  margin: 0 0 8px;
+  padding: 0 8px;
+}
+.prompt-categories .category-all {
+  text-align: left;
+  justify-content: flex-start;
+  box-shadow: none;
+  border-color: transparent;
+  padding: 4px 8px;
+}
+.prompt-categories .category-all.active {
+  color: var(--brand-blue);
+  background: var(--focus-soft);
+}
+.prompt-categories .ant-checkbox-wrapper {
+  padding: 7px 8px;
+  margin: 0;
+  border-radius: 6px;
+}
+.prompt-categories .ant-checkbox-wrapper:hover,
+.prompt-categories .ant-checkbox-wrapper-checked {
+  background: var(--focus-soft);
+}
+.prompt-results {
+  min-width: 0;
+}

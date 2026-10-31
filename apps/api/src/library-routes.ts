@@ -38,11 +38,13 @@ export function libraryRoutes(
     c.json({ groups: await library.groups(c.get("session").user) }),
   );
   app.get("/api/library/prompts", async (c) => {
-    const rows = await library.prompts(
-      c.get("session").user,
-      pageOffset.parse(c.req.query("offset")),
+    return c.json(
+      await library.promptPage(
+        c.get("session").user,
+        pageOffset.parse(c.req.query("offset")),
+        c.req.queries("category") ?? [],
+      ),
     );
-    return c.json({ prompts: rows.slice(0, 50), hasMore: rows.length > 50 });
   });
   app.get("/api/admin/prompts", async (c) => {
     const rows = await library.managedPrompts(

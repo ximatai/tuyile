@@ -2755,3 +2755,50 @@ test("managed prompt pool supports drafts, publication, cross-tab updates, reuse
   await expect(drawer).toBeHidden();
   await viewer.close();
 });
+
+test("prompt category panel supports multiple selection, deselection and full-catalog filtering", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.getByRole("link", { name: "提示池", exact: true }).click();
+  const panel = page.getByRole("complementary", {
+    name: "提示词分类",
+    exact: true,
+  });
+  const cards = page.locator(".prompt-card");
+  await expect(cards).toHaveCount(36);
+  await panel.getByRole("checkbox", { name: "商品", exact: true }).check();
+  await expect(cards).toHaveCount(4);
+  await expect(
+    panel.getByRole("checkbox", { name: "摄影", exact: true }),
+  ).toBeVisible();
+  await panel.getByRole("checkbox", { name: "摄影", exact: true }).check();
+  await expect(cards).toHaveCount(8);
+  await panel.getByRole("checkbox", { name: "商品", exact: true }).uncheck();
+  await expect(cards).toHaveCount(4);
+  await expect(
+    page.getByRole("heading", { name: "美食自然光摄影", exact: true }),
+  ).toBeVisible();
+  await panel.getByRole("checkbox", { name: "摄影", exact: true }).uncheck();
+  await expect(cards).toHaveCount(36);
+  await expect(
+    panel.getByRole("button", { name: "全部分类", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await panel.getByRole("checkbox", { name: "空间", exact: true }).check();
+  await expect(cards).toHaveCount(3);
+  await panel.getByRole("button", { name: "全部分类", exact: true }).click();
+  await expect(cards).toHaveCount(36);
+  await expect(
+    panel.getByRole("checkbox", { name: "空间", exact: true }),
+  ).not.toBeChecked();
+  for (const width of [1440, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    const left = await panel.boundingBox(),
+      right = await page
+        .getByRole("region", { name: "提示词列表", exact: true })
+        .boundingBox();
+    expect(left!.x + left!.width).toBeLessThan(right!.x);
+    expect(Math.abs(left!.y - right!.y)).toBeLessThan(2);
+  }
+});

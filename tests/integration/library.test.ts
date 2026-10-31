@@ -537,3 +537,81 @@ it("ships diverse valid starter prompts and never overwrites edited or unpublish
   });
   expect(await library.managedPrompts(f.principal)).toHaveLength(36);
 });
+
+it("filters published prompts by the union of categories before pagination and exposes all published categories", async () => {
+  // A category whose only entry is beyond page one must still be discoverable.
+  for (let i = 0; i < 20; i++)
+    await library.savePrompt(f.principal, {
+      id: randomUUID(),
+      title: `额外${i}`,
+      category: "分页测试",
+      prompt: "分页测试正文",
+      published: true,
+      revision: 0,
+    });
+  const late = await library.savePrompt(f.principal, {
+    id: randomUUID(),
+    title: "最后的分类",
+    category: "末页分类",
+    prompt: "只能在后续页找到的完整内容",
+    published: true,
+    revision: 0,
+  });
+  await library.savePrompt(f.principal, {
+    id: randomUUID(),
+    title: "未公开",
+    category: "隐藏分类",
+    prompt: "隐藏正文",
+    published: false,
+    revision: 0,
+  });
+  const first = await library.promptPage(f.principal);
+  expect(first.prompts).toHaveLength(50);
+  expect(first.prompts.some((p) => p.id === late.id)).toBe(false);
+  expect(first.categories).toContain("末页分类");
+  expect(first.categories).not.toContain("隐藏分类");
+  const filtered = await library.promptPage(f.principal, 0, [
+    "末页分类",
+    "商品",
+  ]);
+  expect(new Set(filtered.prompts.map((p) => p.category))).toEqual(
+    new Set(["末页分类", "商品"]),
+  );
+  expect(filtered.prompts).toHaveLength(5);
+  expect(filtered.categories).toEqual(first.categories);
+  expect(filtered.hasMore).toBe(false);
+  expect(
+    (await library.promptPage(f.principal, 0, ["不存在"])).prompts,
+  ).toEqual([]);
+  expect((await library.promptPage(f.principal, 0, [])).prompts).toHaveLength(
+    50,
+  );
+  const app = createApp(
+    f.service,
+    f.store,
+    { origin: "http://127.0.0.1:5180", production: false },
+    async () => {},
+    undefined,
+    f.creation,
+    undefined,
+    canvas,
+    undefined,
+    library,
+  );
+  const response = await app.request(
+    "/api/library/prompts?category=" +
+      encodeURIComponent("商品") +
+      "&category=" +
+      encodeURIComponent("末页分类"),
+    { headers: { cookie: `tuyile_session=${f.login.token}` } },
+  );
+  expect(response.status).toBe(200);
+  expect((await response.json()).prompts).toHaveLength(5);
+  expect(
+    (
+      await app.request("/api/library/prompts?category=", {
+        headers: { cookie: `tuyile_session=${f.login.token}` },
+      })
+    ).status,
+  ).toBe(400);
+});

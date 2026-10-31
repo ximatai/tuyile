@@ -62,7 +62,19 @@ export interface ManagedPromptTemplate extends PromptTemplateInput {
   createdAt: string;
   updatedAt: string;
 }
+export const promptCategoryFilter = z
+  .array(
+    z
+      .string()
+      .trim()
+      .min(1)
+      .max(60)
+      .refine((s) => !s.includes("\0")),
+  )
+  .max(200)
+  .transform((values) => [...new Set(values)].sort());
 export interface PromptTemplatesPage {
+  categories: string[];
   prompts: PromptTemplate[];
   hasMore: boolean;
 }

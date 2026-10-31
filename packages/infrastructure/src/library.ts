@@ -36,14 +36,22 @@ class PgLibraryRepository
   extends PgCreationContext
   implements LibraryRepository
 {
-  async prompts(p: Principal, offset: number) {
+  async prompts(p: Principal, offset: number, categories: string[]) {
     await this.auth(this.c, p, false, false);
     return (
       await this.c.query(
-        "SELECT id,title,category,prompt FROM prompt_templates WHERE published ORDER BY created_at,id LIMIT 51 OFFSET $1",
-        [offset],
+        "SELECT id,title,category,prompt FROM prompt_templates WHERE published AND (cardinality($2::text[])=0 OR category=ANY($2::text[])) ORDER BY created_at,id LIMIT 51 OFFSET $1",
+        [offset, categories],
       )
     ).rows;
+  }
+  async promptCategories(p: Principal) {
+    await this.auth(this.c, p, false, false);
+    return (
+      await this.c.query(
+        "SELECT DISTINCT category FROM prompt_templates WHERE published ORDER BY category",
+      )
+    ).rows.map((r) => r.category as string);
   }
   async managedPrompts(p: Principal, offset: number, search: string) {
     await this.auth(this.c, p, true, false);

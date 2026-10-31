@@ -36,3 +36,14 @@ it("normalizes template content and rejects invalid limits or identities before 
       .success,
   ).toBe(true);
 });
+
+it("normalizes category filters and rejects empty or oversized values", async () => {
+  const { promptCategoryFilter } = await import("@tuyile/contracts");
+  expect(promptCategoryFilter.parse([])).toEqual([]);
+  expect(promptCategoryFilter.parse([" 商品 ", "摄影", "商品"])).toEqual([
+    "商品",
+    "摄影",
+  ]);
+  expect(promptCategoryFilter.safeParse([""]).success).toBe(false);
+  expect(promptCategoryFilter.safeParse(["x".repeat(61)]).success).toBe(false);
+});

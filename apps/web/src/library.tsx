@@ -47,6 +47,8 @@ export function LibraryPage({ mode }: { mode: Mode }) {
     [editing, setEditing] = useState<FavoriteInput | null>(null),
     [references, setReferences] = useState<AssetReference[]>([]),
     [pendingReuse, setPendingReuse] = useState<ReuseRequest | null>(null);
+  const [promptCategories, setPromptCategories] = useState<string[]>([]);
+  const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -93,11 +95,11 @@ export function LibraryPage({ mode }: { mode: Mode }) {
       api<{ groups: string[] }>("/library/groups", undefined, signal),
   });
   const prompts = useInfiniteQuery({
-    queryKey: state.key("prompt-templates"),
+    queryKey: state.key("prompt-templates", JSON.stringify(promptCategories)),
     initialPageParam: 0,
     queryFn: ({ signal, pageParam }) =>
       api<PromptTemplatesPage>(
-        `/library/prompts?offset=${pageParam}`,
+        `/library/prompts?${new URLSearchParams([["offset", String(pageParam)], ...promptCategories.map((category) => ["category", category])])}`,
         undefined,
         signal,
       ),
@@ -106,6 +108,10 @@ export function LibraryPage({ mode }: { mode: Mode }) {
     staleTime: 0,
     refetchInterval: mode === "prompts" ? 15000 : false,
   });
+  useEffect(() => {
+    const available = prompts.data?.pages[0]?.categories;
+    if (available) setCategoryOptions(available);
+  }, [prompts.data]);
   const allPrompts = [
     ...new Map(
       (prompts.data?.pages.flatMap((p) => p.prompts) ?? []).map((p) => [
@@ -650,54 +656,97 @@ export function LibraryPage({ mode }: { mode: Mode }) {
         </>
       )}
       {mode === "prompts" && (
-        <div className="prompt-grid">
-          {!prompts.isPending && !prompts.error && !allPrompts.length && (
-            <div className="empty">暂无提示词</div>
-          )}
-          {allPrompts.map((p) => (
-            <article className="prompt-card" key={p.id}>
-              <div className="prompt-card-heading">
-                <h2>{p.title}</h2>
-                <span className="eyebrow">{p.category}</span>
-              </div>
-              <Excerpt>{p.prompt}</Excerpt>
-              <div className="actions">
-                <Button
-                  disabled={busy || !project}
-                  aria-label="用于目标项目"
-                  onClick={() => void openProjectDraft({ prompt: p.prompt })}
-                >
-                  使用 <ArrowRight size={14} aria-hidden="true" />
-                </Button>
-                <Tooltip title="收藏">
-                  <Button
-                    className="prompt-bookmark"
-                    aria-label="收藏提示词"
-                    disabled={busy}
-                    onClick={() =>
-                      startFavorite({
-                        title: p.title,
-                        prompt: p.prompt,
-                        groupName: p.category,
-                      })
-                    }
-                  >
-                    <Bookmark size={16} aria-hidden="true" />
-                  </Button>
-                </Tooltip>
-              </div>
-            </article>
-          ))}
-          {prompts.hasNextPage && (
+        <div className="prompt-browser">
+          <aside className="prompt-categories" aria-label="提示词分类">
+            <h2>分类</h2>
             <Button
               type="button"
-              loading={prompts.isFetchingNextPage}
-              disabled={prompts.isFetchingNextPage}
-              onClick={() => void prompts.fetchNextPage()}
+              aria-pressed={!promptCategories.length}
+              className={
+                !promptCategories.length
+                  ? "category-all active"
+                  : "category-all"
+              }
+              onClick={() => setPromptCategories([])}
             >
-              加载更多提示词
+              全部分类
             </Button>
-          )}
+            {[...new Set([...categoryOptions, ...promptCategories])].map(
+              (category) => (
+                <Checkbox
+                  key={category}
+                  checked={promptCategories.includes(category)}
+                  onChange={() =>
+                    setPromptCategories((current) =>
+                      current.includes(category)
+                        ? current.filter((c) => c !== category)
+                        : [...current, category].sort(),
+                    )
+                  }
+                >
+                  {category}
+                </Checkbox>
+              ),
+            )}
+          </aside>
+          <div className="prompt-results" aria-label="提示词列表" role="region">
+            {prompts.isPending && <p role="status">正在加载提示词…</p>}
+            <div className="prompt-grid">
+              {!prompts.isPending && !prompts.error && !allPrompts.length && (
+                <div className="empty">
+                  {promptCategories.length
+                    ? "该分类下暂无提示词"
+                    : "暂无提示词"}
+                </div>
+              )}
+              {allPrompts.map((p) => (
+                <article className="prompt-card" key={p.id}>
+                  <div className="prompt-card-heading">
+                    <h2>{p.title}</h2>
+                    <span className="eyebrow">{p.category}</span>
+                  </div>
+                  <Excerpt>{p.prompt}</Excerpt>
+                  <div className="actions">
+                    <Button
+                      disabled={busy || !project}
+                      aria-label="用于目标项目"
+                      onClick={() =>
+                        void openProjectDraft({ prompt: p.prompt })
+                      }
+                    >
+                      使用 <ArrowRight size={14} aria-hidden="true" />
+                    </Button>
+                    <Tooltip title="收藏">
+                      <Button
+                        className="prompt-bookmark"
+                        aria-label="收藏提示词"
+                        disabled={busy}
+                        onClick={() =>
+                          startFavorite({
+                            title: p.title,
+                            prompt: p.prompt,
+                            groupName: p.category,
+                          })
+                        }
+                      >
+                        <Bookmark size={16} aria-hidden="true" />
+                      </Button>
+                    </Tooltip>
+                  </div>
+                </article>
+              ))}
+              {prompts.hasNextPage && (
+                <Button
+                  type="button"
+                  loading={prompts.isFetchingNextPage}
+                  disabled={prompts.isFetchingNextPage}
+                  onClick={() => void prompts.fetchNextPage()}
+                >
+                  加载更多提示词
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
       )}
       {mode === "favorites" && (

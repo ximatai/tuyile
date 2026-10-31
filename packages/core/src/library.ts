@@ -1,6 +1,7 @@
 import {
   favoriteInput,
   promptTemplateInput,
+  promptCategoryFilter,
   type PromptTemplateInput,
   type ManagedPromptTemplate,
   type Principal,
@@ -11,7 +12,12 @@ import {
   type PromptTemplate,
 } from "@tuyile/contracts";
 export interface LibraryRepository {
-  prompts(p: Principal, offset: number): Promise<PromptTemplate[]>;
+  prompts(
+    p: Principal,
+    offset: number,
+    categories: string[],
+  ): Promise<PromptTemplate[]>;
+  promptCategories(p: Principal): Promise<string[]>;
   managedPrompts(
     p: Principal,
     offset: number,
@@ -38,8 +44,20 @@ export interface LibraryStore {
 }
 export class LibraryService {
   constructor(private readonly store: LibraryStore) {}
-  prompts(p: Principal, offset = 0) {
-    return this.store.read((r) => r.prompts(p, offset));
+  prompts(p: Principal, offset = 0, categories: string[] = []) {
+    const parsed = promptCategoryFilter.parse(categories);
+    return this.store.read((r) => r.prompts(p, offset, parsed));
+  }
+  promptPage(p: Principal, offset = 0, categories: string[] = []) {
+    const parsed = promptCategoryFilter.parse(categories);
+    return this.store.read(async (r) => {
+      const rows = await r.prompts(p, offset, parsed);
+      return {
+        prompts: rows.slice(0, 50),
+        hasMore: rows.length > 50,
+        categories: await r.promptCategories(p),
+      };
+    });
   }
   managedPrompts(p: Principal, offset = 0, search = "") {
     return this.store.read((r) => r.managedPrompts(p, offset, search));
