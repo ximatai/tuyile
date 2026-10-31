@@ -30,6 +30,8 @@ const messages: Record<string, string> = {
   PLANNING_QUEUE_FULL: "规划排队已满，请稍后再试。",
   PLANNING_BUDGET_EXCEEDED: "规划超出本次输入或输出预算，请精简需求。",
   PLANNING_FORMAT_INVALID: "规划结果格式未能修复，请调整需求后重新规划。",
+  PLANNING_RESPONSE_INVALID: "规划服务返回的内容无效，未启动图片生成。",
+  PLANNING_RESPONSE_LIMIT: "规划服务返回的内容过大，未启动图片生成。",
   PLANNING_RESULT_UNKNOWN: "规划调用结果不明，本次规划已计用，未启动图片生成。",
   PLANNING_INTERRUPTED: "规划执行中断，未启动图片生成。",
   PLANNING_STOPPED: "规划已停止，未启动图片生成。",

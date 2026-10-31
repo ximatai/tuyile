@@ -5,7 +5,51 @@ import {
   type PlanningExecutionConfig,
   type PlanningReply,
   type PlanningImage,
+  type PlanningFailureDiagnostic,
 } from "@tuyile/core";
+type ResponsePhase = "request" | "body" | "json";
+function failureDiagnostic(
+  error: unknown,
+  phase: ResponsePhase,
+): PlanningFailureDiagnostic {
+  if (phase === "json") return "PLANNING_RESPONSE_JSON_INVALID";
+  const failure = error as {
+    code?: unknown;
+    cause?: { code?: unknown };
+  } | null;
+  const code = failure?.cause?.code ?? failure?.code;
+  switch (code) {
+    case "ENOTFOUND":
+    case "EAI_AGAIN":
+      return "PLANNING_DNS_FAILURE";
+    case "UND_ERR_CONNECT_TIMEOUT":
+      return "PLANNING_CONNECT_TIMEOUT";
+    case "ETIMEDOUT":
+      return phase === "request"
+        ? "PLANNING_CONNECT_TIMEOUT"
+        : "PLANNING_RESPONSE_TIMEOUT";
+    case "ECONNREFUSED":
+      return "PLANNING_CONNECT_REFUSED";
+    case "ECONNRESET":
+    case "EPIPE":
+    case "UND_ERR_SOCKET":
+      return "PLANNING_CONNECTION_LOST";
+    case "CERT_HAS_EXPIRED":
+    case "DEPTH_ZERO_SELF_SIGNED_CERT":
+    case "SELF_SIGNED_CERT_IN_CHAIN":
+    case "UNABLE_TO_VERIFY_LEAF_SIGNATURE":
+    case "UNABLE_TO_GET_ISSUER_CERT_LOCALLY":
+    case "ERR_TLS_CERT_ALTNAME_INVALID":
+      return "PLANNING_TLS_FAILURE";
+    case "UND_ERR_HEADERS_TIMEOUT":
+    case "UND_ERR_BODY_TIMEOUT":
+      return "PLANNING_RESPONSE_TIMEOUT";
+    default:
+      return phase === "body"
+        ? "PLANNING_RESPONSE_READ_FAILED"
+        : "PLANNING_TRANSPORT_FAILED";
+  }
+}
 export class CompatiblePlanningProvider implements PlanningProvider {
   constructor(
     private readonly fakeAllowed = false,
@@ -73,6 +117,7 @@ export class CompatiblePlanningProvider implements PlanningProvider {
         outputTokens: 1,
       };
     }
+    let phase: ResponsePhase = "request";
     try {
       const response = await this.fetcher(
         `${config.baseUrl}/chat/completions`,
@@ -118,7 +163,8 @@ export class CompatiblePlanningProvider implements PlanningProvider {
         },
       );
       if (!response.ok) {
-        await response.body?.cancel();
+        // Cleanup must not replace an already received HTTP status.
+        await response.body?.cancel().catch(() => {});
         throw new PlanningCallError(
           [400, 401, 403, 404, 422, 429].includes(response.status)
             ? "rejected"
@@ -129,6 +175,7 @@ export class CompatiblePlanningProvider implements PlanningProvider {
           response.status,
         );
       }
+      phase = "body";
       const reader = response.body?.getReader();
       if (!reader)
         throw new PlanningCallError("unknown", "PLANNING_RESPONSE_INVALID");
@@ -146,6 +193,7 @@ export class CompatiblePlanningProvider implements PlanningProvider {
       } finally {
         await reader.cancel().catch(() => {});
       }
+      phase = "json";
       const json = JSON.parse(Buffer.concat(chunks).toString("utf8"));
       const text = json?.choices?.[0]?.message?.content;
       if (
@@ -167,6 +215,8 @@ export class CompatiblePlanningProvider implements PlanningProvider {
       throw new PlanningCallError(
         "unknown",
         signal.aborted ? "PLANNING_INTERRUPTED" : "PLANNING_RESULT_UNKNOWN",
+        undefined,
+        signal.aborted ? undefined : failureDiagnostic(e, phase),
       );
     }
   }

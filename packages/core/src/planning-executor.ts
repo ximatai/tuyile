@@ -42,7 +42,7 @@ export class PlanningExecutor {
             dispatch.attemptId,
             call.kind,
             undefined,
-            call.code,
+            call.diagnosticCode ?? call.code,
           );
           if (
             call.kind === "rejected" &&
@@ -94,6 +94,8 @@ export class PlanningExecutor {
         "REFERENCE_UNAVAILABLE",
         "PLANNING_REFERENCE_LIMIT",
         "PLANNING_FORMAT_INVALID",
+        "PLANNING_RESPONSE_INVALID",
+        "PLANNING_RESPONSE_LIMIT",
         "PLANNING_RESULT_UNKNOWN",
         "PLANNING_INTERRUPTED",
         "PLANNING_STOPPED",
