@@ -913,3 +913,103 @@ it("calibrates only untouched starter styles and keeps the migration repeatable"
     (await library.styles(f.principal)).find((s) => s.id === personal.id),
   ).toEqual(personal);
 });
+
+it("picks only personal text favorites before pagination and exposes only published recommendations", async () => {
+  const base = { source: "favorites" as const, offset: 0, search: "" };
+  expect((await library.promptPicker(f.principal, base)).items).toEqual([]);
+  expect(
+    (
+      await library.promptPicker(f.principal, {
+        ...base,
+        source: "recommended",
+      })
+    ).items.map((p) => p.id),
+  ).toEqual(["brand-banner", "illustration-scene", "product-studio"]);
+  const asset = await f.creation.upload(f.principal, f.png);
+  await f.pool.query(
+    "INSERT INTO library_favorites(id,workspace_id,title,group_name,prompt) SELECT gen_random_uuid(),$1,'提示词'||n,CASE WHEN n%2=0 THEN 'A组' ELSE 'B组' END,'完整正文'||n FROM generate_series(1,55) n",
+    [f.principal.workspaceId],
+  );
+  await f.pool.query(
+    "INSERT INTO library_favorites(id,workspace_id,title,group_name,asset_id,created_at) SELECT gen_random_uuid(),$1,'图片'||n,'仅图片分组',$2,now()+interval '1 day' FROM generate_series(1,55) n",
+    [f.principal.workspaceId, asset.id],
+  );
+  const first = await library.promptPicker(f.principal, base),
+    second = await library.promptPicker(f.principal, { ...base, offset: 50 });
+  expect(first.items).toHaveLength(50);
+  expect(first.hasMore).toBe(true);
+  expect(second.items).toHaveLength(5);
+  expect(second.hasMore).toBe(false);
+  expect(new Set([...first.items, ...second.items].map((p) => p.id)).size).toBe(
+    55,
+  );
+  expect(first.groups).toEqual(["A组", "B组"]);
+  const found = await library.promptPicker(f.principal, {
+    ...base,
+    search: "完整正文55",
+    group: "B组",
+  });
+  expect(found.items.map((p) => p.title)).toEqual(["提示词55"]);
+  expect(found.groups).toEqual(["A组", "B组"]);
+  expect(
+    (
+      await library.promptPicker(f.principal, {
+        ...base,
+        search: "完整正文55",
+        group: "A组",
+      })
+    ).items,
+  ).toHaveLength(0);
+  const user = await f.service.createUser(f.principal, "picker-member");
+  await finishTemporaryPassword(f.service, user);
+  const login = await f.service.login("picker-member", testPassword),
+    member = (await f.service.authenticate(login.token)).user;
+  expect((await library.promptPicker(member, base)).items).toHaveLength(0);
+  expect((await library.promptPicker(member, base)).groups).toHaveLength(0);
+  const input = {
+    id: "featured-picker-test",
+    title: "精选测试",
+    category: "新增分类",
+    prompt: "推荐的完整正文",
+    published: false,
+    featured: true,
+    revision: 0,
+  };
+  const saved = await library.savePrompt(f.principal, input);
+  expect(
+    (
+      await library.promptPicker(member, { ...base, source: "recommended" })
+    ).items.some((p) => p.id === saved.id),
+  ).toBe(false);
+  const published = await library.savePrompt(f.principal, {
+    ...input,
+    revision: saved.revision,
+    published: true,
+  });
+  const listed = await library.promptPicker(member, {
+    ...base,
+    source: "recommended",
+    group: "新增分类",
+    search: "完整正文",
+  });
+  expect(listed.items.map((p) => p.id)).toEqual([saved.id]);
+  const { featured, ...legacyInput } = {
+    ...input,
+    published: true,
+    revision: published.revision,
+  };
+  const unchanged = await library.savePrompt(f.principal, legacyInput);
+  expect(unchanged.featured).toBe(true);
+  await library.savePrompt(f.principal, {
+    ...input,
+    published: true,
+    featured: false,
+    revision: unchanged.revision,
+  });
+  expect(
+    (
+      await library.promptPicker(member, { ...base, source: "recommended" })
+    ).items.some((p) => p.id === saved.id),
+  ).toBe(false);
+  expect((await f.repo.usage(f.principal)).used).toBe(0);
+});

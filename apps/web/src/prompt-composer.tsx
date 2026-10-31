@@ -2,15 +2,8 @@ import { StyleSelector } from "./style-selector";
 import { composeCreativePrompt, type CreationStyle } from "@tuyile/contracts";
 import { WandSparkles } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ComponentRef } from "react";
-import {
-  Button,
-  Input,
-  Notice,
-  Popover,
-  Tooltip,
-  useConfirm,
-} from "@tuyile/ui";
-import { promptExamples } from "./creation-presets";
+import { Button, Input, Notice, Popover, useConfirm } from "@tuyile/ui";
+import { PromptShortcuts } from "./prompt-shortcuts";
 export function PromptComposer({
   value,
   onChange,
@@ -46,29 +39,24 @@ export function PromptComposer({
       : composeCreativePrompt({ prompt: value, style }).length > 12000
         ? "需求与风格合计不能超过 12000 字符。"
         : "";
-  async function example(prompt: string) {
+  async function applyPrompt(prompt: string) {
     if (
       value.trim() &&
       value !== prompt &&
-      !(await confirm("用这个示例替换当前提示词？"))
+      !(await confirm("用选中的提示词替换当前内容？"))
     )
-      return;
+      return false;
     onChange(prompt);
     setAssistOpen(false);
     textarea.current?.focus();
+    return true;
   }
   const assist = (
     <div className="prompt-assist-controls">
-      {" "}
-      <div className="prompt-shortcuts" role="group" aria-label="快捷提示词">
-        {promptExamples.map((p) => (
-          <Tooltip key={p.label} title={p.prompt} trigger={["hover", "focus"]}>
-            <Button type="button" onClick={() => void example(p.prompt)}>
-              {p.label}
-            </Button>
-          </Tooltip>
-        ))}
-      </div>
+      <PromptShortcuts
+        onChoose={applyPrompt}
+        visible={visible && (!compact || assistOpen)}
+      />
       <StyleSelector
         style={style}
         onChange={onStyleChange}

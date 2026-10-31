@@ -1,26 +1,4 @@
 // Interaction and preset geometry adapted from GPT Image Canvas (MIT); see THIRD_PARTY_NOTICES.md.
-export const promptExamples = [
-  {
-    label: "产品海报",
-    prompt:
-      "为一款产品设计高端商业海报，突出产品主体，精致布光、简洁背景，预留清晰的标题空间。",
-  },
-  {
-    label: "室内空间",
-    prompt:
-      "一间安静的现代工作室，清晨自然光透过窗户，木质家具与绿植，干净构图，真实空间摄影。",
-  },
-  {
-    label: "角色头像",
-    prompt:
-      "一个原创角色头像，温暖自然的表情，清爽背景，细腻插画质感，突出人物个性。",
-  },
-  {
-    label: "城市夜景",
-    prompt:
-      "未来城市的雨后夜景，街道倒映霓虹，富有层次的建筑与灯光，电影感构图。",
-  },
-];
 export interface SizePreset {
   tier: string;
   ratio: string;

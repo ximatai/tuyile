@@ -5,6 +5,7 @@ import {
   type CreationService,
 } from "@tuyile/core";
 import {
+  promptPickerQuery,
   styleInput,
   favoriteInput,
   promptTemplateInput,
@@ -20,6 +21,14 @@ export function libraryRoutes(
   library: LibraryService,
   creation: CreationService,
 ) {
+  app.get("/api/library/prompt-picker", async (c) =>
+    c.json(
+      await library.promptPicker(
+        c.get("session").user,
+        promptPickerQuery.parse(c.req.query()),
+      ),
+    ),
+  );
   app.get("/api/library/styles", async (c) =>
     c.json({ styles: await library.styles(c.get("session").user) }),
   );

@@ -371,8 +371,8 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     .click();
   await expect(page.getByText("本地测试模型：生成测试色块")).toBeVisible();
   const projectUrl = page.url();
-  await page.getByRole("button", { name: "产品海报", exact: true }).click();
-  await expect(page.getByLabel("创作需求")).toHaveValue(/高端商业海报/);
+  await page.getByRole("button", { name: "简洁商品展示", exact: true }).click();
+  await expect(page.getByLabel("创作需求")).toHaveValue(/棚拍展示图/);
   const authoredPrompt = await page.getByLabel("创作需求").inputValue();
   await page.getByRole("combobox", { name: "风格", exact: true }).click();
   await page
@@ -407,7 +407,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     .getByRole("button", { name: "应用", exact: true })
     .click();
   const styledDraft = await page.getByLabel("创作需求").inputValue();
-  await page.getByRole("button", { name: "城市夜景", exact: true }).click();
+  await page.getByRole("button", { name: "叙事插画场景", exact: true }).click();
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "取消", exact: true })
@@ -764,7 +764,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   const sentStyleRequest = (await styledRequest).postDataJSON();
   expect(sentStyleRequest.prompt).toBe("合成测试：注销后继续");
   expect(sentStyleRequest.style.name).toBe("海报视觉");
-  expect(sentStyleRequest.style.text).toContain("鲜明的海报构图");
+  expect(sentStyleRequest.style.text).toContain("采用海报式视觉组织");
   await expect(
     reopened.getByRole("status", { name: "图片生成状态" }),
   ).toContainText("提交结果待确认");
@@ -1604,7 +1604,7 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
   await expect(
     page
       .getByRole("tooltip")
-      .getByRole("button", { name: "产品海报", exact: true }),
+      .getByRole("button", { name: "简洁商品展示", exact: true }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(
@@ -3458,4 +3458,194 @@ test("style library supports public maintenance and private saved copies without
   const tasks = await (await page.request.get("/api/images/tasks")).json();
   expect(tasks.tasks).toHaveLength(originalTasks.tasks.length);
   await page.screenshot({ path: ".codex-temp/style-library.png" });
+});
+
+test("prompt shortcuts prefer text favorites and browse in place without changing style or references", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const session = await (await page.request.get("/api/auth/me")).json();
+  const headers = {
+    Origin: "http://127.0.0.1:5180",
+    "X-CSRF-Token": session.csrfToken,
+  };
+  const project = await (
+    await page.request.post("/api/projects", {
+      headers,
+      data: { name: "提示词快捷验收" },
+    })
+  ).json();
+  await page.goto(`/projects/${project.id}`);
+  const shortcuts = page.getByRole("group", {
+    name: "快捷提示词",
+    exact: true,
+  });
+  await expect(shortcuts.getByRole("button")).toHaveCount(4);
+  await expect(
+    shortcuts.getByRole("button", { name: "简洁商品展示", exact: true }),
+  ).toBeVisible();
+  const more = shortcuts.getByRole("button", {
+    name: "更多提示词",
+    exact: true,
+  });
+  await more.click();
+  const picker = page.locator(".prompt-picker:visible");
+  await expect(
+    picker.getByRole("tab", { name: "推荐提示词", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await picker.getByRole("tab", { name: "我的收藏", exact: true }).click();
+  await expect(
+    picker.getByText("还没有收藏提示词", { exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(more).toBeFocused();
+  for (let n = 1; n <= 5; n++)
+    expect(
+      (
+        await page.request.post("/api/library/favorites", {
+          headers,
+          data: {
+            id: randomUUID(),
+            title: `收藏提示${n}`,
+            groupName: n === 1 ? "A组" : "B组",
+            prompt: `完整收藏正文${n}`,
+          },
+        })
+      ).status(),
+    ).toBe(201);
+  const png = await (
+    await import("sharp")
+  )
+    .default({
+      create: { width: 256, height: 256, channels: 3, background: "#0062b0" },
+    })
+    .png()
+    .toBuffer();
+  const asset = await (
+    await page.request.post("/api/images/uploads", {
+      headers: { ...headers, "Content-Type": "image/png" },
+      data: png,
+    })
+  ).json();
+  expect(
+    (
+      await page.request.post("/api/library/favorites", {
+        headers,
+        data: {
+          id: randomUUID(),
+          title: "不应出现的图片收藏",
+          groupName: "仅图片",
+          assetId: asset.id,
+        },
+      })
+    ).status(),
+  ).toBe(201);
+  await page.reload();
+  await expect(shortcuts.getByRole("button")).toHaveCount(4);
+  await expect(shortcuts).not.toContainText("不应出现的图片收藏");
+  await expect(shortcuts).not.toContainText("简洁商品展示");
+  await expect(
+    shortcuts.getByRole("button", { name: "收藏提示5", exact: true }),
+  ).toBeVisible();
+  await page.getByLabel("创作需求", { exact: true }).fill("已有的独立需求");
+  await page.getByRole("combobox", { name: "风格", exact: true }).click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("真实摄影", { exact: true })
+    .click();
+  await page
+    .getByTestId("reference-upload")
+    .locator('input[type="file"]')
+    .setInputFiles({ name: "参考.png", mimeType: "image/png", buffer: png });
+  await expect(
+    page.getByTestId("reference-upload").locator(".attachment"),
+  ).toHaveCount(1);
+  await more.click();
+  await expect(
+    picker.getByRole("tab", { name: "我的收藏", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await picker
+    .getByRole("textbox", { name: "搜索提示词", exact: true })
+    .fill("正文1");
+  await expect(picker.locator(".prompt-picker-item")).toHaveCount(1);
+  await picker.getByRole("combobox", { name: "收藏分组", exact: true }).click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("B组", { exact: true })
+    .click();
+  await expect(
+    picker.getByText("没有匹配的提示词", { exact: true }),
+  ).toBeVisible();
+  await picker.getByRole("combobox", { name: "收藏分组", exact: true }).click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("A组", { exact: true })
+    .click();
+  await picker.getByRole("button", { name: "使用", exact: true }).click();
+  const confirm = page.getByRole("dialog", { name: "请确认", exact: true });
+  await confirm.getByRole("button", { name: "取消", exact: true }).click();
+  await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
+    "已有的独立需求",
+  );
+  await expect(picker).toBeVisible();
+  await picker.getByRole("button", { name: "使用", exact: true }).click();
+  await confirm.getByRole("button", { name: "确认", exact: true }).click();
+  await expect(picker).toBeHidden();
+  await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
+    "完整收藏正文1",
+  );
+  await expect(
+    page.getByRole("combobox", { name: "风格", exact: true }).locator(".."),
+  ).toContainText("真实摄影");
+  await expect(
+    page.getByTestId("reference-upload").locator(".attachment"),
+  ).toHaveCount(1);
+  expect(
+    (
+      await (
+        await page.request.get(`/api/images/tasks?projectId=${project.id}`)
+      ).json()
+    ).tasks,
+  ).toHaveLength(0);
+  await more.click();
+  await picker
+    .getByRole("textbox", { name: "搜索提示词", exact: true })
+    .fill("正文");
+  await expect(picker.locator(".prompt-picker-item")).toHaveCount(5);
+  await page.screenshot({ path: ".codex-temp/prompt-shortcuts.png" });
+  await page.keyboard.press("Escape");
+  for (let n = 6; n <= 56; n++)
+    await page.request.post("/api/library/favorites", {
+      headers,
+      data: {
+        id: randomUUID(),
+        title: `分页收藏${n}`,
+        groupName: "分页",
+        prompt: `分页正文${n}`,
+      },
+    });
+  await more.click();
+  await expect(picker.locator(".prompt-picker-item")).toHaveCount(50);
+  await picker.getByRole("button", { name: "加载更多", exact: true }).click();
+  await expect(picker.locator(".prompt-picker-item")).toHaveCount(56);
+  await page.keyboard.press("Escape");
+  await page.goto("/admin/prompts");
+  const row = page.getByRole("row").filter({ hasText: "简洁商品展示" });
+  await row.getByRole("button", { name: "编辑", exact: true }).click();
+  const editor = page.getByRole("dialog", { name: "编辑提示词", exact: true });
+  await expect(
+    editor.getByRole("checkbox", { name: "设为推荐提示词", exact: true }),
+  ).toBeChecked();
+  await editor
+    .getByRole("checkbox", { name: "设为推荐提示词", exact: true })
+    .uncheck();
+  await editor.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(editor).toBeHidden();
+  const recommended = await (
+    await page.request.get("/api/library/prompt-picker?source=recommended")
+  ).json();
+  expect(recommended.items.some((p: any) => p.id === "product-studio")).toBe(
+    false,
+  );
 });

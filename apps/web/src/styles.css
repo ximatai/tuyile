@@ -3663,3 +3663,20 @@ h3 {
 
 .style-editor-library-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .style-editor-library-actions .style-reset { margin-left: auto; }
+
+/* Keep shortcut height stable; browse the full collection in the popover. */
+.prompt-shortcuts { flex-wrap: nowrap; align-items: center; min-width: 0; }
+.prompt-shortcuts .prompt-shortcut { min-width: 0; max-width: calc((100% - 64px) / 3); }
+.prompt-shortcut > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prompt-shortcuts-more { flex-shrink: 0; margin-left: auto; }
+.prompt-picker { width: 400px; }
+.prompt-picker-filters { display: grid; grid-template-columns: minmax(0, 1fr) 120px; gap: 8px; margin-bottom: 12px; }
+.prompt-picker-filters .field { margin: 0; }
+.prompt-picker-results { max-height: min(320px, 45vh); overflow-y: auto; overscroll-behavior: contain; }
+.prompt-picker-item { padding: 10px 2px; border-bottom: 1px solid var(--line); }
+.prompt-picker-item-heading { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.prompt-picker-item-heading strong { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.prompt-picker-item-heading .hint { max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prompt-picker-item .content-excerpt { margin-bottom: 0; white-space: pre-wrap; }
+
+.prompt-shortcuts-more[aria-expanded="true"] svg { transform: rotate(180deg); }

@@ -103,6 +103,7 @@ function PromptTemplatesManager() {
           category: row.category,
           prompt: row.prompt,
           published: row.published,
+          featured: row.featured ?? false,
           revision: row.revision,
         }
       : {
@@ -111,6 +112,7 @@ function PromptTemplatesManager() {
           category: "",
           prompt: "",
           published: false,
+          featured: false,
           revision: 0,
         };
     setDraft(value);
@@ -184,9 +186,12 @@ function PromptTemplatesManager() {
             key: "status",
             width: 120,
             render: (_, r) => (
-              <Tag color={r.published ? "success" : "default"}>
-                {r.published ? "已上架" : "未上架"}
-              </Tag>
+              <>
+                <Tag color={r.published ? "success" : "default"}>
+                  {r.published ? "已上架" : "未上架"}
+                </Tag>
+                {r.featured && <Tag color="blue">推荐</Tag>}
+              </>
             ),
           },
           {
@@ -268,6 +273,15 @@ function PromptTemplatesManager() {
                 onChange={(e) => setDraft({ ...draft, prompt: e.target.value })}
               />
             </div>
+            <Checkbox
+              checked={!!draft.featured}
+              disabled={busy}
+              onChange={(e) =>
+                setDraft({ ...draft, featured: e.target.checked })
+              }
+            >
+              设为推荐提示词
+            </Checkbox>
             <Checkbox
               checked={draft.published}
               disabled={busy}

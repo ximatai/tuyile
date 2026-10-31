@@ -54,6 +54,7 @@ export const promptTemplateInput = z
     category: templateText(60),
     prompt: templateText(12000),
     published: z.boolean(),
+    featured: z.boolean().optional(),
     revision: z.number().int().min(0).max(2147483646),
   })
   .strict();
@@ -95,4 +96,34 @@ export const styleInput = z
 export type StyleInput = z.infer<typeof styleInput>;
 export interface SavedStyle extends StyleInput {
   scope: "public" | "personal";
+}
+
+export const promptPickerQuery = z
+  .object({
+    source: z.enum(["favorites", "recommended"]).default("favorites"),
+    offset: z.coerce.number().int().min(0).max(100000).default(0),
+    search: z
+      .string()
+      .trim()
+      .max(100)
+      .refine((s) => !s.includes("\0"))
+      .default(""),
+    group: z
+      .string()
+      .max(60)
+      .refine((s) => !s.includes("\0"))
+      .optional(),
+  })
+  .strict();
+export type PromptPickerQuery = z.infer<typeof promptPickerQuery>;
+export interface PromptPickerItem {
+  id: string;
+  title: string;
+  prompt: string;
+  groupName: string;
+}
+export interface PromptPickerPage {
+  items: PromptPickerItem[];
+  groups: string[];
+  hasMore: boolean;
 }

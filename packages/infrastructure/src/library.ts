@@ -5,6 +5,7 @@ import {
   type LibraryRepository,
 } from "@tuyile/core";
 import type {
+  PromptPickerQuery,
   StyleInput,
   SavedStyle,
   Principal,
@@ -38,6 +39,7 @@ const managedPrompt = (r: any): ManagedPromptTemplate => ({
   category: r.category,
   prompt: r.prompt,
   published: r.published,
+  featured: r.featured,
   revision: r.revision,
   createdAt: r.created_at.toISOString(),
   updatedAt: r.updated_at.toISOString(),
@@ -46,6 +48,39 @@ class PgLibraryRepository
   extends PgCreationContext
   implements LibraryRepository
 {
+  async pickerItems(p: Principal, input: PromptPickerQuery) {
+    await this.auth(this.c, p, false, false);
+    const args = [
+      p.workspaceId,
+      input.offset,
+      input.search,
+      input.group ?? null,
+    ];
+    return (
+      await this.c.query(
+        input.source === "favorites"
+          ? "SELECT id,title,prompt,group_name FROM library_favorites WHERE workspace_id=$1 AND prompt IS NOT NULL AND ($3='' OR strpos(lower(title||' '||prompt),lower($3))>0) AND ($4::text IS NULL OR group_name=$4) ORDER BY created_at DESC,id LIMIT 51 OFFSET $2"
+          : "SELECT id,title,prompt,category AS group_name FROM prompt_templates WHERE published AND featured AND $1::uuid IS NOT NULL AND ($3='' OR strpos(lower(title||' '||prompt),lower($3))>0) AND ($4::text IS NULL OR category=$4) ORDER BY created_at,id LIMIT 51 OFFSET $2",
+        args,
+      )
+    ).rows.map((r) => ({
+      id: r.id,
+      title: r.title,
+      prompt: r.prompt,
+      groupName: r.group_name,
+    }));
+  }
+  async pickerGroups(p: Principal, source: PromptPickerQuery["source"]) {
+    await this.auth(this.c, p, false, false);
+    return (
+      await this.c.query(
+        source === "favorites"
+          ? "SELECT DISTINCT group_name AS name FROM library_favorites WHERE workspace_id=$1 AND prompt IS NOT NULL ORDER BY name LIMIT 200"
+          : "SELECT DISTINCT category AS name FROM prompt_templates WHERE published AND featured AND $1::uuid IS NOT NULL ORDER BY name LIMIT 200",
+        [p.workspaceId],
+      )
+    ).rows.map((r) => r.name as string);
+  }
   async styles(p: Principal, managed: boolean) {
     await this.auth(this.c, p, managed, false);
     const rows = await this.c.query(
@@ -156,13 +191,14 @@ class PgLibraryRepository
       input.prompt,
       input.published,
       input.revision,
+      input.featured ?? null,
     ];
     const row = (
       await this.c.query(
         input.revision === 0
-          ? "INSERT INTO prompt_templates(id,title,category,prompt,published) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO NOTHING RETURNING *"
-          : "UPDATE prompt_templates SET title=$2,category=$3,prompt=$4,published=$5,revision=revision+1,updated_at=now() WHERE id=$1 AND revision=$6 RETURNING *",
-        input.revision === 0 ? args.slice(0, 5) : args,
+          ? "INSERT INTO prompt_templates(id,title,category,prompt,published,featured) VALUES($1,$2,$3,$4,$5,coalesce($6,false)) ON CONFLICT(id) DO NOTHING RETURNING *"
+          : "UPDATE prompt_templates SET title=$2,category=$3,prompt=$4,published=$5,featured=coalesce($7,featured),revision=revision+1,updated_at=now() WHERE id=$1 AND revision=$6 RETURNING *",
+        input.revision === 0 ? [...args.slice(0, 5), args[6]] : args,
       )
     ).rows[0];
     if (!row) throw new AppError("PROMPT_TEMPLATE_CONFLICT", 409);

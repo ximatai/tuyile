@@ -2,6 +2,9 @@ import {
   styleInput,
   type StyleInput,
   type SavedStyle,
+  promptPickerQuery,
+  type PromptPickerQuery,
+  type PromptPickerItem,
   favoriteInput,
   promptTemplateInput,
   promptCategoryFilter,
@@ -15,6 +18,14 @@ import {
   type PromptTemplate,
 } from "@tuyile/contracts";
 export interface LibraryRepository {
+  pickerItems(
+    p: Principal,
+    input: PromptPickerQuery,
+  ): Promise<PromptPickerItem[]>;
+  pickerGroups(
+    p: Principal,
+    source: PromptPickerQuery["source"],
+  ): Promise<string[]>;
   styles(p: Principal, managed: boolean): Promise<SavedStyle[]>;
   saveStyle(
     p: Principal,
@@ -58,6 +69,17 @@ export interface LibraryStore {
 }
 export class LibraryService {
   constructor(private readonly store: LibraryStore) {}
+  promptPicker(p: Principal, input: PromptPickerQuery) {
+    const parsed = promptPickerQuery.parse(input);
+    return this.store.read(async (r) => {
+      const rows = await r.pickerItems(p, parsed);
+      return {
+        items: rows.slice(0, 50),
+        hasMore: rows.length > 50,
+        groups: await r.pickerGroups(p, parsed.source),
+      };
+    });
+  }
   styles(p: Principal, managed = false) {
     return this.store.read((r) => r.styles(p, managed));
   }

@@ -227,7 +227,7 @@ export async function assertSchema(pool: pg.Pool) {
     "SELECT version FROM schema_migrations ORDER BY version",
   );
   if (
-    result.rows.length !== 20 ||
+    result.rows.length !== 21 ||
     result.rows[0].version !== 1 ||
     result.rows[1].version !== 2 ||
     result.rows[2].version !== 3 ||
@@ -247,7 +247,8 @@ export async function assertSchema(pool: pg.Pool) {
     result.rows[16].version !== 17 ||
     result.rows[17].version !== 18 ||
     result.rows[18].version !== 19 ||
-    result.rows[19].version !== 20
+    result.rows[19].version !== 20 ||
+    result.rows[20].version !== 21
   )
     throw new Error("SCHEMA_VERSION_MISMATCH_RUN_MIGRATIONS");
   const r = await pool.query(

@@ -41,6 +41,16 @@ export async function resetDatabase() {
         "utf8",
       ),
     );
+    const featuredSql = await readFile(
+      new URL(
+        "../migrations/0021_featured_prompt_shortcuts.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    await owner.query(
+      featuredSql.slice(featuredSql.indexOf("UPDATE prompt_templates")),
+    );
     await owner.query("TRUNCATE tuyile.model_services CASCADE");
     await owner.query(
       "UPDATE tuyile.model_catalog_state SET managed=false,revision=0 WHERE id=1",
