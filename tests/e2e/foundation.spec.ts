@@ -3948,10 +3948,7 @@ test("prompt bookmarks connect public browsing, private editing and protected cr
     .click();
   await expect(prompt).toHaveValue(body);
   await prompt.fill(`自定义收藏正文 ${suffix}`);
-  await page
-    .locator(".prompt-save-current")
-    .getByRole("button", { name: "收藏提示词", exact: true })
-    .click();
+  await page.getByRole("button", { name: "收藏提示词", exact: true }).click();
   const dialog = page.getByRole("dialog", { name: "收藏提示词", exact: true });
   await dialog.getByLabel("标题", { exact: true }).fill(`我的版本${suffix}`);
   await dialog.getByRole("button", { name: "收藏", exact: true }).click();
@@ -4550,4 +4547,81 @@ test("Agent clarification stays conversational and proposals separate creative a
       ).json()
     ).tasks,
   ).toEqual([]);
+});
+
+test("shared creation controls respect parent locks and dismiss helpers across modes", async ({
+  page,
+}) => {
+  await login(page);
+  await page.getByLabel("项目名称", { exact: true }).fill("共享创作控件验收");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await page.getByRole("link", { name: /共享创作控件验收 .*创建/ }).click();
+  const prompt = page.getByLabel("创作需求", { exact: true });
+  await prompt.fill("共享控件测试：暖色咖啡店海报");
+  const style = page.getByRole("combobox", { name: "风格", exact: true });
+  await style.click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("真实摄影", { exact: true })
+    .click();
+  await page.getByRole("button", { name: "编辑风格", exact: true }).click();
+  await page.getByLabel("风格描述", { exact: true }).fill("尚未应用的临时编辑");
+  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await expect(page.locator(".style-editor:visible")).toHaveCount(0);
+  const agentHelp = page.getByRole("button", {
+    name: "规划与执行规则",
+    exact: true,
+  });
+  await agentHelp.click();
+  const content = page.locator(".help-content:visible");
+  await content.press("Escape");
+  await expect(agentHelp).toBeFocused();
+  await agentHelp.click();
+  await page.getByRole("tab", { name: "直接创作", exact: true }).click();
+  await expect(page.locator(".help-content:visible")).toHaveCount(0);
+  await expect(prompt).toHaveValue("共享控件测试：暖色咖啡店海报");
+  const directHelp = page.getByRole("button", {
+    name: "生成说明",
+    exact: true,
+  });
+  await directHelp.click();
+  await page.locator(".help-content:visible").press("Escape");
+  await expect(directHelp).toBeFocused();
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  await page.route("**/api/images/tasks", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    await gate;
+    await route.fulfill({
+      status: 429,
+      json: { error: { code: "SUBMISSION_RATE" } },
+    });
+  });
+  await page.getByRole("button", { name: "提交图片任务", exact: true }).click();
+  await expect(style).toBeDisabled();
+  await expect(page.locator(".style-selector .ant-select")).toHaveClass(
+    /ant-select-disabled/,
+  );
+  await expect(
+    page.getByRole("button", { name: "收藏提示词", exact: true }),
+  ).toHaveAttribute("disabled", "");
+  await expect(page.locator(".prompt-shortcut").first()).toHaveAttribute(
+    "disabled",
+    "",
+  );
+
+  await expect(
+    page.getByRole("button", { name: "收藏提示词", exact: true }),
+  ).toBeDisabled();
+  release();
+  await expect(style).toBeEnabled();
+  await expect(prompt).toHaveValue("共享控件测试：暖色咖啡店海报");
+  await page.getByRole("button", { name: "编辑风格", exact: true }).click();
+  await expect(page.getByLabel("风格描述", { exact: true })).not.toHaveValue(
+    "尚未应用的临时编辑",
+  );
+  await page
+    .locator(".style-editor")
+    .getByRole("button", { name: "取消", exact: true })
+    .click();
 });

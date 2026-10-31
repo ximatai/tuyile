@@ -1,7 +1,15 @@
 import { useEffect, useRef, useState, type ComponentRef } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { PromptPickerPage } from "@tuyile/contracts";
-import { Button, ChoiceField, Input, Notice, Popover, Tabs } from "@tuyile/ui";
+import {
+  Button,
+  ChoiceField,
+  Input,
+  Notice,
+  Popover,
+  Tabs,
+  useControlsDisabled,
+} from "@tuyile/ui";
 import { ChevronDown, Search } from "lucide-react";
 import { client } from "./api";
 import { useSessionState } from "./session-state";
@@ -14,6 +22,7 @@ export function PromptShortcuts({
   onChoose: (prompt: string) => Promise<boolean>;
   visible?: boolean;
 }) {
+  const disabled = useControlsDisabled();
   const state = useSessionState(),
     api = client(state.session.csrfToken);
   const [open, setOpen] = useState(false),
@@ -88,15 +97,15 @@ export function PromptShortcuts({
     return () => clearTimeout(timer);
   }, [search]);
   useEffect(() => {
-    if (!visible) setOpen(false);
-  }, [visible]);
+    if (!visible || disabled) setOpen(false);
+  }, [visible, disabled]);
   function resetFilters() {
     setSearch("");
     setTerm("");
     setGroup(undefined);
   }
   function toggle(next: boolean) {
-    if (choosing) return;
+    if (disabled || choosing) return;
     if (next) {
       resetFilters();
       setSource(
@@ -108,7 +117,7 @@ export function PromptShortcuts({
     setOpen(next);
   }
   async function choose(prompt: string) {
-    if (selecting.current) return;
+    if (disabled || selecting.current) return;
     selecting.current = true;
     setChoosing(true);
     try {
@@ -125,7 +134,7 @@ export function PromptShortcuts({
           key={item.id}
           type="button"
           className="prompt-shortcut"
-          disabled={choosing}
+          disabled={disabled || choosing}
           onClick={() => void choose(item.prompt)}
         >
           {item.title}
@@ -230,7 +239,7 @@ export function PromptShortcuts({
                     type="button"
                     className="prompt-picker-choice"
                     aria-label={`选用 ${item.title}`}
-                    disabled={choosing}
+                    disabled={disabled || choosing}
                     onClick={() => void choose(item.prompt)}
                   >
                     <span className="prompt-picker-item-heading">
@@ -257,7 +266,7 @@ export function PromptShortcuts({
               {query.hasNextPage && (
                 <Button
                   type="button"
-                  disabled={query.isFetchingNextPage}
+                  disabled={disabled || query.isFetchingNextPage}
                   loading={query.isFetchingNextPage}
                   onClick={() => void query.fetchNextPage()}
                 >
@@ -279,7 +288,7 @@ export function PromptShortcuts({
           className="prompt-shortcuts-more"
           aria-label="更多提示词"
           aria-expanded={open}
-          disabled={choosing || favorites.isPending}
+          disabled={disabled || choosing || favorites.isPending}
           onKeyDown={(e) => {
             if (e.key === "Escape") {
               e.stopPropagation();

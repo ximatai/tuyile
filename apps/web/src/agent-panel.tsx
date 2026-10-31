@@ -526,7 +526,10 @@ export function AgentPanel({
                     ? ` · 待结算 ${planning.data.held} 次`
                     : ""}
                 </span>
-                <HelpPopover title="规划与执行规则">
+                <HelpPopover
+                  title="规划与执行规则"
+                  visible={visible && (!hasProposal || composeOpen)}
+                >
                   规划开始调用时计次，确认计划后才生成图片并预留额度。额度不足时不降低规格。生图任务是后台执行，关闭页面不影响任务执行和费用核算。取消可能计费，后台中断不自动续跑。
                 </HelpPopover>
               </div>
@@ -564,7 +567,7 @@ export function AgentPanel({
                   : "计划已确认"
                 : `本计划预留 ${total} 张图片`}
             </strong>
-            <HelpPopover title="执行说明">
+            <HelpPopover title="执行说明" visible={visible && hasProposal}>
               生图任务是后台执行，关闭页面不影响任务执行和费用核算。取消可能计费；后台中断不自动续跑，已保存图片保留。
             </HelpPopover>
           </div>

@@ -9,6 +9,7 @@ import {
   Image,
   Upload,
   Tooltip,
+  useControlsDisabled,
 } from "@tuyile/ui";
 import {
   allowedQualities,
@@ -28,7 +29,7 @@ export function ImageControls({
   count = true,
   compact = false,
   labelPrefix = "",
-  disabled = false,
+  disabled: disabledProp = false,
 }: {
   usage?: ImageUsage;
   value: ImageSettings;
@@ -39,6 +40,7 @@ export function ImageControls({
   labelPrefix?: string;
   disabled?: boolean;
 }) {
+  const disabled = useControlsDisabled(disabledProp);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const customSizeRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -364,7 +366,7 @@ export function ReferenceAttachments({
   references,
   onRemove,
   onUpload,
-  disabled,
+  disabled: disabledProp,
   maxReferences = 4,
   agent = false,
   selected = [],
@@ -379,6 +381,7 @@ export function ReferenceAttachments({
   selected?: { id: string; name: string }[];
   onUseSelected?: () => void;
 }) {
+  const disabled = useControlsDisabled(disabledProp);
   return (
     <div
       className="reference-attachments"

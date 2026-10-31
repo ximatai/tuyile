@@ -665,6 +665,7 @@ function CreationEditor({
               >
                 <fieldset disabled={busy || !!pending || !usage?.models.length}>
                   <PromptComposer
+                    visible={mode === "direct"}
                     height={promptHeight}
                     value={prompt}
                     onChange={setPrompt}
@@ -759,7 +760,7 @@ function CreationEditor({
                             : "排队中…"
                         : `生成 ${settings.count} 张`}
                 </Button>
-                <HelpPopover title="生成说明">
+                <HelpPopover title="生成说明" visible={mode === "direct"}>
                   生图任务是后台执行，关闭页面不影响任务执行和费用核算。
                 </HelpPopover>
               </div>
