@@ -3564,3 +3564,6 @@ h3 {
 .prompt-use-create { display: inline-flex; align-items: center; gap: 6px; width: 100%; }
 .prompt-library .prompt-card .actions > .ant-popover-open,
 .prompt-library .prompt-card .actions > button[aria-label="使用提示词"] { display: inline-flex; align-items: center; gap: 8px; color: var(--brand-blue); }
+.prompt-use-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.prompt-use-heading h3 { margin: 0; }
+.prompt-use-search-toggle { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; border-color: transparent; box-shadow: none; }

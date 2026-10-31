@@ -23,6 +23,8 @@ export function PromptUseMenu({
   const formId = useId();
   const state = useSessionState(),
     api = client(state.session.csrfToken);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const searchId = useId();
   const [open, setOpen] = useState(false),
     [search, setSearch] = useState(""),
     [term, setTerm] = useState("");
@@ -129,15 +131,38 @@ export function PromptUseMenu({
         classNames={{ root: "prompt-use-popover" }}
         content={
           <div className="prompt-use-content" onKeyDown={escape}>
-            <h3>我的项目</h3>
-            <Input
-              aria-label="搜索我的项目"
-              placeholder="搜索项目"
-              prefix={<Search size={14} />}
-              maxLength={80}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+            <div className="prompt-use-heading">
+              <h3>我的项目</h3>
+              <Button
+                type="button"
+                aria-label="搜索项目"
+                aria-expanded={searchOpen}
+                aria-controls={searchOpen ? searchId : undefined}
+                className="prompt-use-search-toggle"
+                disabled={disabled || busy}
+                onClick={() => {
+                  setSearchOpen((value) => !value);
+                  if (searchOpen) {
+                    setSearch("");
+                    setTerm("");
+                  }
+                }}
+              >
+                <Search size={15} />
+              </Button>
+            </div>
+            {searchOpen && (
+              <Input
+                id={searchId}
+                autoFocus
+                aria-label="搜索我的项目"
+                placeholder="搜索项目"
+                prefix={<Search size={14} />}
+                maxLength={80}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            )}
             {projects.error && <Notice error>{projects.error.message}</Notice>}
             {projects.isPending && <p role="status">正在加载…</p>}
             <div className="prompt-use-project-list">

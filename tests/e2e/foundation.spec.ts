@@ -2809,10 +2809,19 @@ test("prompt use menu supports hover, complete project search and creating a des
   await expect(
     popup.getByRole("heading", { name: "我的项目", exact: true }),
   ).toBeVisible();
+  await expect(popup.getByLabel("搜索我的项目", { exact: true })).toHaveCount(
+    0,
+  );
+  await popup.getByRole("button", { name: "搜索项目", exact: true }).click();
   await popup.getByLabel("搜索我的项目", { exact: true }).hover();
   await expect(popup).toBeVisible();
   await popup.getByLabel("搜索我的项目", { exact: true }).fill("不存在的名称");
   await expect(popup.getByText("未找到项目", { exact: true })).toBeVisible();
+  await popup.getByRole("button", { name: "搜索项目", exact: true }).click();
+  await expect(popup.getByLabel("搜索我的项目", { exact: true })).toHaveCount(
+    0,
+  );
+  await expect(popup.getByText("未找到项目", { exact: true })).toHaveCount(0);
   await popup.getByRole("button", { name: "新建项目", exact: true }).click();
   const modal = page.getByRole("dialog", { name: "新建项目", exact: true });
   await modal.getByLabel("项目名称", { exact: true }).fill("从提示词新建");
