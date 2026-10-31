@@ -1921,6 +1921,12 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
     await page.request.get("/api/agent/usage")
   ).json();
   expect(planningAfter.used).toBe(planningBefore.used);
+  await expect(
+    page.getByRole("button", { name: "查看提示词", exact: true }),
+  ).toBeEnabled();
+  await expect(
+    page.getByRole("button", { name: "步骤 1 图片设置", exact: true }),
+  ).toBeEnabled();
   await page.reload();
   await expect(page.locator(".react-flow__node-image")).toHaveCount(3);
   await page.getByRole("tab", { name: "Agent", exact: true }).click();
@@ -4386,6 +4392,33 @@ test("Agent clarification stays conversational and proposals separate creative a
   ).json();
   const jobs: any[] = [];
   const inputs: any[] = [];
+  let completeFirstReply = () => {};
+  let failNextRevision = false,
+    passwordPosts = 0;
+  await page.route("**/api/auth/password", async (route) => {
+    passwordPosts++;
+    await route.fulfill({
+      status: 400,
+      json: { error: { code: "BAD_INPUT" } },
+    });
+  });
+  async function attemptPasswordChange() {
+    await page.getByRole("button", { name: "账户菜单", exact: true }).click();
+    await page.getByRole("menuitem", { name: "修改密码", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "修改密码", exact: true });
+    await dialog.getByLabel("当前密码", { exact: true }).fill(auth.password);
+    await dialog
+      .getByLabel("新密码", { exact: true })
+      .fill("Synthetic-blocked-password-2026!");
+    await dialog
+      .getByLabel("确认新密码", { exact: true })
+      .fill("Synthetic-blocked-password-2026!");
+    await dialog
+      .getByRole("button", { name: "保存并重新登录", exact: true })
+      .click();
+    return dialog;
+  }
+
   await page.route("**/api/agent/jobs?**", (route) =>
     route.fulfill({ json: { jobs } }),
   );
@@ -4437,10 +4470,25 @@ test("Agent clarification stays conversational and proposals separate creative a
       ],
     };
     job.plans[0].jobId = job.id;
+    if (inputs.length === 1) {
+      const reply = job.plans;
+      job.state = "running";
+      job.plans = [];
+      completeFirstReply = () => {
+        job.state = "succeeded";
+        job.plans = reply;
+      };
+    }
     jobs.unshift(job);
     await route.fulfill({ status: 202, json: job });
   });
   await page.route("**/api/agent/jobs/*/revisions", async (route) => {
+    if (failNextRevision) {
+      failNextRevision = false;
+      await route.abort("failed");
+      return;
+    }
+
     const job = jobs[0],
       last = job.plans.at(-1);
     const saved = {
@@ -4457,6 +4505,13 @@ test("Agent clarification stays conversational and proposals separate creative a
   const prompt = page.getByLabel("告诉 Agent 你的想法", { exact: true });
   await prompt.fill("设计咖啡店开业海报");
   await page.getByRole("button", { name: "生成计划", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "正在规划…", exact: true }),
+  ).toBeDisabled();
+  expect(inputs).toHaveLength(1);
+  await expect(prompt).toBeEnabled();
+  completeFirstReply();
+
   await expect(
     page.getByText(
       "用于朋友圈还是店内张贴？也可以先按当前方形规格看暖色视觉草稿。",
@@ -4517,7 +4572,54 @@ test("Agent clarification stays conversational and proposals separate creative a
     page.getByRole("button", { name: "更新方案", exact: true }),
   ).toBeDisabled();
   expect(inputs).toHaveLength(2);
+  expect(
+    await page.evaluate(() => {
+      const event = new Event("beforeunload", { cancelable: true });
+      window.dispatchEvent(event);
+      return event.defaultPrevented;
+    }),
+  ).toBe(true);
+  await page.getByRole("link", { name: "图库", exact: true }).click();
+  const leaveDialog = page.getByRole("dialog", { name: "请确认", exact: true });
+  await expect(leaveDialog).toContainText("方案修改尚未保存");
+  await leaveDialog.getByRole("button", { name: "取消", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`));
+  await expect(
+    page.getByRole("button", { name: "保存计划修改", exact: true }),
+  ).toBeVisible();
+
+  const passwordDialog = await attemptPasswordChange();
+  const discardForPassword = page.getByRole("dialog", {
+    name: "请确认",
+    exact: true,
+  });
+  await expect(discardForPassword).toContainText("方案修改尚未保存");
+  await discardForPassword
+    .getByRole("button", { name: "取消", exact: true })
+    .click();
+  await expect(passwordDialog).toContainText("请先处理当前页面");
+  expect(passwordPosts).toBe(0);
+  await passwordDialog
+    .getByRole("button", { name: "取消", exact: true })
+    .click();
+  failNextRevision = true;
   await page.getByRole("button", { name: "保存计划修改", exact: true }).click();
+
+  await expect(
+    page.getByRole("button", { name: "重试保存本次修改", exact: true }),
+  ).toBeVisible();
+  const unknownPasswordDialog = await attemptPasswordChange();
+  await expect(unknownPasswordDialog).toContainText("请先处理当前页面");
+  await expect(
+    page.getByRole("dialog", { name: "请确认", exact: true }),
+  ).toHaveCount(0);
+  expect(passwordPosts).toBe(0);
+  await unknownPasswordDialog
+    .getByRole("button", { name: "取消", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "重试保存本次修改", exact: true })
+    .click();
   await page.getByRole("button", { name: "调整方案", exact: true }).click();
   await expect(prompt).toHaveValue("保留布局，换成更年轻的配色");
 

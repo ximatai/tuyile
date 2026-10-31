@@ -141,6 +141,9 @@ export function AgentPanel({
     !modelPools.data.conversation.some((m) => m.id === conversationModel);
   const [planDirty, setPlanDirty] = useState(false);
   const history = jobs.data?.pages.flatMap((page) => page.jobs) ?? [];
+  const awaitingReply = history.some((job) =>
+    ["queued", "running"].includes(job.state),
+  );
   const selected = history.find((j) => j.id === current) ?? history[0],
     plan = selected?.plans.at(-1);
   async function refresh() {
@@ -159,7 +162,12 @@ export function AgentPanel({
   }
   async function request(event: React.FormEvent) {
     event.preventDefault();
-    if (submitting.current || busy) return;
+    if (
+      submitting.current ||
+      busy ||
+      (!pending && (awaitingReply || jobs.isPending || !!jobs.error))
+    )
+      return;
     if (planDirty) {
       setError("请先保存方案修改，再继续沟通。");
       return;
@@ -267,11 +275,13 @@ export function AgentPanel({
   );
   const requestLabel = pending
     ? "重试同一规划"
-    : plan
-      ? hasProposal
-        ? "更新方案"
-        : "发送回答"
-      : "生成计划";
+    : awaitingReply
+      ? "正在规划…"
+      : plan
+        ? hasProposal
+          ? "更新方案"
+          : "发送回答"
+        : "生成计划";
   return (
     <div
       className={`agent-panel ${!history.length ? "agent-panel-empty" : ""}`}
@@ -559,7 +569,10 @@ export function AgentPanel({
             uploadBusy ||
             !model ||
             (!pending &&
-              (!prompt.trim() ||
+              (awaitingReply ||
+                jobs.isPending ||
+                !!jobs.error ||
+                !prompt.trim() ||
                 issues.length > 0 ||
                 conversationUnavailable ||
                 (style && !style.text.trim()) ||
@@ -811,6 +824,7 @@ function PlanCard({
       setConfirmation(id);
       await api(`/agent/plans/${id}/confirm`, {});
       setConfirmed(true);
+      setConfirmation(null);
       await onRefresh();
     } catch (e) {
       if (e instanceof ApiError && e.code !== "INTERNAL_ERROR")
@@ -873,8 +887,41 @@ function PlanCard({
       };
     });
   }
-  const locked = busy || !!pending || !!confirmation;
+  const locked = busy || (!confirmed && (!!pending || !!confirmation));
   const dirty = JSON.stringify(document) !== JSON.stringify(plan.document);
+  const discardConfirm = useConfirm();
+  const leaveConfirm = useRef(discardConfirm);
+  leaveConfirm.current = discardConfirm;
+  const leaveState = useRef({ dirty: false, waiting: false, confirmed });
+  leaveState.current = {
+    dirty: !confirmed && dirty,
+    waiting: !confirmed && !!(pending || confirmation),
+    confirmed,
+  };
+  useEffect(
+    () =>
+      state.registerNavigationGuard({
+        isDirty: () =>
+          leaveState.current.dirty ||
+          leaveState.current.waiting ||
+          (!leaveState.current.confirmed && active.current),
+        canLeave: async () => {
+          if (
+            leaveState.current.waiting ||
+            (!leaveState.current.confirmed && active.current)
+          ) {
+            setError("请先确认本次保存或执行结果，再离开页面。");
+            return false;
+          }
+          return (
+            !leaveState.current.dirty ||
+            leaveConfirm.current("方案修改尚未保存，放弃修改并离开页面？")
+          );
+        },
+      }),
+    [state],
+  );
+
   useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
   return (
     <form

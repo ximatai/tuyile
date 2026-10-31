@@ -424,6 +424,10 @@ export function PasswordDialog({
     try {
       if (f.get("password") !== f.get("confirm"))
         throw new Error("两次输入的密码不一致。");
+      if (!(await state.canLeave()))
+        throw new Error(
+          "请先处理当前页面的未保存修改或未确认结果，再修改密码。",
+        );
       await state.flush();
       await client(csrfToken)("/auth/password", {
         currentPassword: f.get("currentPassword"),
