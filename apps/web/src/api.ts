@@ -8,6 +8,7 @@ const messages: Record<string, string> = {
   PLANNING_REFERENCE_LIMIT:
     "一次连续规划最多使用 4 张参考图，请新建规划或减少参考图。",
   PLANNING_QUOTA: "今日规划次数不足，请稍后再试。",
+  PROMPT_TEMPLATE_CONFLICT: "提示词已被修改，请关闭编辑并刷新列表后重新编辑。",
   MODEL_SERVICE_CONFLICT: "服务已被修改，请刷新后重试。",
   MODEL_SERVICE_NAME_TAKEN: "已有同名服务，请使用其他名称。",
   MODEL_SERVICE_UNAVAILABLE: "服务已停用或撤销。",

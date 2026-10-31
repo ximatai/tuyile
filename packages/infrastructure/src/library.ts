@@ -6,6 +6,8 @@ import {
 } from "@tuyile/core";
 import type {
   Principal,
+  PromptTemplateInput,
+  ManagedPromptTemplate,
   FavoriteInput,
   Favorite,
   GalleryAsset,
@@ -20,10 +22,63 @@ const favorite = (r: any): Favorite => ({
   ...(r.asset_id ? { assetId: r.asset_id } : { prompt: r.prompt }),
   createdAt: r.created_at.toISOString(),
 });
+const managedPrompt = (r: any): ManagedPromptTemplate => ({
+  id: r.id,
+  title: r.title,
+  category: r.category,
+  prompt: r.prompt,
+  published: r.published,
+  revision: r.revision,
+  createdAt: r.created_at.toISOString(),
+  updatedAt: r.updated_at.toISOString(),
+});
 class PgLibraryRepository
   extends PgCreationContext
   implements LibraryRepository
 {
+  async prompts(p: Principal, offset: number) {
+    await this.auth(this.c, p, false, false);
+    return (
+      await this.c.query(
+        "SELECT id,title,category,prompt FROM prompt_templates WHERE published ORDER BY created_at,id LIMIT 51 OFFSET $1",
+        [offset],
+      )
+    ).rows;
+  }
+  async managedPrompts(p: Principal, offset: number, search: string) {
+    await this.auth(this.c, p, true, false);
+    return (
+      await this.c.query(
+        "SELECT * FROM prompt_templates WHERE $2='' OR strpos(lower(title),lower($2))>0 OR strpos(lower(category),lower($2))>0 ORDER BY created_at DESC,id LIMIT 51 OFFSET $1",
+        [offset, search],
+      )
+    ).rows.map(managedPrompt);
+  }
+  async savePrompt(p: Principal, input: PromptTemplateInput) {
+    await this.auth(this.c, p, true);
+    const args = [
+      input.id,
+      input.title,
+      input.category,
+      input.prompt,
+      input.published,
+      input.revision,
+    ];
+    const row = (
+      await this.c.query(
+        input.revision === 0
+          ? "INSERT INTO prompt_templates(id,title,category,prompt,published) VALUES($1,$2,$3,$4,$5) ON CONFLICT(id) DO NOTHING RETURNING *"
+          : "UPDATE prompt_templates SET title=$2,category=$3,prompt=$4,published=$5,revision=revision+1,updated_at=now() WHERE id=$1 AND revision=$6 RETURNING *",
+        input.revision === 0 ? args.slice(0, 5) : args,
+      )
+    ).rows[0];
+    if (!row) throw new AppError("PROMPT_TEMPLATE_CONFLICT", 409);
+    await this.c.query(
+      "INSERT INTO administration_audit(actor_id,action,values) VALUES($1,'prompt-template-save',$2)",
+      [p.id, { id: row.id, revision: row.revision, published: row.published }],
+    );
+    return managedPrompt(row);
+  }
   async assets(p: Principal, offset: number): Promise<GalleryAsset[]> {
     await this.auth(this.c, p, false, false);
     return (

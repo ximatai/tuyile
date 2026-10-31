@@ -91,7 +91,8 @@ export function createApp(
             ? 20 * 1024 * 1024
             : c.req.path.startsWith("/api/images/") ||
                 c.req.path.startsWith("/api/image-admin/") ||
-                c.req.path.startsWith("/api/library/")
+                c.req.path.startsWith("/api/library/") ||
+                c.req.path === "/api/admin/prompts"
               ? 65536
               : 16384,
       onError: (c) =>

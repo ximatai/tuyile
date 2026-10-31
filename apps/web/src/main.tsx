@@ -30,6 +30,9 @@ import { Button, Notice, UiProvider, Tooltip, Dropdown } from "@tuyile/ui";
 import { client, ApiError, notifySessionChange, sessionTabId } from "./api";
 import { SessionProvider, useSessionState } from "./session-state";
 import "./styles.css";
+const PromptAdminPage = lazy(() =>
+  import("./prompt-admin").then((m) => ({ default: m.PromptAdminPage })),
+);
 const LibraryPage = lazy(() =>
   import("./library").then((m) => ({ default: m.LibraryPage })),
 );
@@ -295,6 +298,7 @@ function Shell() {
                 {
                   "/gallery": "图库",
                   "/prompts": "提示池",
+                  "/admin/prompts": "提示池管理",
                   "/favorites": "收藏",
                   "/usage": "额度",
                   "/admin/users": "用户管理",
@@ -358,6 +362,16 @@ function Shell() {
               <Route
                 path="/prompts"
                 element={<LibraryPage key="prompts" mode="prompts" />}
+              />
+              <Route
+                path="/admin/prompts"
+                element={
+                  session.user.role === "admin" ? (
+                    <PromptAdminPage />
+                  ) : (
+                    <Notice error>你没有执行此操作的权限。</Notice>
+                  )
+                }
               />
               <Route
                 path="/favorites"

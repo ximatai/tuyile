@@ -1,7 +1,7 @@
 import { finishTemporaryPassword } from "../test-database.js";
 import { beforeEach, afterEach, expect, it } from "vitest";
 import { randomUUID } from "node:crypto";
-import { CanvasService, LibraryService, promptTemplates } from "@tuyile/core";
+import { CanvasService, LibraryService } from "@tuyile/core";
 import { PgCanvasStore, PgLibraryStore } from "@tuyile/infrastructure";
 import { emptyCanvas } from "@tuyile/contracts";
 import { unzipSync } from "fflate";
@@ -91,10 +91,10 @@ it("protects favorites and supports private prompt groups without calling a mode
     id: randomUUID(),
     title: "我的提示词",
     groupName: "常用",
-    prompt: promptTemplates[0].prompt,
+    prompt: "商品测试提示词",
   });
   expect((await library.favorites(f.principal))[0].prompt).toBe(
-    promptTemplates[0].prompt,
+    "商品测试提示词",
   );
   expect(await f.repo.tasks(f.principal)).toEqual([]);
 });
@@ -267,4 +267,214 @@ it("serializes project deletion with admission and protects cancelling or pendin
   await expect(
     canvas.removeProject(f.principal, pendingProject.id),
   ).rejects.toMatchObject({ code: "PROJECT_BUSY" });
+});
+
+it("publishes database templates globally while retaining private favorite snapshots and detecting concurrent edits", async () => {
+  const seeded = await library.prompts(f.principal);
+  expect(seeded).toHaveLength(3);
+  const created = await f.service.createUser(f.principal, "template-member");
+  await finishTemporaryPassword(f.service, created, testPassword);
+  const memberLogin = await f.service.login("template-member", testPassword);
+  const member = (await f.service.authenticate(memberLogin.token)).user;
+  const input = {
+    id: randomUUID(),
+    title: "数据库新增",
+    category: "测试",
+    prompt: "初始完整正文",
+    published: false,
+    revision: 0,
+  };
+  const draft = await library.savePrompt(f.principal, input);
+  expect(draft.revision).toBe(1);
+  expect((await library.prompts(member)).some((p) => p.id === draft.id)).toBe(
+    false,
+  );
+  await expect(library.managedPrompts(member)).rejects.toMatchObject({
+    code: "FORBIDDEN",
+  });
+  await expect(library.savePrompt(member, input)).rejects.toMatchObject({
+    code: "FORBIDDEN",
+  });
+  const published = await library.savePrompt(f.principal, {
+    ...input,
+    revision: draft.revision,
+    published: true,
+  });
+  expect(
+    (await library.prompts(member)).find((p) => p.id === draft.id),
+  ).toMatchObject({ prompt: input.prompt });
+  const favoriteId = randomUUID();
+  await library.saveFavorite(member, {
+    id: favoriteId,
+    title: input.title,
+    groupName: input.category,
+    prompt: input.prompt,
+  });
+  const races = await Promise.allSettled(
+    ["first", "second"].map((prompt) =>
+      library.savePrompt(f.principal, {
+        ...input,
+        prompt,
+        revision: published.revision,
+        published: true,
+      }),
+    ),
+  );
+  expect(races.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+  expect(races.find((r) => r.status === "rejected")).toMatchObject({
+    reason: { code: "PROMPT_TEMPLATE_CONFLICT" },
+  });
+  const current = (
+    await library.managedPrompts(f.principal, 0, "数据库新增")
+  )[0];
+  await library.savePrompt(f.principal, {
+    ...input,
+    revision: current.revision,
+    published: false,
+  });
+  expect((await library.prompts(member)).some((p) => p.id === draft.id)).toBe(
+    false,
+  );
+  expect((await library.favorites(member))[0]).toMatchObject({
+    id: favoriteId,
+    prompt: input.prompt,
+  });
+  expect(await library.favorites(f.principal)).toHaveLength(0);
+  const { migrate } = await import("../../scripts/migrate.js");
+  await migrate(process.env.MIGRATION_DATABASE_URL!);
+  expect(
+    (await library.managedPrompts(f.principal, 0, "数据库新增"))[0].published,
+  ).toBe(false);
+  expect(await library.prompts(member)).toHaveLength(3);
+});
+
+it("guards prompt HTTP writes, validates content and returns only published bounded pages", async () => {
+  const app = createApp(
+    f.service,
+    f.store,
+    { origin: "http://127.0.0.1:5180", production: false },
+    async () => {},
+    undefined,
+    f.creation,
+    undefined,
+    canvas,
+    undefined,
+    library,
+  );
+  const session = await f.service.authenticate(f.login.token);
+  const headers = {
+    cookie: `tuyile_session=${f.login.token}`,
+    Origin: "http://127.0.0.1:5180",
+    "Content-Type": "application/json",
+    "X-CSRF-Token": session.csrfToken,
+  };
+  expect((await app.request("/api/library/prompts")).status).toBe(401);
+  const input = {
+    id: randomUUID(),
+    title: "新模板",
+    category: "测试",
+    prompt: "图".repeat(12000),
+    published: true,
+    revision: 0,
+  };
+  expect(
+    (
+      await app.request("/api/admin/prompts", {
+        method: "POST",
+        headers: { ...headers, "X-CSRF-Token": "wrong" },
+        body: JSON.stringify(input),
+      })
+    ).status,
+  ).toBe(403);
+  expect(
+    (
+      await app.request("/api/admin/prompts", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ ...input, prompt: " " }),
+      })
+    ).status,
+  ).toBe(400);
+  const created = await f.service.createUser(
+    f.principal,
+    "template-api-member",
+  );
+  await finishTemporaryPassword(f.service, created, testPassword);
+  const login = await f.service.login("template-api-member", testPassword),
+    other = await f.service.authenticate(login.token);
+  const otherHeaders = {
+    ...headers,
+    cookie: `tuyile_session=${login.token}`,
+    "X-CSRF-Token": other.csrfToken,
+  };
+  expect(
+    (await app.request("/api/admin/prompts", { headers: otherHeaders })).status,
+  ).toBe(403);
+  expect(
+    (
+      await app.request("/api/admin/prompts", {
+        method: "POST",
+        headers: otherHeaders,
+        body: JSON.stringify(input),
+      })
+    ).status,
+  ).toBe(403);
+  expect(
+    (
+      await app.request("/api/admin/prompts", {
+        method: "POST",
+        headers,
+        body: JSON.stringify(input),
+      })
+    ).status,
+  ).toBe(201);
+  expect(
+    (
+      await app.request("/api/admin/prompts", {
+        method: "POST",
+        headers,
+        body: JSON.stringify(input),
+      })
+    ).status,
+  ).toBe(409);
+  // Exercise pagination with synthetic public content through the real service.
+  for (let i = 0; i < 49; i++)
+    await library.savePrompt(f.principal, {
+      ...input,
+      id: randomUUID(),
+      title: `分页${i}`,
+      prompt: "分页正文",
+    });
+  const first = await (
+    await app.request("/api/library/prompts", { headers: otherHeaders })
+  ).json();
+  const next = await (
+    await app.request("/api/library/prompts?offset=50", {
+      headers: otherHeaders,
+    })
+  ).json();
+  expect(first.prompts).toHaveLength(50);
+  expect(first.hasMore).toBe(true);
+  expect(next.prompts).toHaveLength(3);
+  expect(next.hasMore).toBe(false);
+  expect(
+    new Set([...first.prompts, ...next.prompts].map((p) => p.id)).size,
+  ).toBe(53);
+  expect(first.prompts[0]).not.toHaveProperty("revision");
+  expect(
+    [...first.prompts, ...next.prompts].find((p) => p.id === input.id).prompt,
+  ).toHaveLength(12000);
+  expect(
+    (
+      await app.request("/api/admin/prompts", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          ...input,
+          id: randomUUID(),
+          prompt: "图".repeat(12001),
+        }),
+      })
+    ).status,
+  ).toBe(400);
 });

@@ -2647,3 +2647,99 @@ test("prompt library keeps project selection compact and reuses full prompts", a
     prompt.prompt,
   );
 });
+
+test("managed prompt pool supports drafts, publication, cross-tab updates, reuse and private snapshots", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const session = await (await page.request.get("/api/auth/me")).json();
+  const headers = {
+    Origin: "http://127.0.0.1:5180",
+    "X-CSRF-Token": session.csrfToken,
+  };
+  const project = await (
+    await page.request.post("/api/projects", {
+      headers,
+      data: { name: "Template target" },
+    })
+  ).json();
+  await page.getByRole("link", { name: "提示池", exact: true }).click();
+  await page.getByRole("link", { name: "管理提示词", exact: true }).click();
+  await page.getByRole("button", { name: "新增提示词", exact: true }).click();
+  let drawer = page.getByRole("dialog", { name: "新增提示词", exact: true });
+  await drawer.getByLabel("标题", { exact: true }).fill("公开模板验收");
+  await drawer.getByLabel("分类", { exact: true }).fill("验收");
+  await drawer
+    .getByLabel("提示词正文", { exact: true })
+    .fill("合成模板的完整正文，保留所有内容。");
+  await drawer.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(drawer).toBeHidden();
+  const row = page.getByRole("row").filter({ hasText: "公开模板验收" });
+  await expect(row.getByText("未上架", { exact: true })).toBeVisible();
+  const viewer = await page.context().newPage();
+  await viewer.goto("/prompts");
+  await expect(viewer.locator(".prompt-card")).toHaveCount(3);
+  await expect(
+    viewer.getByRole("heading", { name: "公开模板验收", exact: true }),
+  ).toHaveCount(0);
+  await row.getByRole("button", { name: "编辑", exact: true }).click();
+  drawer = page.getByRole("dialog", { name: "编辑提示词", exact: true });
+  await drawer
+    .getByRole("checkbox", { name: "上架，所有用户可见", exact: true })
+    .check();
+  await drawer.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(drawer).toBeHidden();
+  const template = viewer
+    .locator(".prompt-card")
+    .filter({ hasText: "公开模板验收" });
+  await expect(template).toBeVisible({ timeout: 20000 });
+  await template
+    .getByRole("button", { name: "收藏提示词", exact: true })
+    .click();
+  await viewer.getByRole("button", { name: "保存收藏", exact: true }).click();
+  await expect(
+    viewer.getByRole("dialog", { name: "编辑收藏", exact: true }),
+  ).toBeHidden();
+  await template
+    .getByRole("button", { name: "用于目标项目", exact: true })
+    .click();
+  await expect(viewer).toHaveURL(new RegExp(`/projects/${project.id}$`));
+  await expect(viewer.getByLabel("创作需求", { exact: true })).toHaveValue(
+    "合成模板的完整正文，保留所有内容。",
+  );
+  await row.getByRole("button", { name: "编辑", exact: true }).click();
+  await drawer
+    .getByLabel("提示词正文", { exact: true })
+    .fill("修改后的公共正文");
+  await drawer
+    .getByRole("checkbox", { name: "上架，所有用户可见", exact: true })
+    .uncheck();
+  await drawer.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(drawer).toBeHidden();
+  await viewer.getByRole("link", { name: "提示池", exact: true }).click();
+  await expect(viewer.locator(".prompt-card")).toHaveCount(3);
+  const favorites = (
+    await (await viewer.request.get("/api/library/favorites")).json()
+  ).favorites;
+  expect(
+    favorites.find((f: { title: string }) => f.title === "公开模板验收").prompt,
+  ).toBe("合成模板的完整正文，保留所有内容。");
+  // Closing a dirty editor must ask before discarding it.
+  await row.getByRole("button", { name: "编辑", exact: true }).click();
+  await drawer.getByLabel("标题", { exact: true }).fill("未保存修改");
+  await drawer.getByRole("button", { name: "取消", exact: true }).click();
+  const confirmation = page.getByRole("dialog", {
+    name: "请确认",
+    exact: true,
+  });
+  await expect(confirmation).toBeVisible();
+  await confirmation.getByRole("button", { name: "取消", exact: true }).click();
+  await expect(drawer.getByLabel("标题", { exact: true })).toHaveValue(
+    "未保存修改",
+  );
+  await drawer.getByRole("button", { name: "取消", exact: true }).click();
+  await confirmation.getByRole("button", { name: "确认", exact: true }).click();
+  await expect(drawer).toBeHidden();
+  await viewer.close();
+});

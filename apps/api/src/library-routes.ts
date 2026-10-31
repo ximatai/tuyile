@@ -1,12 +1,12 @@
 import type { Hono } from "hono";
 import {
   AppError,
-  promptTemplates,
   type LibraryService,
   type CreationService,
 } from "@tuyile/core";
 import {
   favoriteInput,
+  promptTemplateInput,
   id,
   libraryExportInput,
   pageOffset,
@@ -37,7 +37,30 @@ export function libraryRoutes(
   app.get("/api/library/groups", async (c) =>
     c.json({ groups: await library.groups(c.get("session").user) }),
   );
-  app.get("/api/library/prompts", (c) => c.json({ prompts: promptTemplates }));
+  app.get("/api/library/prompts", async (c) => {
+    const rows = await library.prompts(
+      c.get("session").user,
+      pageOffset.parse(c.req.query("offset")),
+    );
+    return c.json({ prompts: rows.slice(0, 50), hasMore: rows.length > 50 });
+  });
+  app.get("/api/admin/prompts", async (c) => {
+    const rows = await library.managedPrompts(
+      c.get("session").user,
+      pageOffset.parse(c.req.query("offset")),
+      z.string().trim().max(100).default("").parse(c.req.query("search")),
+    );
+    return c.json({ prompts: rows.slice(0, 50), hasMore: rows.length > 50 });
+  });
+  app.post("/api/admin/prompts", async (c) =>
+    c.json(
+      await library.savePrompt(
+        c.get("session").user,
+        promptTemplateInput.parse(await c.req.json()),
+      ),
+      201,
+    ),
+  );
   app.post("/api/library/favorites", async (c) =>
     c.json(
       await library.saveFavorite(

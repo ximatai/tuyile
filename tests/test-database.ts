@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { createDatabase, PgStore, security } from "@tuyile/infrastructure";
 import { Workbench } from "@tuyile/core";
@@ -22,6 +23,15 @@ export async function resetDatabase() {
   await migrate(urls.owner);
   const { pool: owner } = createDatabase(urls.owner);
   try {
+    await owner.query("TRUNCATE tuyile.prompt_templates");
+    const templatesSql = await readFile(
+      new URL("../migrations/0016_prompt_templates.sql", import.meta.url),
+      "utf8",
+    );
+    await owner.query("SET search_path=tuyile,pg_catalog");
+    await owner.query(
+      templatesSql.slice(templatesSql.indexOf("INSERT INTO prompt_templates")),
+    );
     await owner.query("TRUNCATE tuyile.model_services CASCADE");
     await owner.query(
       "UPDATE tuyile.model_catalog_state SET managed=false,revision=0 WHERE id=1",

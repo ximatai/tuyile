@@ -9,7 +9,7 @@ import {
   type CanvasSave,
   type CanvasSnapshot,
   type ProjectsPage,
-  type PromptTemplate,
+  type PromptTemplatesPage,
 } from "@tuyile/contracts";
 import {
   Button,
@@ -92,13 +92,28 @@ export function LibraryPage({ mode }: { mode: Mode }) {
     queryFn: ({ signal }) =>
       api<{ groups: string[] }>("/library/groups", undefined, signal),
   });
-  const prompts = useQuery({
+  const prompts = useInfiniteQuery({
     queryKey: state.key("prompt-templates"),
-    queryFn: ({ signal }) =>
-      api<{ prompts: PromptTemplate[] }>("/library/prompts", undefined, signal),
+    initialPageParam: 0,
+    queryFn: ({ signal, pageParam }) =>
+      api<PromptTemplatesPage>(
+        `/library/prompts?offset=${pageParam}`,
+        undefined,
+        signal,
+      ),
+    getNextPageParam: (p, pages) => (p.hasMore ? pages.length * 50 : undefined),
     enabled: mode === "prompts",
-    staleTime: Infinity,
+    staleTime: 0,
+    refetchInterval: mode === "prompts" ? 15000 : false,
   });
+  const allPrompts = [
+    ...new Map(
+      (prompts.data?.pages.flatMap((p) => p.prompts) ?? []).map((p) => [
+        p.id,
+        p,
+      ]),
+    ).values(),
+  ];
   const allProjects = projects.data?.pages.flatMap((p) => p.projects) ?? [],
     project = target || allProjects[0]?.id || "",
     allAssets = assets.data?.pages.flatMap((p) => p.assets) ?? [];
@@ -347,7 +362,12 @@ export function LibraryPage({ mode }: { mode: Mode }) {
           </h1>
         </div>
         {mode === "prompts" && (
-          <div className="prompt-project-picker">{projectPicker}</div>
+          <div className="prompt-project-picker">
+            {projectPicker}
+            {state.session.user.role === "admin" && (
+              <Link to="/admin/prompts">管理提示词</Link>
+            )}
+          </div>
         )}
       </div>
       {((!editing && error) || queryError) && (
@@ -631,12 +651,10 @@ export function LibraryPage({ mode }: { mode: Mode }) {
       )}
       {mode === "prompts" && (
         <div className="prompt-grid">
-          {!prompts.isPending &&
-            !prompts.error &&
-            !prompts.data?.prompts.length && (
-              <div className="empty">暂无提示词</div>
-            )}
-          {prompts.data?.prompts.map((p) => (
+          {!prompts.isPending && !prompts.error && !allPrompts.length && (
+            <div className="empty">暂无提示词</div>
+          )}
+          {allPrompts.map((p) => (
             <article className="prompt-card" key={p.id}>
               <div className="prompt-card-heading">
                 <h2>{p.title}</h2>
@@ -670,6 +688,16 @@ export function LibraryPage({ mode }: { mode: Mode }) {
               </div>
             </article>
           ))}
+          {prompts.hasNextPage && (
+            <Button
+              type="button"
+              loading={prompts.isFetchingNextPage}
+              disabled={prompts.isFetchingNextPage}
+              onClick={() => void prompts.fetchNextPage()}
+            >
+              加载更多提示词
+            </Button>
+          )}
         </div>
       )}
       {mode === "favorites" && (

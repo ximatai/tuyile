@@ -3484,3 +3484,25 @@ h3 {
   width: 32px;
   padding: 0;
 }
+
+.prompt-admin-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 20px 0;
+}
+.prompt-admin-toolbar > .ant-input-affix-wrapper {
+  max-width: 320px;
+}
+.prompt-admin-toolbar > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+#prompt-template-editor .field {
+  max-width: none;
+  margin-bottom: 20px;
+}
+.prompt-admin-page > .ant-table-wrapper {
+  margin-bottom: 16px;
+}
