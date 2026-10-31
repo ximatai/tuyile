@@ -208,7 +208,22 @@ export function PromptShortcuts({
                 </p>
               )}
               {items.map((item) => (
-                <article key={item.id} className="prompt-picker-item">
+                <article
+                  key={item.id}
+                  className="prompt-picker-item"
+                  onClick={(event) => {
+                    const target = event.target as HTMLElement;
+                    // Native title buttons and Typography's expand/collapse controls own their clicks.
+                    if (
+                      target.closest(
+                        'button,a,[role="button"],.ant-typography-expand,.ant-typography-collapse',
+                      )
+                    )
+                      return;
+                    if (window.getSelection()?.toString()) return;
+                    void choose(item.prompt);
+                  }}
+                >
                   <Button
                     type="button"
                     className="prompt-picker-choice"

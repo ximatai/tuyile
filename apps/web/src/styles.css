@@ -3673,12 +3673,12 @@ h3 {
 .prompt-picker-filters { display: grid; grid-template-columns: minmax(0, 1fr) 120px; gap: 8px; margin-bottom: 6px; }
 .prompt-picker-filters .field { margin: 0; }
 .prompt-picker-results { max-height: min(320px, 45vh); overflow-y: auto; overscroll-behavior: contain; }
-.prompt-picker-item { padding: 10px; border-radius: 6px; }
+.prompt-picker-item { padding: 10px; border-radius: 6px; cursor: pointer; }
 .prompt-picker-item:hover, .prompt-picker-item:focus-within { background: var(--paper); }
 .prompt-picker-item-heading { display: flex; align-items: center; width: 100%; gap: 8px; }
 .prompt-picker-item-heading strong { min-width: 0; flex: 1; overflow-wrap: anywhere; font-weight: 500; }
 .prompt-picker-item-heading .hint { max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.prompt-picker-item .content-excerpt { margin: 4px 0 0; white-space: pre-wrap; color: var(--muted); }
+.prompt-picker-item .content-excerpt { margin: 4px 0 0; white-space: pre-wrap; color: var(--muted); cursor: pointer; }
 
 .prompt-shortcuts-more[aria-expanded="true"] svg { transform: rotate(180deg); }
 
