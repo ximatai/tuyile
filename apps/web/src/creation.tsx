@@ -758,8 +758,8 @@ function CreationEditor({
                             : "排队中…"
                         : `生成 ${settings.count} 张`}
                 </Button>
-                <HelpPopover title="后台执行与计费">
-                  提交后可关闭页面，任务在后台继续。取消可能仍计费；后台中断后不自动续跑，已保存结果会保留。
+                <HelpPopover title="生成说明">
+                  关闭页面不影响生成。取消可能计费；后台中断不续跑，已保存图片保留。
                 </HelpPopover>
               </div>
               {pending && (
