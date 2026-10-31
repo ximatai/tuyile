@@ -112,3 +112,77 @@ it("protects existing prompt, style and reference drafts against cross-page repl
     false,
   );
 });
+
+it("confirms task replacement when only generation parameters differ", async () => {
+  const { emptyProjectDraft } = await import("@tuyile/contracts");
+  const { ProjectDraftStore } =
+    await import("../../apps/web/src/project-draft-store");
+  const state = new SessionState(session),
+    document = emptyProjectDraft();
+  document.direct.prompt = "same prompt";
+  document.direct.settings.modelKey = "model";
+  const store = new ProjectDraftStore(
+    async () => ({ revision: 1, document }),
+    async (input) => ({
+      revision: input.revision + 1,
+      document: input.document,
+    }),
+  );
+  await store.load();
+  state.projectDrafts.set("project", store);
+  state.creativeDrafts.set("project", {
+    prompt: "same prompt",
+    references: [],
+  });
+  const task = {
+    id: "task",
+    projectId: "project",
+    requestKey: "request",
+    state: "succeeded",
+    used: 1,
+    held: 0,
+    pendingReview: false,
+    cancelRequested: false,
+    errorCode: null,
+    createdAt: "2026-10-31T00:00:00Z",
+    outputs: [],
+    prompt: "same prompt",
+    model: "model",
+    count: 1,
+    settings: {
+      width: 1024,
+      height: 1024,
+      quality: "medium",
+      format: "png",
+      referenceIds: [],
+    },
+  } as import("@tuyile/contracts").ImageTask;
+  expect(state.replacesCreativeDraft("project", { task })).toBe(false);
+  for (const change of [
+    { modelKey: "other" },
+    { width: 2048 },
+    { height: 2048 },
+    { quality: "high" as const },
+    { format: "webp" as const },
+    { count: 2 },
+  ]) {
+    store.edit({
+      direct: {
+        ...document.direct,
+        settings: { ...document.direct.settings, ...change },
+      },
+    });
+    expect(
+      state.replacesCreativeDraft("project", { task }),
+      JSON.stringify(change),
+    ).toBe(true);
+  }
+  store.edit({
+    direct: {
+      ...document.direct,
+      settings: { ...document.direct.settings, modelKey: "historical:task" },
+    },
+  });
+  expect(state.replacesCreativeDraft("project", { task })).toBe(false);
+  state.clear();
+});

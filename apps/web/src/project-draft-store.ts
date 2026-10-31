@@ -46,6 +46,8 @@ export class ProjectDraftStore {
   private loading: Promise<void> | null = null;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private disposed = false;
+  private editVersion = 0;
+  private resolutionVersion = 0;
   private controller = new AbortController();
   constructor(
     private read: (signal: AbortSignal) => Promise<ProjectDraftSnapshot>,
@@ -94,6 +96,7 @@ export class ProjectDraftStore {
     if (!this.state.ready || this.disposed) return;
     const document = { ...this.state.document, ...patch };
     if (serialize(document) === serialize(this.state.document)) return;
+    this.editVersion++;
     const dirty = serialize(document) !== this.baseline || !!this.pending;
     this.update({
       document,
@@ -151,9 +154,20 @@ export class ProjectDraftStore {
     return this.flight;
   }
   async reload() {
+    const resolution = ++this.resolutionVersion;
+    const edits = this.editVersion;
     await this.flight?.catch(() => {});
     const snapshot = await this.read(this.controller.signal);
-    if (this.disposed) return;
+    if (this.disposed || resolution !== this.resolutionVersion) return;
+    if (edits !== this.editVersion) {
+      clearTimeout(this.timer);
+      this.update({
+        dirty: true,
+        conflict: true,
+        error: "加载期间内容已修改，当前输入已保留。请重新选择草稿版本。",
+      });
+      return;
+    }
     clearTimeout(this.timer);
     this.pending = null;
     this.baseline = serialize(snapshot.document);
@@ -167,9 +181,10 @@ export class ProjectDraftStore {
     });
   }
   async overwrite() {
+    const resolution = ++this.resolutionVersion;
     await this.flight?.catch(() => {});
     const snapshot = await this.read(this.controller.signal);
-    if (this.disposed) return;
+    if (this.disposed || resolution !== this.resolutionVersion) return;
     this.pending = null;
     this.baseline = serialize(snapshot.document);
     this.update({

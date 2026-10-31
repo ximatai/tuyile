@@ -473,7 +473,9 @@ function CreationEditor({
     const next = taskSettings(task, usage);
     if (!next) return;
     if (
-      (prompt.trim() || references.length) &&
+      (prompt.trim() ||
+        references.length ||
+        sessionState.replacesCreativeDraft(projectId, { task })) &&
       !(await confirmDraft("用这次任务的提示词、参数和参考图替换当前草稿？"))
     )
       return;

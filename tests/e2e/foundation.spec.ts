@@ -4025,6 +4025,35 @@ test("server drafts persist direct and Agent inputs across refresh and login and
     }),
   ).toBeVisible();
   await expect(otherPrompt).toHaveValue("冲突时必须保留的本地输入");
+  let releaseReload!: () => void, reloadStarted!: () => void;
+  const reloadGate = new Promise<void>((resolve) => (releaseReload = resolve)),
+    reloadRequest = new Promise<void>((resolve) => (reloadStarted = resolve));
+  await second.route(
+    `**/api/projects/${project.id}/draft`,
+    async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      const response = await route.fetch();
+      reloadStarted();
+      await reloadGate;
+      await route.fulfill({ response });
+    },
+    { times: 1 },
+  );
+  await second
+    .getByRole("button", { name: "加载最新草稿", exact: true })
+    .click();
+  await second
+    .getByRole("dialog", { name: "请确认", exact: true })
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await reloadRequest;
+  await otherPrompt.fill("在加载期间新输入的内容");
+  releaseReload();
+  await expect(
+    second.getByText(/加载期间内容已修改，当前输入已保留/),
+  ).toBeVisible();
+  await expect(otherPrompt).toHaveValue("在加载期间新输入的内容");
+  await second.unroute(`**/api/projects/${project.id}/draft`);
   await second
     .getByRole("button", { name: "加载最新草稿", exact: true })
     .click();
@@ -4102,4 +4131,118 @@ test("server drafts persist direct and Agent inputs across refresh and login and
     .toBe("网络失败后仍要保留的输入");
   await page.reload();
   await expect(prompt).toHaveValue("网络失败后仍要保留的输入");
+});
+
+test("task reuse confirms changes to saved generation parameters even when text is identical", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const session = await (await page.request.get("/api/auth/me")).json(),
+    headers = {
+      Origin: "http://127.0.0.1:5180",
+      "X-CSRF-Token": session.csrfToken,
+    };
+  const name = `参数保护 ${randomUUID().slice(0, 8)}`,
+    text = `相同需求 ${randomUUID().slice(0, 8)}`;
+  const project = await (
+    await page.request.post("/api/projects", { headers, data: { name } })
+  ).json();
+  const response = await page.request.post("/api/images/tasks", {
+    headers,
+    data: {
+      projectId: project.id,
+      requestKey: randomUUID(),
+      prompt: text,
+      model: "test-image",
+      width: 1024,
+      height: 1024,
+      count: 1,
+      quality: "medium",
+      format: "png",
+      referenceIds: [],
+    },
+  });
+  expect(response.status()).toBe(202);
+  await page.goto(`/projects/${project.id}`);
+  await page.getByLabel("创作需求", { exact: true }).fill(text);
+  const count = page.getByRole("combobox", { name: "图片张数", exact: true });
+  await count.click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("2 张", { exact: true })
+    .click();
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/projects/${project.id}/draft`)
+          ).json()
+        ).document.direct,
+    )
+    .toMatchObject({
+      prompt: text,
+      settings: {
+        modelKey: "test-image",
+        width: 1024,
+        height: 1024,
+        quality: "medium",
+        format: "png",
+        count: 2,
+      },
+    });
+  await page.getByRole("link", { name: "额度", exact: true }).click();
+  await page
+    .getByRole("region", { name: "使用记录", exact: true })
+    .getByRole("button", { name: "查看任务详情", exact: true })
+    .first()
+    .click();
+  const details = page.getByRole("dialog", { name: "任务详情", exact: true });
+  await expect(details).toContainText(text);
+  await details.getByRole("button", { name: "复用设置", exact: true }).click();
+  const confirmation = page.getByRole("dialog", {
+    name: "请确认",
+    exact: true,
+  });
+  await expect(confirmation).toBeVisible();
+  await confirmation.press("Escape");
+  await expect(page).toHaveURL(/\/usage$/);
+  expect(
+    (await (await page.request.get(`/api/projects/${project.id}/draft`)).json())
+      .document.direct.settings.count,
+  ).toBe(2);
+  await details.getByRole("button", { name: "复用设置", exact: true }).click();
+  await confirmation.getByRole("button", { name: "确认", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`));
+  await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(text);
+  await expect(count.locator("..")).toContainText("1 张");
+  await page.getByLabel("创作需求", { exact: true }).fill("");
+  await count.click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("2 张", { exact: true })
+    .click();
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/projects/${project.id}/draft`)
+          ).json()
+        ).document.direct,
+    )
+    .toMatchObject({ prompt: "", settings: { count: 2 } });
+  await page
+    .locator(".canvas-task-history > .ant-collapse-item > .ant-collapse-header")
+    .click();
+  await page
+    .getByRole("button", { name: "任务详情", exact: true })
+    .first()
+    .click();
+  await page.getByRole("button", { name: "复用设置", exact: true }).click();
+  await expect(confirmation).toBeVisible();
+  await confirmation.press("Escape");
+  await expect(count.locator("..")).toContainText("2 张");
+  await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue("");
 });

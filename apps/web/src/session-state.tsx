@@ -114,7 +114,27 @@ export class SessionState {
     const referenceIds =
       input.task?.settings?.referenceIds ?? input.referenceIds;
     const style = input.task?.settings?.style;
+    const stored = this.projectDrafts.get(projectId)?.get();
+    const settings = stored?.ready
+      ? stored.document.direct.settings
+      : undefined;
+    const task = input.task;
+    const parametersChanged = !!(
+      task?.settings &&
+      settings &&
+      ((settings.modelKey !== (task.settings.modelSelectionId ?? task.model) &&
+        !(
+          task.settings.modelSelectionId === undefined &&
+          settings.modelKey === `historical:${task.id}`
+        )) ||
+        settings.width !== task.settings.width ||
+        settings.height !== task.settings.height ||
+        settings.quality !== task.settings.quality ||
+        settings.format !== task.settings.format ||
+        settings.count !== task.count)
+    );
     return !!(
+      parametersChanged ||
       (current.prompt.trim() &&
         prompt !== undefined &&
         current.prompt !== prompt) ||

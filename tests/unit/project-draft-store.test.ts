@@ -151,3 +151,83 @@ it("does not repeatedly save equivalent server documents with reordered object k
   expect(writes).toHaveLength(1);
   expect(store.get().dirty).toBe(false);
 });
+
+it("keeps edits made while a confirmed reload is waiting and allows a fresh reload afterwards", async () => {
+  let reads = 0,
+    finish!: (snapshot: ProjectDraftSnapshot) => void;
+  const remote = {
+    revision: 3,
+    document: {
+      ...emptyProjectDraft(),
+      direct: { ...emptyProjectDraft().direct, prompt: "remote" },
+    },
+  };
+  const store = new ProjectDraftStore(
+    async () =>
+      ++reads === 2 ? new Promise((resolve) => (finish = resolve)) : remote,
+    async () => {
+      throw Object.assign(new Error("conflict"), { code: "DRAFT_CONFLICT" });
+    },
+  );
+  stores.push(store);
+  await store.load();
+  store.edit({
+    direct: { ...store.get().document.direct, prompt: "before reload" },
+  });
+  await store.flush().catch(() => {});
+  const reloading = store.reload();
+  await Promise.resolve();
+  await Promise.resolve();
+  store.edit({
+    direct: {
+      ...store.get().document.direct,
+      prompt: "typed after confirmation",
+    },
+  });
+  finish(remote);
+  await reloading;
+  expect(store.get()).toMatchObject({
+    dirty: true,
+    conflict: true,
+    epoch: 1,
+    document: { direct: { prompt: "typed after confirmation" } },
+  });
+  expect(store.get().error).toContain("当前输入已保留");
+  await store.reload();
+  expect(store.get()).toMatchObject({
+    dirty: false,
+    conflict: false,
+    epoch: 2,
+    document: { direct: { prompt: "remote" } },
+  });
+});
+it("ignores an older reload response after a newer overwrite has saved the local version", async () => {
+  let reads = 0,
+    finish!: (snapshot: ProjectDraftSnapshot) => void;
+  const store = new ProjectDraftStore(
+    async () =>
+      ++reads === 2
+        ? new Promise((resolve) => (finish = resolve))
+        : { revision: 4, document: emptyProjectDraft() },
+    async (input) => ({
+      revision: input.revision + 1,
+      document: input.document,
+    }),
+  );
+  stores.push(store);
+  await store.load();
+  store.edit({
+    direct: { ...store.get().document.direct, prompt: "keep local" },
+  });
+  const reloading = store.reload();
+  await Promise.resolve();
+  await Promise.resolve();
+  await store.overwrite();
+  finish({ revision: 1, document: emptyProjectDraft() });
+  await reloading;
+  expect(store.get()).toMatchObject({
+    revision: 5,
+    dirty: false,
+    document: { direct: { prompt: "keep local" } },
+  });
+});
