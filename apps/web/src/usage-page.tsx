@@ -211,7 +211,7 @@ export function UsagePage({ csrfToken }: { csrfToken: string }) {
       await api(`/projects/${task.projectId}`);
       await state.flush();
       if (!mounted.current) return;
-      state.creationDrafts.set(task.projectId, input);
+      await state.queueDraftTransfer(task.projectId, input);
       navigate(`/projects/${task.projectId}`);
     } catch (e) {
       if (mounted.current) feedback.error((e as Error).message);

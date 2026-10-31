@@ -67,9 +67,7 @@ export function ProjectsPage({ csrfToken }: { csrfToken: string }) {
     try {
       await state.flush();
       await client(csrfToken)(`/projects/${project.id}/delete`, {});
-      state.editors.get(project.id)?.dispose();
-      state.editors.delete(project.id);
-      state.creationDrafts.delete(project.id);
+      state.releaseProject(project.id);
       await state.queries.invalidateQueries({ queryKey: state.key() });
       feedback.success("项目已删除");
     } catch (e) {

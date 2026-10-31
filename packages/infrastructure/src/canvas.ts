@@ -21,6 +21,12 @@ import {
 } from "@tuyile/contracts";
 import { PgTransactions } from "./transactions.js";
 import { PgCreationContext } from "./creation/context.js";
+function readDraftDocument(value: unknown) {
+  const version = (value as { schemaVersion?: unknown })?.schemaVersion;
+  if (version !== undefined && version !== 1)
+    throw new AppError("DRAFT_VERSION_UNSUPPORTED", 409);
+  return projectDraftDocument.parse(value);
+}
 class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
   async removeProject(p: Principal, id: string) {
     await this.auth(this.c, p, false, false);
@@ -103,7 +109,7 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
     return row
       ? {
           revision: row.revision,
-          document: projectDraftDocument.parse(row.document),
+          document: readDraftDocument(row.document),
         }
       : { revision: 0, document: emptyProjectDraft() };
   }
@@ -131,9 +137,20 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
       )
     ).rows[0];
     if (old?.request_key === input.requestKey) {
-      if (old.request_hash !== hash)
+      // Preserve retries accepted before v1 was explicitly written into the JSON.
+      const { schemaVersion: _version, ...legacyDocument } = input.document;
+      const legacyHash =
+        old.document.schemaVersion === undefined
+          ? createHash("sha256")
+              .update(JSON.stringify({ ...input, document: legacyDocument }))
+              .digest("hex")
+          : null;
+      if (old.request_hash !== hash && old.request_hash !== legacyHash)
         throw new AppError("IDEMPOTENCY_CONFLICT", 409);
-      return { revision: old.revision, document: old.document };
+      return {
+        revision: old.revision,
+        document: readDraftDocument(old.document),
+      };
     }
     if ((old?.revision ?? 0) !== input.revision)
       throw new AppError("DRAFT_CONFLICT", 409);

@@ -263,7 +263,7 @@ export function LibraryPage({ mode }: { mode: Mode }) {
       await api(`/projects/${destination}`);
       await state.flush();
       if (!mounted.current) return;
-      state.creationDrafts.set(destination, input);
+      await state.queueDraftTransfer(destination, input);
       navigate(`/projects/${destination}`);
     });
   }

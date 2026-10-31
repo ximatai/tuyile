@@ -1,10 +1,15 @@
-import { ProjectDraftBoundary, useProjectDraft } from "./project-draft";
+import {
+  ProjectDraftBoundary,
+  useDraftValue,
+  useDraftMode,
+  useDraftReferences,
+} from "./project-draft";
 import { ResultImage } from "./result-image";
 import { TaskDetails, TaskProblem } from "./task-details";
 import { canReuseTask, taskStates as states } from "./task-presentation";
 import { useAdaptivePromptHeight } from "./use-adaptive-prompt-height";
 import { Info } from "lucide-react";
-import { composeCreativePrompt, type CreationStyle } from "@tuyile/contracts";
+import { composeCreativePrompt } from "@tuyile/contracts";
 import { HelpPopover } from "./interface-help";
 import { PromptComposer } from "./prompt-composer";
 import { GenerationFeedback } from "./generation-feedback";
@@ -15,7 +20,6 @@ import {
   selectedCapability,
   settingsIssues,
   taskSettings,
-  type ImageSettings,
 } from "./image-settings";
 import { AgentPanel } from "./agent-panel";
 import { lazy, Suspense, useCallback } from "react";
@@ -282,51 +286,18 @@ function CreationEditor({
   projectId: string;
 }) {
   const sessionState = useSessionState();
-  const draftStore = useProjectDraft();
-  const initialDraft = draftStore.get().document;
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
-    [settings, setSettings] = useState<ImageSettings>(
-      initialDraft.direct.settings,
-    ),
-    [prompt, setPrompt] = useState(initialDraft.direct.prompt),
-    [style, setStyle] = useState<CreationStyle | undefined>(
-      initialDraft.direct.style,
-    ),
-    [references, setReferences] = useState<{ id: string; name: string }[]>(
-      initialDraft.referenceIds.map((id) => ({ id, name: "草稿参考图" })),
-    ),
+    [settings, setSettings] = useDraftValue("direct", "settings"),
+    [prompt, setPrompt] = useDraftValue("direct", "prompt"),
+    [style, setStyle] = useDraftValue("direct", "style"),
+    [references, setReferences] = useDraftReferences(),
     [canvasSelection, setCanvasSelection] = useState<
       { id: string; name: string }[]
     >([]),
     [pending, setPending] = useState<ImageInput | null>(null),
     [mobile, setMobile] = useState("create");
-  useEffect(() => {
-    sessionState.creativeDrafts.set(projectId, { prompt, style, references });
-  }, [sessionState, projectId, prompt, style, references]);
   const confirmDraft = useConfirm();
-  const transferredDraft = useRef(sessionState.creationDrafts.get(projectId));
-  useEffect(() => {
-    const draft = transferredDraft.current;
-    if (!draft) return;
-    setMode("direct");
-    if (draft.task && canReuseTask(draft.task)) {
-      setPrompt(draft.task.prompt);
-      setStyle(draft.task.settings?.style);
-      setReferences(
-        draft.task.settings!.referenceIds.map((id) => ({
-          id,
-          name: "任务参考图",
-        })),
-      );
-    }
-    if (draft.prompt !== undefined) setPrompt(draft.prompt);
-    if (draft.referenceIds)
-      setReferences(
-        draft.referenceIds.map((id) => ({ id, name: "图库参考图" })),
-      );
-    sessionState.creationDrafts.delete(projectId);
-  }, [projectId, sessionState]);
   const chooseReference = useCallback(
     (id: string) => {
       if (busy || pending) {
@@ -359,14 +330,7 @@ function CreationEditor({
     setReferences(next);
     setError("");
   }
-  const [mode, setMode] = useState(initialDraft.mode);
-  useEffect(() => {
-    draftStore.edit({
-      direct: { prompt, style, settings },
-      referenceIds: references.map((r) => r.id),
-      mode,
-    });
-  }, [draftStore, prompt, style, settings, references, mode]);
+  const [mode, setMode] = useDraftMode();
   const [phase, setPhase] = useState<GenerationPhase>("idle");
   const [submissionRejected, setSubmissionRejected] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -442,10 +406,7 @@ function CreationEditor({
   useEffect(() => {
     if (usage && usage.models.length && !initialized.current) {
       initialized.current = true;
-      const task = transferredDraft.current?.task;
-      if (task && canReuseTask(task)) {
-        setSettings(taskSettings(task, usage) ?? initialSettings(usage));
-      } else if (!settings.modelKey) setSettings(initialSettings(usage));
+      setSettings((old) => (old.modelKey ? old : initialSettings(usage)));
     }
   }, [usage]);
   const issues = usage

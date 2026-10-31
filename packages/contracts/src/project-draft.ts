@@ -25,6 +25,7 @@ const draftInput = z
   .strict();
 export const projectDraftDocument = z
   .object({
+    schemaVersion: z.literal(1).default(1),
     direct: draftInput,
     agent: draftInput
       .extend({ conversationModel: text(200), skillId: text(200) })
@@ -59,6 +60,7 @@ export function emptyProjectDraft(): ProjectDraftDocument {
     count: 1,
   };
   return {
+    schemaVersion: 1,
     direct: { prompt: "", settings: { ...settings } },
     agent: {
       prompt: "",

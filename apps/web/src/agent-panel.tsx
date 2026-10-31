@@ -1,12 +1,11 @@
-import { useProjectDraft } from "./project-draft";
-import { composeCreativePrompt, type CreationStyle } from "@tuyile/contracts";
+import { useDraftValue } from "./project-draft";
+import { composeCreativePrompt } from "@tuyile/contracts";
 import { PromptComposer } from "./prompt-composer";
 import { ImageControls, ReferenceAttachments } from "./image-controls";
 import {
   initialSettings,
   selectedCapability,
   settingsIssues,
-  type ImageSettings,
 } from "./image-settings";
 import { useEffect, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
@@ -70,28 +69,19 @@ export function AgentPanel({
 }) {
   const state = useSessionState(),
     api = client(state.session.csrfToken);
-  const draftStore = useProjectDraft();
-  const initialDraft = draftStore.get().document.agent;
-  const [prompt, setPrompt] = useState(initialDraft.prompt),
-    [style, setStyle] = useState<CreationStyle | undefined>(initialDraft.style),
-    [skillId, setSkillId] = useState(initialDraft.skillId),
-    [settings, setSettings] = useState<ImageSettings>(initialDraft.settings),
-    [conversationModel, setConversationModel] = useState(
-      initialDraft.conversationModel,
+  const [prompt, setPrompt] = useDraftValue("agent", "prompt"),
+    [style, setStyle] = useDraftValue("agent", "style"),
+    [skillId, setSkillId] = useDraftValue("agent", "skillId"),
+    [settings, setSettings] = useDraftValue("agent", "settings"),
+    [conversationModel, setConversationModel] = useDraftValue(
+      "agent",
+      "conversationModel",
     ),
     [current, setCurrent] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [pending, setPending] = useState<PlanningRequest | null>(null),
     [total, setTotal] = useState(0);
-  useEffect(() => {
-    state.agentDrafts.set(projectId, { prompt, style });
-  }, [state, projectId, prompt, style]);
-  useEffect(() => {
-    draftStore.edit({
-      agent: { prompt, style, settings, skillId, conversationModel },
-    });
-  }, [draftStore, prompt, style, settings, skillId, conversationModel]);
   const confirmHistory = useConfirm();
   const submitting = useRef(false);
   const jobs = useInfiniteQuery({
@@ -134,7 +124,7 @@ export function AgentPanel({
   useEffect(() => {
     if (usage?.models.length && !initialized.current) {
       initialized.current = true;
-      if (!settings.modelKey) setSettings(initialSettings(usage));
+      setSettings((old) => (old.modelKey ? old : initialSettings(usage)));
     }
   }, [usage]);
   const model = settings.modelKey;

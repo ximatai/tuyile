@@ -167,3 +167,81 @@ it("enforces project ownership and HTTP schemas including large Unicode drafts",
   const anonymous = await app.request(`/api/projects/${f.project.id}/draft`);
   expect(anonymous.status).toBe(401);
 });
+
+it("reads legacy drafts without rewriting them and recognizes their previously accepted save keys", async () => {
+  const { createHash } = await import("node:crypto"),
+    { projectDraftSave } = await import("@tuyile/contracts");
+  const { schemaVersion, ...legacy } = emptyProjectDraft();
+  legacy.direct.prompt = "legacy saved input";
+  const legacyRequest = {
+    revision: 0,
+    requestKey: randomUUID(),
+    document: legacy,
+  };
+  const hash = createHash("sha256")
+    .update(JSON.stringify(legacyRequest))
+    .digest("hex");
+  await f.pool.query(
+    "INSERT INTO project_creation_drafts(workspace_id,project_id,revision,document,request_key,request_hash) VALUES($1,$2,1,$3,$4,$5)",
+    [
+      f.principal.workspaceId,
+      f.project.id,
+      legacy,
+      legacyRequest.requestKey,
+      hash,
+    ],
+  );
+  expect((await s.loadDraft(f.principal, f.project.id)).document).toMatchObject(
+    { schemaVersion: 1, direct: { prompt: "legacy saved input" } },
+  );
+  expect(
+    (
+      await f.pool.query(
+        "SELECT document FROM project_creation_drafts WHERE project_id=$1",
+        [f.project.id],
+      )
+    ).rows[0].document.schemaVersion,
+  ).toBeUndefined();
+  expect(
+    (
+      await s.saveDraft(
+        f.principal,
+        f.project.id,
+        projectDraftSave.parse(legacyRequest),
+      )
+    ).revision,
+  ).toBe(1);
+  await expect(
+    s.saveDraft(
+      f.principal,
+      f.project.id,
+      projectDraftSave.parse({
+        ...legacyRequest,
+        document: {
+          ...legacy,
+          direct: { ...legacy.direct, prompt: "different body" },
+        },
+      }),
+    ),
+  ).rejects.toMatchObject({ code: "IDEMPOTENCY_CONFLICT" });
+  await s.saveDraft(
+    f.principal,
+    f.project.id,
+    input({ revision: 1, document: { schemaVersion, ...legacy } }),
+  );
+  expect(
+    (
+      await f.pool.query(
+        "SELECT document FROM project_creation_drafts WHERE project_id=$1",
+        [f.project.id],
+      )
+    ).rows[0].document.schemaVersion,
+  ).toBe(1);
+  await f.pool.query(
+    "UPDATE project_creation_drafts SET document=jsonb_set(document,'{schemaVersion}','2'::jsonb) WHERE project_id=$1",
+    [f.project.id],
+  );
+  await expect(s.loadDraft(f.principal, f.project.id)).rejects.toMatchObject({
+    code: "DRAFT_VERSION_UNSUPPORTED",
+  });
+});

@@ -2901,6 +2901,9 @@ test("favorite library groups cards and reuses prompts, images and references th
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page);
+  const initialUsage = (
+    await (await page.request.get("/api/images/usage")).json()
+  ).used;
   const initialFavorites = (
     await (await page.request.get("/api/library/favorites")).json()
   ).favorites.length;
@@ -3051,7 +3054,7 @@ test("favorite library groups cards and reuses prompts, images and references th
   ).toHaveCount(0);
   expect(
     (await (await page.request.get("/api/images/usage")).json()).used,
-  ).toBe(0);
+  ).toBe(initialUsage);
   await page.getByRole("button", { name: "新增提示词", exact: true }).click();
   await page.getByLabel("收藏标题", { exact: true }).fill("手动新增需求");
   await page.getByLabel("收藏提示词", { exact: true }).fill("新增收藏正文");

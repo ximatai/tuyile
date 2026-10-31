@@ -1,5 +1,6 @@
 import type { ErrorResponse } from "@tuyile/contracts";
 const messages: Record<string, string> = {
+  DRAFT_VERSION_UNSUPPORTED: "草稿由更新版本创建，请升级应用后再打开。",
   DRAFT_CONFLICT: "草稿已在其他页面更新，当前输入已保留。",
   STYLE_CONFLICT: "风格已被修改，请重新打开后编辑。当前输入已保留。",
   STYLE_LIMIT: "最多保存 200 个风格，请先清理不再使用的风格。",

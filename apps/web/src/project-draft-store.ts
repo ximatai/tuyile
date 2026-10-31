@@ -46,6 +46,11 @@ export class ProjectDraftStore {
   private loading: Promise<void> | null = null;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private disposed = false;
+  private queuedTransfer: {
+    patch: Partial<ProjectDraftDocument>;
+    referenceLabel?: string;
+  } | null = null;
+  private referenceLabels = new Map<string, string>();
   private editVersion = 0;
   private resolutionVersion = 0;
   private controller = new AbortController();
@@ -91,6 +96,42 @@ export class ProjectDraftStore {
           this.loading = null;
         });
     return this.loading;
+  }
+  queueTransfer(patch: Partial<ProjectDraftDocument>, referenceLabel?: string) {
+    if (!this.disposed)
+      this.queuedTransfer = { patch: structuredClone(patch), referenceLabel };
+  }
+  applyQueuedTransfer() {
+    if (this.disposed || !this.state.ready || !this.queuedTransfer) return;
+    const { patch, referenceLabel } = this.queuedTransfer;
+    this.queuedTransfer = null;
+    if (referenceLabel && patch.referenceIds)
+      for (const id of patch.referenceIds)
+        this.referenceLabels.set(id, referenceLabel);
+    const before = this.state.document;
+    this.edit(patch);
+    if (referenceLabel && this.state.document === before) this.update({});
+  }
+  referenceName(id: string) {
+    return this.referenceLabels.get(id) ?? "草稿参考图";
+  }
+  editReferences(
+    action:
+      | { id: string; name: string }[]
+      | ((
+          previous: { id: string; name: string }[],
+        ) => { id: string; name: string }[]),
+  ) {
+    if (this.disposed || !this.state.ready) return;
+    const before = this.state.document;
+    const previous = before.referenceIds.map((id) => ({
+      id,
+      name: this.referenceName(id),
+    }));
+    const next = typeof action === "function" ? action(previous) : action;
+    this.referenceLabels = new Map(next.map((ref) => [ref.id, ref.name]));
+    this.edit({ referenceIds: next.map((ref) => ref.id) });
+    if (this.state.document === before) this.update({});
   }
   edit(patch: Partial<ProjectDraftDocument>) {
     if (!this.state.ready || this.disposed) return;
@@ -199,6 +240,8 @@ export class ProjectDraftStore {
     this.disposed = true;
     clearTimeout(this.timer);
     this.controller.abort();
+    this.queuedTransfer = null;
+    this.referenceLabels.clear();
     this.listeners.clear();
   }
 }

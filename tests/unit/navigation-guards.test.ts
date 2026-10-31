@@ -1,6 +1,28 @@
-import { expect, it } from "vitest";
-import type { SessionView } from "@tuyile/contracts";
+import { expect, it, vi } from "vitest";
+import {
+  emptyProjectDraft,
+  type ProjectDraftDocument,
+  type SessionView,
+} from "@tuyile/contracts";
 import { SessionState } from "../../apps/web/src/session-state";
+import { ProjectDraftStore } from "../../apps/web/src/project-draft-store";
+import { EditorStore } from "../../apps/web/src/editor/store";
+async function seed(
+  state: SessionState,
+  id: string,
+  document: ProjectDraftDocument,
+) {
+  const store = new ProjectDraftStore(
+    async () => ({ revision: 1, document }),
+    async (input) => ({
+      revision: input.revision + 1,
+      document: input.document,
+    }),
+  );
+  await store.load();
+  state.projectDrafts.set(id, store);
+  return store;
+}
 const session = {
   user: { id: "test", workspaceId: "workspace", executionVersion: 1 },
   csrfToken: "test",
@@ -73,29 +95,34 @@ it("shares one confirmation across repeated navigation attempts and retries afte
   state.clear();
 });
 
-it("keeps creation drafts per project and clears private drafts at session end", () => {
-  const state = new SessionState(session);
-  state.creativeDrafts.set("first", {
-    prompt: "私人草稿",
-    style: { name: "个人风格", text: "保持风格" },
-    references: [{ id: "asset", name: "参考图" }],
-  });
-  state.creativeDrafts.set("second", { prompt: "另一个项目", references: [] });
-  state.agentDrafts.set("first", { prompt: "规划草稿" });
-  expect(state.creativeDrafts.get("first")?.prompt).toBe("私人草稿");
-  expect(state.creativeDrafts.get("second")?.prompt).toBe("另一个项目");
+it("keeps one authoritative draft per project and clears it at session end", async () => {
+  const state = new SessionState(session),
+    first = emptyProjectDraft(),
+    second = emptyProjectDraft();
+  first.direct.prompt = "私人草稿";
+  first.agent.prompt = "规划草稿";
+  second.direct.prompt = "另一个项目";
+  await seed(state, "first", first);
+  await seed(state, "second", second);
+  expect(state.projectDraft("first").get().document.direct.prompt).toBe(
+    "私人草稿",
+  );
+  expect(state.projectDraft("first").get().document.agent.prompt).toBe(
+    "规划草稿",
+  );
+  expect(state.projectDraft("second").get().document.direct.prompt).toBe(
+    "另一个项目",
+  );
   state.clear();
-  expect(state.creativeDrafts.size).toBe(0);
-  expect(state.agentDrafts.size).toBe(0);
+  expect(state.projectDrafts.size).toBe(0);
 });
-
-it("protects existing prompt, style and reference drafts against cross-page replacements", () => {
-  const state = new SessionState(session);
-  state.creativeDrafts.set("project", {
-    prompt: "原需求",
-    style: { name: "风格", text: "风格正文" },
-    references: [{ id: "reference", name: "参考" }],
-  });
+it("protects current prompt, style and references from the canonical draft", async () => {
+  const state = new SessionState(session),
+    document = emptyProjectDraft();
+  document.direct.prompt = "原需求";
+  document.direct.style = { name: "风格", text: "风格正文" };
+  document.referenceIds = ["reference"];
+  await seed(state, "project", document);
   expect(state.replacesCreativeDraft("project", { prompt: "新需求" })).toBe(
     true,
   );
@@ -111,6 +138,40 @@ it("protects existing prompt, style and reference drafts against cross-page repl
   expect(state.replacesCreativeDraft("other", { prompt: "新需求" })).toBe(
     false,
   );
+  state.clear();
+});
+it("releases only the deleted project's stores, queued input, subscriptions and query cache", async () => {
+  const state = new SessionState(session),
+    one = await seed(state, "one", emptyProjectDraft()),
+    two = await seed(state, "two", emptyProjectDraft());
+  const dispose = vi.fn();
+  state.editors.set("one", { dispose } as unknown as EditorStore);
+  one.queueTransfer({
+    direct: { ...one.get().document.direct, prompt: "queued" },
+  });
+  const listener = vi.fn();
+  one.subscribe(listener);
+  state.queries.setQueryData(state.key("canvas", "one"), { private: true });
+  state.queries.setQueryData(state.key("canvas-sources", "one", "1"), {});
+  state.queries.setQueryData(state.key("canvas", "two"), {});
+  state.queries.setQueryData(state.key("usage"), {});
+  state.releaseProject("one");
+  one.applyQueuedTransfer();
+  one.edit({ mode: "agent" });
+  expect(dispose).toHaveBeenCalledOnce();
+  expect(listener).not.toHaveBeenCalled();
+  expect(state.editors.has("one")).toBe(false);
+  expect(state.projectDrafts.has("one")).toBe(false);
+  expect(state.projectDrafts.get("two")).toBe(two);
+  expect(
+    state.queries.getQueryData(state.key("canvas", "one")),
+  ).toBeUndefined();
+  expect(
+    state.queries.getQueryData(state.key("canvas-sources", "one", "1")),
+  ).toBeUndefined();
+  expect(state.queries.getQueryData(state.key("canvas", "two"))).toEqual({});
+  expect(state.queries.getQueryData(state.key("usage"))).toEqual({});
+  state.clear();
 });
 
 it("confirms task replacement when only generation parameters differ", async () => {
@@ -130,10 +191,6 @@ it("confirms task replacement when only generation parameters differ", async () 
   );
   await store.load();
   state.projectDrafts.set("project", store);
-  state.creativeDrafts.set("project", {
-    prompt: "same prompt",
-    references: [],
-  });
   const task = {
     id: "task",
     projectId: "project",

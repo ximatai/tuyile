@@ -6,10 +6,16 @@ import {
   type ReactNode,
 } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { CreationStyle, ImageTask, SessionView } from "@tuyile/contracts";
+import type {
+  ImageUsage,
+  ImageTask,
+  SessionView,
+  ProjectDraftDocument,
+} from "@tuyile/contracts";
 import { ProjectDraftStore } from "./project-draft-store";
 import { client } from "./api";
 import type { ProjectDraftSnapshot } from "@tuyile/contracts";
+import { taskSettings } from "./image-settings";
 import { EditorStore } from "./editor/store";
 export class SessionState {
   readonly queries = new QueryClient({
@@ -63,23 +69,6 @@ export class SessionState {
             signal,
           ),
       );
-      const draft = store;
-      store.subscribe(() => {
-        if (!draft.get().ready) return;
-        const doc = draft.get().document;
-        this.creativeDrafts.set(projectId, {
-          prompt: doc.direct.prompt,
-          style: doc.direct.style,
-          references: doc.referenceIds.map((id) => ({
-            id,
-            name: "草稿参考图",
-          })),
-        });
-        this.agentDrafts.set(projectId, {
-          prompt: doc.agent.prompt,
-          style: doc.agent.style,
-        });
-      });
       this.projectDrafts.set(projectId, store);
     }
     return store;
@@ -88,36 +77,58 @@ export class SessionState {
     await this.projectDraft(projectId).load();
   }
   readonly editors = new Map<string, EditorStore>();
-  readonly agentDrafts = new Map<
-    string,
-    { prompt: string; style?: CreationStyle }
-  >();
-  readonly creativeDrafts = new Map<
-    string,
-    {
-      prompt: string;
-      style?: CreationStyle;
-      references: { id: string; name: string }[];
+  async queueDraftTransfer(
+    projectId: string,
+    input: { prompt?: string; referenceIds?: string[]; task?: ImageTask },
+  ) {
+    const store = this.projectDraft(projectId);
+    await store.load();
+    const patch: Partial<ProjectDraftDocument> = { mode: "direct" };
+    if (input.task) {
+      const usage = await client(this.session.csrfToken)<ImageUsage>(
+        "/images/usage",
+      );
+      const settings = taskSettings(input.task, usage);
+      if (!settings) throw new Error("这次任务没有可复用的参数。");
+      patch.direct = {
+        prompt: input.task.prompt,
+        style: input.task.settings?.style,
+        settings,
+      };
+      patch.referenceIds = input.task.settings!.referenceIds;
     }
-  >();
-  readonly creationDrafts = new Map<
-    string,
-    { prompt?: string; referenceIds?: string[]; task?: ImageTask }
-  >();
+    if (input.prompt !== undefined)
+      patch.direct = {
+        ...(patch.direct ?? store.get().document.direct),
+        prompt: input.prompt,
+      };
+    if (input.referenceIds) patch.referenceIds = input.referenceIds;
+    store.queueTransfer(
+      patch,
+      input.referenceIds ? "图库参考图" : input.task ? "任务参考图" : undefined,
+    );
+  }
+  releaseProject(projectId: string) {
+    this.editors.get(projectId)?.dispose();
+    this.editors.delete(projectId);
+    this.projectDrafts.get(projectId)?.dispose();
+    this.projectDrafts.delete(projectId);
+    this.queries.removeQueries({
+      predicate: (query) => query.queryKey.slice(3).includes(projectId),
+    });
+  }
   replacesCreativeDraft(
     projectId: string,
     input: { prompt?: string; referenceIds?: string[]; task?: ImageTask },
   ) {
-    const current = this.creativeDrafts.get(projectId);
-    if (!current) return false;
+    const stored = this.projectDrafts.get(projectId)?.get();
+    if (!stored?.ready) return false;
+    const current = stored.document.direct;
     const prompt = input.task?.prompt ?? input.prompt;
     const referenceIds =
       input.task?.settings?.referenceIds ?? input.referenceIds;
     const style = input.task?.settings?.style;
-    const stored = this.projectDrafts.get(projectId)?.get();
-    const settings = stored?.ready
-      ? stored.document.direct.settings
-      : undefined;
+    const settings = current.settings;
     const task = input.task;
     const parametersChanged = !!(
       task?.settings &&
@@ -139,8 +150,8 @@ export class SessionState {
         prompt !== undefined &&
         current.prompt !== prompt) ||
       (referenceIds !== undefined &&
-        current.references.length &&
-        JSON.stringify(current.references.map((r) => r.id)) !==
+        stored.document.referenceIds.length &&
+        JSON.stringify(stored.document.referenceIds) !==
           JSON.stringify(referenceIds)) ||
       (input.task &&
         current.style &&
@@ -176,9 +187,6 @@ export class SessionState {
     this.editors.clear();
     this.projectDrafts.forEach((draft) => draft.dispose());
     this.projectDrafts.clear();
-    this.creationDrafts.clear();
-    this.creativeDrafts.clear();
-    this.agentDrafts.clear();
     this.navigationGuards.clear();
   }
 }

@@ -231,3 +231,40 @@ it("ignores an older reload response after a newer overwrite has saved the local
     document: { direct: { prompt: "keep local" } },
   });
 });
+
+it("stages cross-page selection without making an offscreen draft dirty, then consumes it exactly once", async () => {
+  const { store, writes } = fixture();
+  await store.load();
+  store.queueTransfer(
+    {
+      direct: { ...store.get().document.direct, prompt: "selected" },
+      referenceIds: ["reference"],
+      mode: "direct",
+    },
+    "图库参考图",
+  );
+  expect(store.get().dirty).toBe(false);
+  expect(store.get().document.direct.prompt).toBe("");
+  store.applyQueuedTransfer();
+  expect(store.get().document.direct.prompt).toBe("selected");
+  expect(store.referenceName("reference")).toBe("图库参考图");
+  store.edit({
+    direct: { ...store.get().document.direct, prompt: "further edit" },
+  });
+  store.applyQueuedTransfer();
+  expect(store.get().document.direct.prompt).toBe("further edit");
+  await store.flush();
+  expect(writes).toHaveLength(1);
+});
+it("updates reference presentation labels independently of the canonical reference IDs", async () => {
+  const { store } = fixture();
+  await store.load();
+  store.editReferences([{ id: "reference", name: "uploaded.png" }]);
+  await store.flush();
+  store.editReferences((old) =>
+    old.map((ref) => ({ ...ref, name: "任务参考图" })),
+  );
+  expect(store.get().document.referenceIds).toEqual(["reference"]);
+  expect(store.referenceName("reference")).toBe("任务参考图");
+  expect(store.get().dirty).toBe(false);
+});
