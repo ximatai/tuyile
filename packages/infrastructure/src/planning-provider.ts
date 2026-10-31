@@ -163,7 +163,8 @@ export class CompatiblePlanningProvider implements PlanningProvider {
         },
       );
       if (!response.ok) {
-        await response.body?.cancel();
+        // Cleanup must not replace an already received HTTP status.
+        await response.body?.cancel().catch(() => {});
         throw new PlanningCallError(
           [400, 401, 403, 404, 422, 429].includes(response.status)
             ? "rejected"

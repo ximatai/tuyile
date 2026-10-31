@@ -106,3 +106,39 @@ it("preserves explicit HTTP rejection and interrupted-call semantics", async () 
   expect(interrupted.code).toBe("PLANNING_INTERRUPTED");
   expect(interrupted.diagnosticCode).toBeUndefined();
 });
+
+it.each([400, 401, 403, 404, 422, 429, 500, 503])(
+  "retains HTTP %s even when response cleanup fails",
+  async (status) => {
+    let cancelled = false;
+    const error = await failure(
+      async () =>
+        new Response(
+          new ReadableStream({
+            cancel() {
+              cancelled = true;
+              return Promise.reject(privateFailure("ECONNRESET"));
+            },
+          }),
+          { status },
+        ),
+    );
+    expect(cancelled).toBe(true);
+    expect(error).toMatchObject({
+      status,
+      kind: status < 500 ? "rejected" : "unknown",
+      code:
+        status === 429 ? "UPSTREAM_RATE_LIMIT" : "PLANNING_UPSTREAM_FAILURE",
+    });
+    expect(error.diagnosticCode).toBeUndefined();
+  },
+);
+it("rejects oversized responses without retaining their content", async () => {
+  const error = await failure(
+    async () => new Response("PRIVATE_BODY".repeat(100000)),
+  );
+  expect(error).toMatchObject({
+    kind: "unknown",
+    code: "PLANNING_RESPONSE_LIMIT",
+  });
+});
