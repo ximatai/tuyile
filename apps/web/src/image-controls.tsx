@@ -1,3 +1,4 @@
+import { modelDisplayName } from "./model-presentation";
 import { X, Upload as UploadIcon } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import type { ImageUsage } from "@tuyile/contracts";
@@ -9,6 +10,7 @@ import {
   Image,
   Upload,
   Tooltip,
+  useControlsDisabled,
 } from "@tuyile/ui";
 import {
   allowedQualities,
@@ -28,6 +30,7 @@ export function ImageControls({
   count = true,
   compact = false,
   labelPrefix = "",
+  disabled: disabledProp = false,
 }: {
   usage?: ImageUsage;
   value: ImageSettings;
@@ -36,7 +39,9 @@ export function ImageControls({
   count?: boolean;
   compact?: boolean;
   labelPrefix?: string;
+  disabled?: boolean;
 }) {
+  const disabled = useControlsDisabled(disabledProp);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const customSizeRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -67,11 +72,7 @@ export function ImageControls({
       return "历史模型（已不可用）";
     const model =
       usage?.modelOptions?.find((m) => m.id === key)?.modelId ?? key;
-    const names: Record<string, string> = {
-      "gpt-image-2.5-sunburst": "Sunburst",
-      "gpt-image-2.5-flare": "Flare",
-    };
-    return names[model] ?? model;
+    return modelDisplayName(model);
   };
   const label = (text: string) =>
     labelPrefix ? `${labelPrefix} ${text}` : text;
@@ -90,6 +91,7 @@ export function ImageControls({
     (size) => !currentSize || size.ratio === currentSize.ratio,
   );
   const patch = (v: Partial<ImageSettings>) => {
+    if (disabled) return;
     if (v.modelKey && usage && v.modelKey !== value.modelKey) {
       const nextUsage = {
         ...usage,
@@ -152,6 +154,7 @@ export function ImageControls({
         patch({ quality: quality as ImageSettings["quality"] })
       }
       disabled={
+        disabled ||
         !qualities.length ||
         (qualities.length === 1 && qualities.includes(value.quality))
       }
@@ -163,13 +166,14 @@ export function ImageControls({
   );
   return (
     <div
-      className={`image-controls${compact ? " compact-image-controls" : ""}`}
+      className={`image-controls${compact ? " compact-image-controls" : ""}${count ? "" : " image-controls-single-output"}`}
     >
       <div className={compact ? "parameter-grid" : "model-control-row"}>
         <ChoiceField
           label={label(modelLabel)}
           value={value.modelKey}
           disabled={
+            disabled ||
             !choices.length ||
             (choices.length === 1 && choices[0]?.value === value.modelKey)
           }
@@ -179,7 +183,11 @@ export function ImageControls({
           optionRender={(option) => (
             <span className="model-choice-option">
               <span>
-                {modelName(String(option.value))}
+                {usage?.modelOptions?.find((m) => m.id === option.value)
+                  ?.modelId ??
+                  (choices.some((choice) => choice.value === option.value)
+                    ? String(option.value)
+                    : option.label)}
                 {usage?.modelOptions?.find((m) => m.id === option.value)
                   ?.serviceName
                   ? ` · ${usage.modelOptions.find((m) => m.id === option.value)!.serviceName}`
@@ -211,7 +219,9 @@ export function ImageControls({
         <ChoiceField
           label={label("比例")}
           value={currentSize?.ratio ?? "custom"}
-          disabled={!ratios.length || (ratios.length === 1 && !!currentSize)}
+          disabled={
+            disabled || !ratios.length || (ratios.length === 1 && !!currentSize)
+          }
           optionRender={(option) => ratioLabel(String(option.value))}
           labelRender={(option) => ratioLabel(String(option.value))}
           options={ratios
@@ -237,6 +247,7 @@ export function ImageControls({
           label={label("尺寸")}
           value={`${value.width}x${value.height}`}
           disabled={
+            disabled ||
             !sameRatioSizes.length ||
             (sameRatioSizes.length === 1 && !!currentSize)
           }
@@ -262,13 +273,17 @@ export function ImageControls({
           }}
         />
       </div>
-      <div className={`parameter-grid${count ? " image-output-options" : ""}`}>
+      <div
+        className={`parameter-grid${count || compact ? " image-output-options" : ""}`}
+      >
         {!compact && qualityControl}
         {count && (
           <ChoiceField
             label={label(labelPrefix ? "张数" : "图片张数")}
             value={String(value.count)}
-            disabled={usage?.policy.maxCount === 1 && value.count === 1}
+            disabled={
+              disabled || (usage?.policy.maxCount === 1 && value.count === 1)
+            }
             onValueChange={(count) => patch({ count: Number(count) })}
             options={Array.from(
               { length: usage?.policy.maxCount ?? 16 },
@@ -281,6 +296,7 @@ export function ImageControls({
           name="format"
           value={value.format}
           disabled={
+            disabled ||
             !formats.length ||
             (formats.length === 1 && formats.includes(value.format))
           }
@@ -309,6 +325,7 @@ export function ImageControls({
                   <div className="parameter-grid">
                     <Field
                       label={label("宽度")}
+                      disabled={disabled}
                       name="width"
                       type="number"
                       value={value.width}
@@ -323,6 +340,7 @@ export function ImageControls({
                     />
                     <Field
                       label={label("高度")}
+                      disabled={disabled}
                       name="height"
                       type="number"
                       value={value.height}
@@ -351,7 +369,7 @@ export function ReferenceAttachments({
   references,
   onRemove,
   onUpload,
-  disabled,
+  disabled: disabledProp,
   maxReferences = 4,
   agent = false,
   selected = [],
@@ -366,6 +384,7 @@ export function ReferenceAttachments({
   selected?: { id: string; name: string }[];
   onUseSelected?: () => void;
 }) {
+  const disabled = useControlsDisabled(disabledProp);
   return (
     <div
       className="reference-attachments"

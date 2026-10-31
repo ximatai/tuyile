@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   AutoComplete,
@@ -8,6 +8,7 @@ import {
   Input,
   Tooltip,
   useFeedback,
+  useControlsDisabled,
 } from "@tuyile/ui";
 import { Bookmark } from "lucide-react";
 import type { Favorite } from "@tuyile/contracts";
@@ -33,13 +34,16 @@ export function PromptFavorite({
   title = "",
   prompt,
   groupName = "",
+  visible = true,
 }: {
   sourceId?: string;
   favoriteId?: string;
   title?: string;
   prompt: string;
   groupName?: string;
+  visible?: boolean;
 }) {
+  const disabled = useControlsDisabled();
   const state = useSessionState(),
     api = client(state.session.csrfToken),
     feedback = useFeedback();
@@ -47,6 +51,9 @@ export function PromptFavorite({
     [busy, setBusy] = useState(false),
     [name, setName] = useState(title),
     [group, setGroup] = useState("");
+  useEffect(() => {
+    if (!visible || disabled) setOpen(false);
+  }, [visible, disabled]);
   const formId = useId();
   const pending = useRef(false),
     requestId = useRef<string | null>(null);
@@ -57,7 +64,7 @@ export function PromptFavorite({
     enabled: open,
   });
   async function save() {
-    if (pending.current) return;
+    if (disabled || pending.current) return;
     pending.current = true;
     setBusy(true);
     try {
@@ -86,7 +93,7 @@ export function PromptFavorite({
           type="button"
           className="prompt-bookmark"
           aria-label={favoriteId ? "已收藏提示词" : "收藏提示词"}
-          disabled={!!favoriteId || !prompt.trim() || busy}
+          disabled={disabled || !!favoriteId || !prompt.trim() || busy}
           onClick={() => {
             if (sourceId) void save();
             else {
@@ -109,7 +116,7 @@ export function PromptFavorite({
         okText="收藏"
         confirmLoading={busy}
         okButtonProps={{
-          disabled: !name.trim() || busy,
+          disabled: disabled || !name.trim() || busy,
           htmlType: "submit",
           form: formId,
         }}
@@ -131,7 +138,7 @@ export function PromptFavorite({
             label="标题"
             maxLength={100}
             value={name}
-            disabled={busy}
+            disabled={disabled || busy}
             onChange={(e) => setName(e.target.value)}
           />
           <label className="field">
@@ -148,7 +155,7 @@ export function PromptFavorite({
                 .filter(Boolean)
                 .map((value) => ({ value }))}
               onChange={setGroup}
-              disabled={busy}
+              disabled={disabled || busy}
             >
               <Input maxLength={60} placeholder="选择或输入分组" />
             </AutoComplete>

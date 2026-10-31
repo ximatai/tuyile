@@ -81,6 +81,10 @@ export function UiProvider({ children }: { children: ReactNode }) {
     </ConfigProvider>
   );
 }
+/** Business editors must not override an inherited form lock with local false. */
+export function useControlsDisabled(disabled = false) {
+  return ConfigProvider.useConfig().componentDisabled || disabled;
+}
 export function Button({
   children,
   className = "",

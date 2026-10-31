@@ -11,6 +11,7 @@ import {
   Notice,
   useConfirm,
   useFeedback,
+  useControlsDisabled,
 } from "@tuyile/ui";
 import type { SavedStyle } from "@tuyile/contracts";
 import { useQuery } from "@tanstack/react-query";
@@ -25,6 +26,7 @@ export function StyleSelector({
   onChange: (style: CreationStyle | undefined) => void;
   visible?: boolean;
 }) {
+  const disabled = useControlsDisabled();
   const state = useSessionState(),
     api = client(state.session.csrfToken),
     confirm = useConfirm(),
@@ -62,7 +64,7 @@ export function StyleSelector({
       : undefined;
   const current = style ? (exact?.id ?? "modified") : "none";
   async function save(copy: boolean) {
-    if (saving.current) return;
+    if (disabled || saving.current) return;
     saving.current = true;
     setBusy(true);
     setError("");
@@ -93,6 +95,7 @@ export function StyleSelector({
   }
   async function remove() {
     if (
+      disabled ||
       !original ||
       original.scope !== "personal" ||
       saving.current ||
@@ -118,10 +121,10 @@ export function StyleSelector({
     }
   }
   useEffect(() => {
-    if (!visible) setOpen(false);
-  }, [visible]);
+    if (!visible || disabled) setOpen(false);
+  }, [visible, disabled]);
   function edit(next: boolean) {
-    if (busy) return;
+    if (disabled || busy) return;
     if (next) {
       setSource(candidate);
       setError("");
@@ -154,7 +157,7 @@ export function StyleSelector({
       <ChoiceField
         label="风格"
         value={current}
-        disabled={busy}
+        disabled={disabled || busy}
         options={[]}
         groups={[
           { value: "none", label: "无风格" },
@@ -176,6 +179,7 @@ export function StyleSelector({
           { value: "new", label: "自定义风格" },
         ]}
         onValueChange={(key) => {
+          if (disabled) return;
           if (key === "new") {
             setSource(undefined);
             setSelectedId("");
@@ -212,13 +216,13 @@ export function StyleSelector({
           placement="leftTop"
           open={open}
           onOpenChange={edit}
-          classNames={{ root: "style-editor-popover" }}
+          classNames={{ root: "creation-popover style-editor-popover" }}
           content={
             <div className="style-editor" onKeyDown={escape}>
               <Field
                 label="风格名称"
                 value={name}
-                disabled={busy}
+                disabled={disabled || busy}
                 maxLength={80}
                 onChange={(event) => setName(event.target.value)}
               />
@@ -228,7 +232,7 @@ export function StyleSelector({
                   id={descriptionId}
                   aria-label="风格描述"
                   value={text}
-                  disabled={busy}
+                  disabled={disabled || busy}
                   rows={6}
                   maxLength={2000}
                   placeholder="描述画面质感、光线、色彩和构图"
@@ -240,7 +244,7 @@ export function StyleSelector({
                 {original?.scope === "personal" && (
                   <Button
                     type="button"
-                    disabled={busy}
+                    disabled={disabled || busy}
                     onClick={() => void remove()}
                   >
                     删除
@@ -248,7 +252,7 @@ export function StyleSelector({
                 )}
                 <Button
                   type="button"
-                  disabled={busy || !name.trim() || !text.trim()}
+                  disabled={disabled || busy || !name.trim() || !text.trim()}
                   onClick={() => void save(original?.scope !== "personal")}
                 >
                   {original?.scope === "personal"
@@ -260,7 +264,9 @@ export function StyleSelector({
                     type="button"
                     className="style-reset"
                     disabled={
-                      busy || (name === original.name && text === original.text)
+                      disabled ||
+                      busy ||
+                      (name === original.name && text === original.text)
                     }
                     onClick={() => {
                       setName(original.name);
@@ -272,13 +278,17 @@ export function StyleSelector({
                 )}
               </div>
               <div className="style-editor-footer">
-                <Button type="button" disabled={busy} onClick={close}>
+                <Button
+                  type="button"
+                  disabled={disabled || busy}
+                  onClick={close}
+                >
                   取消
                 </Button>
                 <Button
                   type="button"
                   className="primary"
-                  disabled={busy || !name.trim() || !text.trim()}
+                  disabled={disabled || busy || !name.trim() || !text.trim()}
                   onClick={() => {
                     const next = { name: name.trim(), text: text.trim() };
                     setSelectedId(original?.id ?? "");
@@ -301,6 +311,7 @@ export function StyleSelector({
               ref={trigger}
               type="button"
               className="style-edit-trigger"
+              disabled={disabled || busy}
               aria-label="编辑风格"
               aria-expanded={open}
               onKeyDown={escape}

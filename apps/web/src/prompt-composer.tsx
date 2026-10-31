@@ -3,7 +3,14 @@ import { StyleSelector } from "./style-selector";
 import { composeCreativePrompt, type CreationStyle } from "@tuyile/contracts";
 import { WandSparkles } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ComponentRef } from "react";
-import { Button, Input, Notice, Popover, useConfirm } from "@tuyile/ui";
+import {
+  Button,
+  Input,
+  Notice,
+  Popover,
+  useConfirm,
+  useControlsDisabled,
+} from "@tuyile/ui";
 import { PromptShortcuts } from "./prompt-shortcuts";
 export function PromptComposer({
   value,
@@ -26,14 +33,15 @@ export function PromptComposer({
   compact?: boolean;
   visible?: boolean;
 }) {
+  const disabled = useControlsDisabled();
   const confirm = useConfirm(),
     id = useId(),
     textarea = useRef<ComponentRef<typeof Input.TextArea>>(null);
   const [assistOpen, setAssistOpen] = useState(false);
   const assistTrigger = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (!visible) setAssistOpen(false);
-  }, [visible]);
+    if (!visible || disabled) setAssistOpen(false);
+  }, [visible, disabled]);
   const issue =
     style && !style.text.trim()
       ? "请填写风格描述。"
@@ -41,6 +49,7 @@ export function PromptComposer({
         ? "需求与风格合计不能超过 12000 字符。"
         : "";
   async function applyPrompt(prompt: string) {
+    if (disabled) return false;
     if (
       value.trim() &&
       value !== prompt &&
@@ -58,7 +67,7 @@ export function PromptComposer({
         onChoose={applyPrompt}
         visible={visible && (!compact || assistOpen)}
       />
-      {compact && <PromptFavorite prompt={value} />}
+      {compact && <PromptFavorite prompt={value} visible={visible} />}
       <StyleSelector
         style={style}
         onChange={onStyleChange}
@@ -71,10 +80,17 @@ export function PromptComposer({
       ref={assistTrigger}
       className={`prompt-composer ${compact ? "prompt-composer-compact" : ""}`}
     >
-      <label className="field" htmlFor={id}>
-        <span className={compact ? "sr-only" : "prompt-composer-heading"}>
-          {label}
-        </span>
+      <div className="field">
+        {compact ? (
+          <label className="sr-only" htmlFor={id}>
+            {label}
+          </label>
+        ) : (
+          <div className="field-heading prompt-composer-heading-row">
+            <label htmlFor={id}>{label}</label>
+            <PromptFavorite prompt={value} visible={visible} />
+          </div>
+        )}
         <Input.TextArea
           ref={textarea}
           id={id}
@@ -88,12 +104,7 @@ export function PromptComposer({
           maxLength={12000}
           placeholder="描述主体、场景、光线、构图和关键细节"
         />
-      </label>
-      {!compact && (
-        <div className="prompt-save-current">
-          <PromptFavorite prompt={value} />
-        </div>
-      )}
+      </div>
       {compact ? (
         <Popover
           trigger="click"
@@ -101,6 +112,7 @@ export function PromptComposer({
           open={assistOpen}
           onOpenChange={setAssistOpen}
           title="灵感与风格"
+          classNames={{ root: "creation-popover prompt-assist-popover" }}
           content={
             <div
               className="prompt-assist-content"
@@ -120,6 +132,7 @@ export function PromptComposer({
         >
           <Button
             className="prompt-assist-trigger"
+            disabled={disabled}
             type="button"
             aria-label="灵感与风格"
             aria-expanded={assistOpen}

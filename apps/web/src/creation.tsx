@@ -119,7 +119,7 @@ function TaskTile({
           open={detailsOpen}
           onOpenChange={setDetailsOpen}
           placement="topRight"
-          classNames={{ root: "task-details-popover" }}
+          classNames={{ root: "creation-popover task-details-popover" }}
           content={
             <div className="task-tile-details" onKeyDown={closeDetails}>
               <TaskDetails
@@ -140,11 +140,12 @@ function TaskTile({
           <Button
             ref={detailsTrigger}
             type="button"
+            className="help-trigger"
             aria-label="任务详情"
             aria-expanded={detailsOpen}
             onKeyDown={closeDetails}
           >
-            <Info size={16} />
+            <Info size={16} aria-hidden="true" />
           </Button>
         </Popover>
       </div>
@@ -665,6 +666,7 @@ function CreationEditor({
               >
                 <fieldset disabled={busy || !!pending || !usage?.models.length}>
                   <PromptComposer
+                    visible={mode === "direct"}
                     height={promptHeight}
                     value={prompt}
                     onChange={setPrompt}
@@ -693,6 +695,7 @@ function CreationEditor({
                     />
                   )}
                   <ImageControls
+                    disabled={busy || !!pending}
                     compact
                     usage={usage}
                     value={settings}
@@ -758,8 +761,8 @@ function CreationEditor({
                             : "排队中…"
                         : `生成 ${settings.count} 张`}
                 </Button>
-                <HelpPopover title="后台执行与计费">
-                  提交后可关闭页面，任务在后台继续。取消可能仍计费；后台中断后不自动续跑，已保存结果会保留。
+                <HelpPopover title="生成说明" visible={mode === "direct"}>
+                  生图任务是后台执行，关闭页面不影响任务执行和费用核算。
                 </HelpPopover>
               </div>
               {pending && (

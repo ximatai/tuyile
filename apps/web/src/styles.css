@@ -1086,14 +1086,33 @@ form {
   overflow: auto;
   padding: 2px 4px;
 }
+.agent-panel-empty .agent-conversation {
+  display: grid;
+  place-items: center;
+}
 .agent-intro {
-  padding: 10px 0;
-  color: #62748c;
-  line-height: 1.8;
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--muted);
+}
+.agent-intro-icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 16px;
+  border-radius: 16px;
+  background: var(--focus-soft);
+  color: var(--brand-blue);
 }
 .agent-intro h2 {
-  font-size: 16px;
-  color: #24354a;
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: var(--ink);
+}
+.agent-intro p {
+  margin: 0;
+  font-size: 12px;
 }
 .agent-message {
   padding: 10px 0;
@@ -1128,29 +1147,36 @@ form {
   gap: 8px;
   color: #0062b0;
 }
-.agent-step {
-  border-top: 1px solid #e6ecf4;
-  margin-top: 12px;
-  padding-top: 12px;
+.creation-panel form.agent-compose[hidden] {
+  display: none;
 }
-.agent-step .field {
-  margin-bottom: 10px;
+.agent-panel .agent-followup-trigger {
+  display: flex;
+  justify-content: space-between;
+  flex-shrink: 0;
+  border: 0;
+  box-shadow: none;
+  background: var(--paper);
+  color: var(--muted);
+  font-size: 12px;
 }
-.agent-step .ant-select {
-  width: 100%;
+.agent-followup-trigger[aria-expanded="true"] svg {
+  transform: rotate(180deg);
 }
 .creation-panel form.agent-compose {
   flex: none;
-  gap: 6px;
-  border-top: 1px solid #e6ecf4;
-  padding-top: 8px;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
 }
 .creation-panel .agent-compose fieldset {
   min-height: 0;
-  max-height: 250px;
+  max-height: min(48dvh, 360px);
   overflow: auto;
   display: grid;
-  gap: 8px;
+  gap: 12px;
 }
 .agent-options {
   display: grid;
@@ -1159,6 +1185,9 @@ form {
 }
 .agent-options .field {
   margin: 0;
+}
+.agent-options > .field:only-child {
+  grid-column: 1 / -1;
 }
 .agent-references {
   display: flex;
@@ -1189,6 +1218,12 @@ form {
   gap: 6px;
   border-top: 1px solid #e6ecf4;
   padding-top: 8px;
+}
+.agent-confirm-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 .agent-confirm-footer .hint {
   font-size: 12px;
@@ -1365,41 +1400,6 @@ form {
   line-height: 22px;
   font-weight: 600;
 }
-.plan-step-content {
-  min-width: 0;
-  flex: 1;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  column-gap: 8px;
-}
-.plan-step-content strong {
-  grid-column: 1 / -1;
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  color: #24354a;
-}
-.plan-step-content strong span {
-  white-space: nowrap;
-  color: #0062b0;
-  font-weight: 400;
-}
-.plan-step-content p {
-  grid-column: 1;
-  margin: 5px 0;
-  line-height: 1.6;
-  overflow-wrap: anywhere;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.plan-step-content small {
-  grid-column: 1;
-  display: block;
-  color: #65748b;
-  overflow-wrap: anywhere;
-}
 .plan-step-content .plan-dependency {
   color: #0062b0;
   margin-top: 4px;
@@ -1422,12 +1422,6 @@ form {
   object-fit: cover;
   border-radius: 4px;
   border: 1px solid #e6ecf4;
-}
-.agent-plan-form .plan-edit-toggle {
-  min-height: 30px;
-  height: 30px;
-  margin-top: 8px;
-  font-size: 12px;
 }
 .workspace-shell .creation-layout {
   grid-template-columns: minmax(0, 1fr) clamp(360px, 28vw, 460px);
@@ -1453,18 +1447,47 @@ form {
 .agent-message p {
   margin: 6px 0;
 }
-.agent-compose .ant-collapse {
-  width: 100%;
-  font-size: 12px;
-}
-.agent-compose .ant-collapse-header {
-  padding: 6px 10px !important;
-}
-.agent-compose .ant-collapse-content-box {
-  padding: 10px !important;
-}
 .agent-compose .agent-references {
-  margin-top: 8px;
+  display: block;
+  margin: 0;
+}
+.agent-compose .reference-attachments {
+  width: 100%;
+  margin: 0;
+}
+.agent-compose-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.agent-settings-trigger.ant-btn {
+  padding-inline: 0;
+  border: 0;
+  box-shadow: none;
+  color: var(--muted);
+  background: transparent;
+}
+.agent-planning-quota {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.agent-settings-content {
+  width: 300px;
+  max-height: min(60dvh, 480px);
+  overflow: auto;
+  padding: 2px;
+}
+.agent-settings-content .image-controls {
+  margin-top: 16px;
+}
+.agent-compose .prompt-composer-compact textarea.ant-input {
+  min-height: 96px;
+}
+.agent-compose .agent-plan-submit {
+  width: 100%;
 }
 
 /* Calibrated against the approved OpenAI desktop targets (2026-10-30). */
@@ -1595,8 +1618,7 @@ form {
 }
 .agent-plan-title {
   align-items: center;
-  justify-content: flex-start;
-  padding-right: 84px;
+  justify-content: space-between;
   min-height: 30px;
 }
 .agent-plan-title strong {
@@ -1615,19 +1637,6 @@ form {
   color: #26784d;
   background: #e5f7ed;
 }
-.agent-plan-form {
-  position: relative;
-}
-.agent-plan-form .plan-edit-toggle {
-  position: absolute;
-  top: 16px;
-  right: 12px;
-  margin: 0;
-  border: 0;
-  box-shadow: none;
-  color: var(--brand-blue);
-  background: transparent;
-}
 .plan-step-number {
   flex-basis: 28px;
   height: 28px;
@@ -1640,12 +1649,6 @@ form {
 }
 .agent-plan-summary li:last-child {
   padding-bottom: 0;
-}
-.plan-step-content {
-  column-gap: 12px;
-}
-.plan-step-content p {
-  color: #536b89;
 }
 .plan-step-content .plan-dependency {
   display: inline-block;
@@ -1929,21 +1932,46 @@ form {
 .heading-with-help h2 {
   margin: 0;
 }
-.help-trigger.button {
+.help-trigger.button.ant-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
   min-height: 28px;
   height: 28px;
   width: 28px;
-  padding: 4px;
+  padding: 0;
   border: 0;
   background: transparent;
   box-shadow: none;
   color: var(--muted);
   flex-shrink: 0;
 }
+.help-trigger.button.ant-btn:not(:disabled):hover {
+  color: var(--brand-blue);
+  background: var(--focus-soft);
+}
+.help-trigger svg { display: block; flex-shrink: 0; }
+.creation-popover .ant-popover-container {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px #172f4b18;
+}
+.creation-popover .ant-popover-title {
+  font-size: var(--text-body);
+  line-height: 20px;
+}
 .help-content {
   max-width: 300px;
   line-height: 1.7;
   white-space: normal;
+  font-size: var(--text-body);
+}
+.help-content:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 4px;
+  border-radius: 4px;
 }
 .content-excerpt.ant-typography {
   white-space: pre-wrap;
@@ -2197,9 +2225,6 @@ h3 {
 .model-pool-entry {
   font-size: var(--text-body);
 }
-.agent-intro h2 {
-  font-size: 14px;
-}
 .agent-message {
   padding: 6px 0;
 }
@@ -2211,9 +2236,6 @@ h3 {
 }
 .agent-plan-title strong {
   font-size: 14px;
-}
-.agent-plan-form .plan-edit-toggle {
-  top: 12px;
 }
 .agent-plan-summary li {
   padding: 8px 0;
@@ -2246,9 +2268,6 @@ h3 {
 }
 .model-pool-save {
   padding: 12px 16px;
-}
-.help-content {
-  font-size: var(--text-body);
 }
 
 /* Creation controls follow the same compact scale as the rest of the workspace. */
@@ -2330,7 +2349,11 @@ h3 {
 .creation-panel .field > label,
 .creation-panel .field-heading > label,
 .creation-panel label.field > span:not(.sr-only),
-.creation-panel .editor-field-label {
+.creation-panel .editor-field-label,
+.creation-popover .field > label,
+.creation-popover .field-heading > label,
+.creation-popover label.field > span:not(.sr-only),
+.creation-popover .editor-field-label {
   font-size: 13px;
   font-weight: 500;
   line-height: 20px;
@@ -2343,12 +2366,6 @@ h3 {
 }
 .output-grid .ant-image {
   width: 100%;
-}
-.agent-compose .image-controls {
-  margin-top: 10px;
-}
-.agent-compose .reference-attachments {
-  margin: 6px 0 0;
 }
 
 .direct-creation fieldset {
@@ -2378,6 +2395,19 @@ h3 {
 }
 .prompt-composer .field {
   margin-bottom: 0;
+}
+.prompt-composer .prompt-composer-heading-row {
+  align-items: center;
+}
+.prompt-composer-heading-row .prompt-bookmark {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 5px;
+  flex-shrink: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
 }
 .prompt-shortcuts {
   display: flex;
@@ -2440,9 +2470,6 @@ h3 {
 .agent-compose .prompt-shortcuts .button {
   height: 28px;
   min-height: 28px;
-}
-.agent-compose .prompt-composer > .field > span {
-  font-size: 12px;
 }
 
 .back,
@@ -2561,11 +2588,6 @@ h3 {
   font-size: 12px;
   color: var(--muted);
 }
-.execution-note .help-trigger {
-  width: 24px;
-  height: 24px;
-  min-height: 24px;
-}
 
 .image-output-options {
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2667,7 +2689,7 @@ h3 {
 }
 .task-tile-actions .button,
 .task-tile-icon,
-.task-tile-footer > .button {
+.task-tile-footer > .button:not(.help-trigger) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2712,12 +2734,6 @@ h3 {
 .task-tile > .product-notice,
 .task-tile > .button {
   margin: 0 8px;
-}
-.task-details-popover .ant-popover-inner {
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  box-shadow: 0 8px 28px #172f4b18;
 }
 .task-tile-details {
   width: 340px;
@@ -2926,6 +2942,9 @@ h3 {
 .compact-image-controls .image-output-options {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
+.compact-image-controls.image-controls-single-output .image-output-options {
+  grid-template-columns: 1fr;
+}
 .model-control-row {
   display: contents;
 }
@@ -2954,12 +2973,6 @@ h3 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-}
-.style-editor-popover .ant-popover-container {
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  box-shadow: 0 8px 28px #172f4b18;
 }
 .style-editor {
   display: grid;
@@ -3592,9 +3605,6 @@ h3 {
 .prompt-picker-filters.single-filter { grid-template-columns: 1fr; }
 
 .library-prompt-search { max-width: 360px; margin-bottom: 16px; }
-.prompt-composer { position: relative; }
-.prompt-save-current { position: absolute; right: 0; top: -4px; }
-.prompt-save-current .button { width: 28px; height: 28px; padding: 5px; }
 .prompt-picker-item { position: relative; padding-right: 38px; }
 .prompt-picker-item > span { position: absolute; right: 4px; top: 7px; }
 .prompt-picker-item > span { opacity: 0; }
@@ -3618,10 +3628,6 @@ h3 {
   color: var(--muted);
   padding-inline: 8px;
   font-size: 12px;
-}
-.header-usage-popover .ant-popover-inner {
-  padding: 16px;
-  border-radius: 10px;
 }
 .header-usage-popover .header-usage-close.ant-btn {
   position: absolute;
@@ -3691,14 +3697,6 @@ h3 {
   justify-content: space-between;
   gap: 8px;
   margin: 12px 0 8px;
-}
-.quota-billing-help.ant-btn {
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  box-shadow: none;
-  color: var(--muted);
 }
 .header-usage-popover .header-usage-details {
   display: flex;
@@ -3789,3 +3787,48 @@ h3 {
   border-radius: 8px;
   background: var(--surface);
 }
+
+.agent-reply, .agent-proposal-description {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.agent-proposal-description {
+  color: var(--muted);
+  line-height: 1.7;
+  margin: 12px 0;
+}
+.agent-proposal-actions, .plan-step-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.agent-proposal-actions .button, .plan-step-controls .button {
+  height: 28px;
+  min-height: 28px;
+  padding: 0 6px;
+  font-size: 12px;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  color: var(--brand-blue);
+}
+.plan-step-controls .plan-deliverable { white-space: nowrap; }
+
+.plan-step-content {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.plan-step-content strong {
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.plan-step-content small {
+  display: block;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.plan-step-content .field { margin: 0; }
