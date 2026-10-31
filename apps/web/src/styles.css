@@ -3712,3 +3712,70 @@ h3 {
 .header-usage-popover .usage-summary h2 {
   padding-right: 28px;
 }
+
+/* Loading placeholders preserve the workspace proportions without flashing copy. */
+.loading-app {
+  min-height: 100dvh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--muted);
+  font-size: var(--text-small);
+}
+.loading-workspace {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+.loading-canvas-container {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.loading-canvas {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f5f9ff;
+  background-image: radial-gradient(var(--line) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+.loading-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 24px 16px 16px;
+  border-left: 1px solid var(--line);
+  background: var(--surface);
+}
+.loading-prompt {
+  flex: 1;
+  min-height: 120px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper);
+}
+.loading-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.loading-submit {
+  height: var(--control-height);
+  border-radius: 6px;
+  background: var(--focus-soft);
+}
+.loading-page {
+  width: 100%;
+  padding-block: 8px;
+}
+.loading-page-content {
+  margin-top: 24px;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}

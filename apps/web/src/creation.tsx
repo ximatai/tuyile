@@ -1,3 +1,4 @@
+import { LoadingState } from "./loading-state";
 import {
   ProjectDraftBoundary,
   useDraftValue,
@@ -592,7 +593,7 @@ function CreationEditor({
       </div>
       <div className={`creation-layout show-${mobile}`}>
         <div className="creation-results" ref={resultsRef}>
-          <Suspense fallback={<p role="status">正在加载画布…</p>}>
+          <Suspense fallback={<LoadingState variant="canvas" />}>
             <CanvasEditor
               tasks={tasks}
               statusStale={!!taskQuery.error}

@@ -1,3 +1,4 @@
+import { LoadingState } from "./loading-state";
 import {
   createContext,
   useCallback,
@@ -166,7 +167,7 @@ export function ProjectDraftBoundary({
       {snapshot.ready ? (
         <DraftEpoch key={snapshot.epoch}>{children}</DraftEpoch>
       ) : !snapshot.error ? (
-        <p role="status">正在恢复创作草稿…</p>
+        <LoadingState variant="workspace" />
       ) : null}
     </Context.Provider>
   );

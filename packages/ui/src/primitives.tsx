@@ -225,6 +225,7 @@ export {
   Modal,
   Collapse,
   Spin,
+  Skeleton,
   Image,
   Upload,
   Checkbox,

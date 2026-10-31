@@ -1,3 +1,4 @@
+import { LoadingState } from "./loading-state";
 import { HeaderUsage } from "./header-usage";
 import React, { lazy, Suspense, useState, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
@@ -115,12 +116,7 @@ function App() {
     };
   }, []);
   if (path === "/login") return <AuthPage />;
-  if (loading)
-    return (
-      <main className="loading" role="status">
-        正在打开你的工作区…
-      </main>
-    );
+  if (loading) return <LoadingState variant="app" />;
   if (!session)
     return (
       <main className="loading">
@@ -353,7 +349,11 @@ function Shell() {
         </header>
         <main className="content">
           {error && <Notice error>{error}</Notice>}
-          <Suspense fallback={<p role="status">正在加载页面…</p>}>
+          <Suspense
+            fallback={
+              <LoadingState variant={workspace ? "workspace" : "page"} />
+            }
+          >
             <Routes>
               <Route
                 path="/gallery"
@@ -432,7 +432,7 @@ const router = createBrowserRouter([{ path: "*", element: <App /> }]);
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <UiProvider>
-      <Suspense fallback={<p role="status">正在加载…</p>}>
+      <Suspense fallback={<LoadingState variant="app" />}>
         <RouterProvider router={router} />
       </Suspense>
     </UiProvider>

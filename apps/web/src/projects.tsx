@@ -1,3 +1,4 @@
+import { LoadingState } from "./loading-state";
 import { useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams, useLocation } from "react-router-dom";
@@ -100,7 +101,7 @@ export function ProjectsPage({ csrfToken }: { csrfToken: string }) {
         <Notice error>{error || query.error?.message}</Notice>
       )}
       {query.isPending ? (
-        <p role="status">正在加载项目…</p>
+        <LoadingState />
       ) : (
         <div className="project-grid">
           {query.data?.projects.map((p) => (
@@ -143,10 +144,10 @@ export function ProjectWorkspace({ csrfToken }: { csrfToken: string }) {
       client(csrfToken)<Project>(`/projects/${projectId}`, undefined, signal),
   });
   if (query.error) return <Notice error>{query.error.message}</Notice>;
-  if (!query.data) return <p role="status">正在加载项目…</p>;
+  if (!query.data) return <LoadingState variant="workspace" />;
   return (
     <section className="project-workspace">
-      <Suspense fallback={<p role="status">正在加载创作面板…</p>}>
+      <Suspense fallback={<LoadingState variant="workspace" />}>
         <CreationPage
           key={projectId}
           csrfToken={csrfToken}
