@@ -511,23 +511,13 @@ function CanvasView({
           selected.has(n.parentId ?? "") ? { ...n, parentId: undefined } : n,
         );
     if (action === "copy") {
-      const ids = new Map(
-        old
-          .filter((n) => selected.has(n.id) || selected.has(n.parentId ?? ""))
-          .map((n) => [n.id, crypto.randomUUID()]),
-      );
-      next = [
-        ...old,
-        ...old
-          .filter((n) => ids.has(n.id))
-          .map((n) => ({
-            ...n,
-            id: ids.get(n.id)!,
-            parentId: n.parentId ? ids.get(n.parentId) : undefined,
-            x: n.x + 30,
-            y: n.y + 30,
-          })),
-      ];
+      try {
+        store.duplicateSelection();
+        setOperationError("");
+      } catch (e) {
+        setOperationError((e as Error).message);
+      }
+      return;
     }
     if (action === "group") {
       const picked = old.filter(
@@ -632,6 +622,61 @@ function CanvasView({
     <section
       className={`canvas-surface${panning ? " is-panning" : ""}`}
       aria-label="项目画布"
+      tabIndex={0}
+      onPointerDownCapture={(e) => {
+        const target = e.target as HTMLElement;
+        if (
+          !e.currentTarget.contains(target) ||
+          target.closest(
+            "input,textarea,select,button,a,[contenteditable],[role=dialog],[role=menu],[role=combobox]",
+          )
+        )
+          return;
+        e.currentTarget.focus({ preventScroll: true });
+      }}
+      onKeyDown={(e) => {
+        const target = e.target as HTMLElement;
+        if (
+          e.defaultPrevented ||
+          e.nativeEvent.isComposing ||
+          !e.currentTarget.contains(target) ||
+          target.closest(
+            "input,textarea,select,button,a,[contenteditable],[role=dialog],[role=menu],[role=combobox]",
+          )
+        )
+          return;
+        const key = e.key.toLowerCase();
+        const mod = e.ctrlKey || e.metaKey;
+        if (e.altKey) return;
+        const action =
+          mod && !e.shiftKey
+            ? {
+                a: () => store.selectAll(),
+                c: () => {
+                  store.copySelection();
+                },
+                v: () => store.pasteSelection(),
+                d: () => store.duplicateSelection(),
+                z: () => store.undo(),
+              }[key]
+            : mod && e.shiftKey && key === "z"
+              ? () => store.redo()
+              : !mod && !e.shiftKey && (key === "delete" || key === "backspace")
+                ? () => command("remove")
+                : !mod && !e.shiftKey && key === "escape"
+                  ? () => store.select([])
+                  : undefined;
+        if (!action) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.repeat) return;
+        try {
+          action();
+          setOperationError("");
+        } catch (error) {
+          setOperationError((error as Error).message);
+        }
+      }}
     >
       <div className="canvas-status" role="status">
         {snap.saving ? "正在保存…" : snap.dirty ? "有未保存修改" : "画布已保存"}{" "}
@@ -686,18 +731,6 @@ function CanvasView({
         panActivationKeyCode="Space"
         panOnDrag={[0, 1, 2]}
         onPaneClick={() => store.select([])}
-        onKeyDown={(e) => {
-          if ((e.target as HTMLElement).closest("input,textarea,button"))
-            return;
-          if (e.key === "Delete" || e.key === "Backspace") {
-            e.preventDefault();
-            command("remove");
-          }
-          if ((e.ctrlKey || e.metaKey) && e.key === "z") {
-            e.preventDefault();
-            e.shiftKey ? store.redo() : store.undo();
-          }
-        }}
       >
         <Background gap={20} size={1} />
         <Controls showInteractive={false} />
@@ -734,7 +767,7 @@ function CanvasView({
           </Button>
         </Tooltip>
 
-        <Tooltip title="撤销" trigger={["hover", "focus"]}>
+        <Tooltip title="撤销（⌘/Ctrl+Z）" trigger={["hover", "focus"]}>
           <Button
             aria-label="撤销"
             disabled={!snap.canUndo}
@@ -743,7 +776,7 @@ function CanvasView({
             <Undo2 size={16} />
           </Button>
         </Tooltip>
-        <Tooltip title="重做" trigger={["hover", "focus"]}>
+        <Tooltip title="重做（⌘/Ctrl+Shift+Z）" trigger={["hover", "focus"]}>
           <Button
             aria-label="重做"
             disabled={!snap.canRedo}
@@ -752,7 +785,7 @@ function CanvasView({
             <Redo2 size={16} />
           </Button>
         </Tooltip>
-        <Tooltip title="复制" trigger={["hover", "focus"]}>
+        <Tooltip title="创建副本（⌘/Ctrl+D）" trigger={["hover", "focus"]}>
           <Button
             aria-label="复制"
             disabled={!snap.selected.length}

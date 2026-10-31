@@ -132,3 +132,124 @@ it("allows corrected drafts after a definitive save rejection without replaying 
   expect(store.get().dirty).toBe(false);
   store.dispose();
 });
+
+it("copies groups as snapshots, remaps children and pastes as one undoable edit", () => {
+  const image = node(),
+    group = {
+      id: randomUUID(),
+      kind: "group" as const,
+      label: "group",
+      x: 0,
+      y: 0,
+      width: 300,
+      height: 300,
+    };
+  const child = { ...image, parentId: group.id };
+  const original = { ...emptyCanvas(), nodes: [group, child] };
+  const store = new EditorStore(
+    { document: original, revision: 0 },
+    async () => {
+      throw new Error("not used");
+    },
+  );
+  store.select([group.id]);
+  store.copySelection();
+  expect(store.get().document).toEqual(original);
+  store.edit({ ...original, nodes: [group, { ...child, x: 500 }] });
+  store.pasteSelection();
+  const [newGroup, newChild] = store.get().document.nodes.slice(2);
+  expect(newGroup.id).not.toBe(group.id);
+  expect(newChild.parentId).toBe(newGroup.id);
+  expect(newChild.assetId).toBe(image.assetId);
+  expect(newChild.x).toBe(30);
+  expect(store.get().selected).toEqual([newGroup.id, newChild.id]);
+  store.undo();
+  expect(store.get().document.nodes).toHaveLength(2);
+  store.redo();
+  expect(store.get().document.nodes).toHaveLength(4);
+  store.pasteSelection();
+  expect(store.get().document.nodes[5].x).toBe(60);
+  store.dispose();
+});
+it("copies a child without its parent and duplicate preserves the clipboard", () => {
+  const a = node(),
+    b = { ...node(), x: 200 };
+  const store = new EditorStore(
+    { document: { ...emptyCanvas(), nodes: [a, b] }, revision: 0 },
+    async () => {
+      throw new Error("not used");
+    },
+  );
+  store.select([a.id]);
+  store.copySelection();
+  store.select([b.id]);
+  store.duplicateSelection();
+  expect(store.get().document.nodes[2].assetId).toBe(b.assetId);
+  expect(store.get().selected).toEqual([b.id]);
+  store.pasteSelection();
+  expect(store.get().document.nodes[3].assetId).toBe(a.assetId);
+  store.selectAll();
+  expect(store.get().selected).toHaveLength(4);
+  store.dispose();
+  store.pasteSelection();
+  expect(store.get().document.nodes).toHaveLength(4);
+});
+it("rejects paste limits atomically and isolates clipboards between projects", () => {
+  const image = { ...node(), x: 99990 };
+  const store = new EditorStore(
+    { document: { ...emptyCanvas(), nodes: [image] }, revision: 0 },
+    async () => {
+      throw new Error("not used");
+    },
+  );
+  store.selectAll();
+  store.copySelection();
+  expect(() => store.pasteSelection()).toThrow("无法粘贴");
+  expect(store.get().document.nodes).toEqual([image]);
+  expect(store.get().canUndo).toBe(false);
+  const other = new EditorStore(
+    { document: emptyCanvas(), revision: 0 },
+    async () => {
+      throw new Error("not used");
+    },
+  );
+  other.pasteSelection();
+  expect(other.get().document.nodes).toHaveLength(0);
+  store.reset({
+    document: { ...emptyCanvas(), nodes: Array.from({ length: 1000 }, node) },
+    revision: 0,
+  });
+  store.selectAll();
+  store.copySelection();
+  expect(() => store.pasteSelection()).toThrow("无法粘贴");
+  expect(store.get().document.nodes).toHaveLength(1000);
+  store.dispose();
+  other.dispose();
+});
+
+it("pastes a selected child independently at its absolute canvas position", () => {
+  const group = {
+    id: randomUUID(),
+    kind: "group" as const,
+    label: "group",
+    x: 100,
+    y: 200,
+    width: 500,
+    height: 500,
+  };
+  const image = { ...node(), parentId: group.id, x: 150, y: 240 };
+  const store = new EditorStore(
+    { document: { ...emptyCanvas(), nodes: [group, image] }, revision: 0 },
+    async () => {
+      throw new Error("not used");
+    },
+  );
+  store.select([image.id]);
+  store.copySelection();
+  store.pasteSelection();
+  const pasted = store.get().document.nodes[2];
+  expect(pasted.parentId).toBeUndefined();
+  expect(pasted.x).toBe(180);
+  expect(pasted.y).toBe(270);
+  store.dispose();
+});

@@ -4,6 +4,7 @@ import {
   type CanvasSnapshot,
   type CanvasSave,
   type CanvasOutput,
+  type CanvasNode,
 } from "@tuyile/contracts";
 export type EditorState = CanvasSnapshot & {
   selected: string[];
@@ -16,6 +17,8 @@ export type EditorState = CanvasSnapshot & {
 };
 /** One instance per authenticated project. Geometry history never rewinds output receipts. */
 export class EditorStore {
+  private clipboard: CanvasNode[] = [];
+  private pasteCount = 0;
   private listeners = new Set<() => void>();
   private past: CanvasDocument[] = [];
   private future: CanvasDocument[] = [];
@@ -55,6 +58,59 @@ export class EditorStore {
   }
   select(ids: string[]) {
     this.update({ selected: ids });
+  }
+  selectAll() {
+    this.select(this.state.document.nodes.map((n) => n.id));
+  }
+  copySelection() {
+    const selected = new Set(this.state.selected);
+    const picked = this.state.document.nodes.filter(
+      (n) => selected.has(n.id) || selected.has(n.parentId ?? ""),
+    );
+    if (!picked.length) return false;
+    const ids = new Set(picked.map((n) => n.id));
+    this.clipboard = picked.map((n) => ({
+      ...n,
+      parentId: ids.has(n.parentId ?? "") ? n.parentId : undefined,
+    }));
+    this.pasteCount = 0;
+    return true;
+  }
+  pasteSelection() {
+    if (!this.clipboard.length) return;
+    const ids = new Map(this.clipboard.map((n) => [n.id, crypto.randomUUID()]));
+    const offset = (this.pasteCount + 1) * 30;
+    const pasted = this.clipboard.map((n) => ({
+      ...n,
+      id: ids.get(n.id)!,
+      parentId: n.parentId ? ids.get(n.parentId) : undefined,
+      x: n.x + offset,
+      y: n.y + offset,
+    }));
+    const document = {
+      ...this.state.document,
+      nodes: [...this.state.document.nodes, ...pasted],
+    };
+    if (!canvasDocument.safeParse(document).success)
+      throw new Error(
+        "无法粘贴：画布最多容纳 1000 个节点，且节点位置须在允许范围内。",
+      );
+    this.edit(document);
+    this.pasteCount++;
+    this.select(pasted.map((n) => n.id));
+  }
+  duplicateSelection() {
+    // Duplicating does not replace the user's copied selection.
+    const clipboard = this.clipboard,
+      count = this.pasteCount,
+      selected = this.state.selected;
+    try {
+      if (this.copySelection()) this.pasteSelection();
+    } finally {
+      this.clipboard = clipboard;
+      this.pasteCount = count;
+      this.select(selected);
+    }
   }
   edit(document: CanvasDocument, history = true) {
     canvasDocument.parse(document);
@@ -201,6 +257,8 @@ export class EditorStore {
   }
   dispose() {
     this.epoch++;
+    this.clipboard = [];
+    this.pasteCount = 0;
     clearTimeout(this.timer);
     this.listeners.clear();
     this.pending = undefined;

@@ -4745,3 +4745,114 @@ test("shared creation controls respect parent locks and dismiss helpers across m
     .getByRole("button", { name: "取消", exact: true })
     .click();
 });
+
+test("canvas keyboard shortcuts stay scoped and persist grouped node copies", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.getByLabel("项目名称").fill("快捷键合成验证");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "快捷键合成验证" })
+    .click();
+  await page.getByLabel("创作需求", { exact: true }).fill("快捷键测试图片");
+  await page.getByRole("button", { name: "提交图片任务", exact: true }).click();
+  const images = page.locator(".react-flow__node-image");
+  await expect(images).toHaveCount(1, { timeout: 20000 });
+  const canvas = page.getByRole("region", { name: "项目画布", exact: true });
+  for (const mod of ["Control", "Meta"]) {
+    await canvas.focus();
+    await page.keyboard.press(`${mod}+a`);
+    await expect(images.first()).toHaveClass(/selected/);
+    await page.keyboard.press(`${mod}+c`);
+    await expect(images).toHaveCount(1);
+    await page.keyboard.press(`${mod}+v`);
+    await expect(images).toHaveCount(2);
+    await expect(images.nth(1)).toHaveClass(/selected/);
+    await page.keyboard.press(`${mod}+z`);
+    await expect(images).toHaveCount(1);
+    await page.keyboard.press(`${mod}+Shift+z`);
+    await expect(images).toHaveCount(2);
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".react-flow__node.selected")).toHaveCount(0);
+    await page.keyboard.press(`${mod}+a`);
+    await page.keyboard.press("Backspace");
+    await expect(images).toHaveCount(0);
+    await page.keyboard.press(`${mod}+z`);
+    await expect(images).toHaveCount(2);
+    await page.keyboard.press(`${mod}+z`);
+    await expect(images).toHaveCount(1);
+  }
+  // Pointer focus works without programmatically focusing the canvas.
+  await images.first().click({ position: { x: 40, y: 50 } });
+  await page.keyboard.down("Control");
+  await page.keyboard.down("d");
+  await page.keyboard.down("d");
+  await page.keyboard.up("d");
+  await page.keyboard.up("Control");
+  await expect(images).toHaveCount(2);
+  await page.keyboard.press("Control+a");
+  await page.getByRole("button", { name: "分组", exact: true }).click();
+  const groups = page.locator(".react-flow__node-group");
+  await expect(groups).toHaveCount(1);
+  await canvas.focus();
+  await page.keyboard.press("Control+a");
+  await page.keyboard.press("Control+c");
+  await page.keyboard.press("Control+v");
+  await expect(groups).toHaveCount(2);
+  await expect(images).toHaveCount(4);
+  await page.keyboard.press("Control+z");
+  await expect(groups).toHaveCount(1);
+  await expect(images).toHaveCount(2);
+  await page.keyboard.press("Control+Shift+z");
+  await expect(images).toHaveCount(4);
+  const prompt = page.getByLabel("创作需求", { exact: true });
+  await prompt.fill("输入框应保留原生行为");
+  const nativeModifier = process.platform === "darwin" ? "Meta" : "Control";
+  await prompt.press(`${nativeModifier}+a`);
+  await prompt.press("Backspace");
+  await expect(prompt).toHaveValue("");
+  await prompt.press(`${nativeModifier}+v`);
+  await expect(images).toHaveCount(4);
+  // A portal preview must not pass canvas shortcuts through its React ancestry.
+  await images.last().dblclick({ position: { x: 30, y: 50 } });
+  await expect(page.locator(".ant-image-preview")).toBeVisible();
+  await page.keyboard.press("Control+a");
+  await page.keyboard.press("Delete");
+  await expect(images).toHaveCount(4);
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".ant-image-preview")).toBeHidden();
+  await expect(page.locator(".canvas-status")).toContainText("画布已保存");
+  const projectId = page.url().split("/").at(-1)!;
+  const saved = await (
+    await page.request.get(`/api/projects/${projectId}/canvas`)
+  ).json();
+  expect(saved.document.nodes).toHaveLength(6);
+  expect(new Set(saved.document.nodes.map((n: any) => n.id)).size).toBe(6);
+  expect(
+    new Set(
+      saved.document.nodes
+        .filter((n: any) => n.kind === "image")
+        .map((n: any) => n.assetId),
+    ).size,
+  ).toBe(1);
+  expect(
+    (
+      await (
+        await page.request.get(`/api/images/tasks?projectId=${projectId}`)
+      ).json()
+    ).tasks,
+  ).toHaveLength(1);
+  await page.reload();
+  await expect(images).toHaveCount(4);
+  await canvas.focus();
+  await page.keyboard.press("Control+v");
+  await expect(images).toHaveCount(4);
+  const wrongOrigin = await page.request.post("/api/auth/login", {
+    headers: { Origin: "http://127.0.0.1:8793" },
+    data: {},
+  });
+  expect((await wrongOrigin.json()).error.code).toBe("INVALID_ORIGIN");
+});

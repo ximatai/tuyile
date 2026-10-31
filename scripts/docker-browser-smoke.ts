@@ -95,6 +95,53 @@ try {
     animations: "disabled",
   });
   const projectId = new URL(page.url()).pathname.split("/").at(-1)!;
+  const completed = await (
+    await page.request.get(
+      `http://127.0.0.1:8792/api/images/tasks?projectId=${projectId}`,
+    )
+  ).json();
+  const expectedAssets = completed.tasks.flatMap((task: any) =>
+    task.outputs.map((output: any) => output.id),
+  ) as string[];
+  await page.waitForFunction((ids) => {
+    const sources = Array.from(
+      document.querySelectorAll<HTMLImageElement>(
+        ".react-flow__node-image img",
+      ),
+      (image) => image.getAttribute("src"),
+    );
+    return (
+      ids.length > 0 &&
+      sources.length === ids.length &&
+      ids.every((id) => sources.includes(`/api/images/assets/${id}/preview`))
+    );
+  }, expectedAssets);
+  const canvas = page.getByRole("region", { name: "项目画布", exact: true });
+  await page
+    .locator(".canvas-status")
+    .filter({ hasText: "画布已保存" })
+    .waitFor();
+  const nodeCount = await page.locator(".react-flow__node-image").count();
+  assert(nodeCount > 0);
+  await canvas.focus();
+  await page.keyboard.press("Control+a");
+  await page.keyboard.press("Control+c");
+  await page.keyboard.press("Control+v");
+  await page.waitForFunction(
+    (count) =>
+      document.querySelectorAll(".react-flow__node-image").length === count,
+    nodeCount * 2,
+  );
+  await page.keyboard.press("Control+z");
+  await page.waitForFunction(
+    (count) =>
+      document.querySelectorAll(".react-flow__node-image").length === count,
+    nodeCount,
+  );
+  await page
+    .locator(".canvas-status")
+    .filter({ hasText: "画布已保存" })
+    .waitFor();
   const session = await (
     await page.request.get("http://127.0.0.1:8792/api/auth/me")
   ).json();
@@ -138,6 +185,14 @@ try {
     .getByRole("button", { name: "复用设置", exact: true })
     .first()
     .click();
+  // Reuse replaces the retained creation draft and requires explicit confirmation.
+  await page
+    .getByRole("dialog", { name: "请确认", exact: true })
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await page
+    .getByRole("dialog", { name: "请确认", exact: true })
+    .waitFor({ state: "hidden" });
   assert(
     (await page.getByLabel("创作需求", { exact: true }).inputValue()).length >
       0,
@@ -255,6 +310,7 @@ try {
   }
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await page.getByRole("button", { name: "继续聊想法", exact: true }).click();
   await page.getByLabel("告诉 Agent 你的想法", { exact: true }).waitFor();
   await page.getByRole("tab", { name: "直接创作", exact: true }).click();
   assert.equal(
@@ -321,9 +377,11 @@ try {
     .first()
     .getByRole("button", { name: "收藏提示词", exact: true })
     .click();
-  await page.getByLabel("收藏标题", { exact: true }).waitFor();
-  await page.getByRole("button", { name: "关闭编辑", exact: true }).click();
-  await page.locator(".ant-drawer:visible").waitFor({ state: "hidden" });
+  await page
+    .locator(".prompt-card")
+    .first()
+    .getByRole("button", { name: "已收藏提示词", exact: true })
+    .waitFor();
   await page.getByRole("link", { name: "模型服务", exact: true }).click();
   await page.getByRole("tab", { name: "运行与核验", exact: true }).click();
   await page
@@ -339,7 +397,7 @@ try {
   });
   assert.deepEqual(errors, []);
   console.log(
-    "Built Docker Chromium: nonce styles, themed button, singleton model lock, confirmation dialog and medium/large desktop layout passed",
+    "Built Docker Chromium: canvas keyboard copy/paste/undo, nonce styles, themed button, singleton model lock, confirmation dialog and medium/large desktop layout passed",
   );
 } finally {
   await browser.close();
