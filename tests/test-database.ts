@@ -32,6 +32,15 @@ export async function resetDatabase() {
     await owner.query(
       templatesSql.slice(templatesSql.indexOf("INSERT INTO prompt_templates")),
     );
+    await owner.query(
+      await readFile(
+        new URL(
+          "../migrations/0018_starter_prompt_library.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
     await owner.query("TRUNCATE tuyile.model_services CASCADE");
     await owner.query(
       "UPDATE tuyile.model_catalog_state SET managed=false,revision=0 WHERE id=1",

@@ -271,7 +271,7 @@ it("serializes project deletion with admission and protects cancelling or pendin
 
 it("publishes database templates globally while retaining private favorite snapshots and detecting concurrent edits", async () => {
   const seeded = await library.prompts(f.principal);
-  expect(seeded).toHaveLength(3);
+  expect(seeded).toHaveLength(36);
   const created = await f.service.createUser(f.principal, "template-member");
   await finishTemporaryPassword(f.service, created, testPassword);
   const memberLogin = await f.service.login("template-member", testPassword);
@@ -345,7 +345,7 @@ it("publishes database templates globally while retaining private favorite snaps
   expect(
     (await library.managedPrompts(f.principal, 0, "数据库新增"))[0].published,
   ).toBe(false);
-  expect(await library.prompts(member)).toHaveLength(3);
+  expect(await library.prompts(member)).toHaveLength(36);
 });
 
 it("guards prompt HTTP writes, validates content and returns only published bounded pages", async () => {
@@ -455,11 +455,11 @@ it("guards prompt HTTP writes, validates content and returns only published boun
   ).json();
   expect(first.prompts).toHaveLength(50);
   expect(first.hasMore).toBe(true);
-  expect(next.prompts).toHaveLength(3);
+  expect(next.prompts).toHaveLength(36);
   expect(next.hasMore).toBe(false);
   expect(
     new Set([...first.prompts, ...next.prompts].map((p) => p.id)).size,
-  ).toBe(53);
+  ).toBe(86);
   expect(first.prompts[0]).not.toHaveProperty("revision");
   expect(
     [...first.prompts, ...next.prompts].find((p) => p.id === input.id).prompt,
@@ -477,4 +477,63 @@ it("guards prompt HTTP writes, validates content and returns only published boun
       })
     ).status,
   ).toBe(400);
+});
+
+it("ships diverse valid starter prompts and never overwrites edited or unpublished entries when importing again", async () => {
+  const rows = await library.managedPrompts(f.principal);
+  expect(rows).toHaveLength(36);
+  expect(new Set(rows.map((r) => r.category)).size).toBe(10);
+  expect(new Set(rows.map((r) => r.id)).size).toBe(36);
+  const { promptTemplateInput } = await import("@tuyile/contracts");
+  for (const { id, title, category, prompt, published, revision } of rows) {
+    expect(
+      promptTemplateInput.safeParse({
+        id,
+        title,
+        category,
+        prompt,
+        published,
+        revision,
+      }).success,
+    ).toBe(true);
+    expect(prompt.length).toBeGreaterThan(40);
+  }
+  const starter = rows.find((r) => r.id === "product-white-background")!;
+  await library.savePrompt(f.principal, {
+    id: starter.id,
+    title: "管理员保留的标题",
+    category: starter.category,
+    prompt: "管理员编辑后的正文",
+    published: false,
+    revision: starter.revision,
+  });
+  const { createDatabase } = await import("@tuyile/infrastructure");
+  const { readFile } = await import("node:fs/promises");
+  const { pool } = createDatabase(process.env.MIGRATION_DATABASE_URL!);
+  try {
+    await pool.query(
+      await readFile(
+        new URL(
+          "../../migrations/0018_starter_prompt_library.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+  } finally {
+    await pool.end();
+  }
+  const after = await library.managedPrompts(
+    f.principal,
+    0,
+    "管理员保留的标题",
+  );
+  expect(after[0]).toMatchObject({
+    id: starter.id,
+    title: "管理员保留的标题",
+    prompt: "管理员编辑后的正文",
+    published: false,
+    revision: starter.revision + 1,
+  });
+  expect(await library.managedPrompts(f.principal)).toHaveLength(36);
 });

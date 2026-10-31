@@ -2636,10 +2636,22 @@ test("prompt library keeps project selection compact and reuses full prompts", a
           pickerBox!.height / 2,
       ),
     ).toBeLessThan(12);
-    const buttons = await page
-      .locator(".prompt-card .actions")
-      .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().bottom));
-    expect(Math.max(...buttons) - Math.min(...buttons)).toBeLessThan(2);
+    const rowSpreads = await page
+      .locator(".prompt-card")
+      .evaluateAll((cards) => {
+        const rows = new Map<number, number[]>();
+        for (const card of cards) {
+          const top = Math.round(card.getBoundingClientRect().top);
+          const bottom = card
+            .querySelector(".actions")!
+            .getBoundingClientRect().bottom;
+          rows.set(top, [...(rows.get(top) ?? []), bottom]);
+        }
+        return [...rows.values()].map(
+          (values) => Math.max(...values) - Math.min(...values),
+        );
+      });
+    expect(Math.max(...rowSpreads)).toBeLessThan(2);
   }
   await card.getByRole("button", { name: "用于目标项目", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/projects/${projects[1].id}$`));
@@ -2679,7 +2691,7 @@ test("managed prompt pool supports drafts, publication, cross-tab updates, reuse
   await expect(row.getByText("未上架", { exact: true })).toBeVisible();
   const viewer = await page.context().newPage();
   await viewer.goto("/prompts");
-  await expect(viewer.locator(".prompt-card")).toHaveCount(3);
+  await expect(viewer.locator(".prompt-card")).toHaveCount(36);
   await expect(
     viewer.getByRole("heading", { name: "公开模板验收", exact: true }),
   ).toHaveCount(0);
@@ -2718,7 +2730,7 @@ test("managed prompt pool supports drafts, publication, cross-tab updates, reuse
   await drawer.getByRole("button", { name: "保存", exact: true }).click();
   await expect(drawer).toBeHidden();
   await viewer.getByRole("link", { name: "提示池", exact: true }).click();
-  await expect(viewer.locator(".prompt-card")).toHaveCount(3);
+  await expect(viewer.locator(".prompt-card")).toHaveCount(36);
   const favorites = (
     await (await viewer.request.get("/api/library/favorites")).json()
   ).favorites;
