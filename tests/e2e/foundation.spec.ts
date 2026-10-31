@@ -3272,21 +3272,47 @@ test("style library supports public maintenance and private saved copies without
     await page.request.get("/api/images/tasks")
   ).json();
   await page.goto("/admin/prompts");
-  await page.getByRole("button", { name: "管理公共风格", exact: true }).click();
-  const manager = page.getByRole("dialog", { name: "公共风格", exact: true });
+  await page.getByRole("tab", { name: "公共风格", exact: true }).click();
+  const manager = page.getByRole("tabpanel", { name: "公共风格", exact: true });
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await manager.getByRole("button", { name: "新增风格", exact: true }).click();
-  await manager.getByLabel("风格名称", { exact: true }).fill("公共风格验收");
-  await manager
+  const publicEditor = page.getByRole("dialog", {
+    name: "新增风格",
+    exact: true,
+  });
+  await publicEditor
+    .getByLabel("风格名称", { exact: true })
+    .fill("公共风格验收");
+  await publicEditor
     .getByLabel("风格描述", { exact: true })
     .fill("合成风格：柔和蓝色调");
-  await manager
+  await publicEditor
     .getByRole("checkbox", { name: "上架，所有用户可见", exact: true })
     .check();
-  await manager.getByRole("button", { name: "保存风格", exact: true }).click();
+  await publicEditor
+    .getByRole("button", { name: "保存风格", exact: true })
+    .click();
   await expect(
     manager.getByRole("row").filter({ hasText: "公共风格验收" }),
   ).toContainText("已上架");
-  await manager.getByRole("button", { name: "关闭", exact: true }).click();
+  await expect(publicEditor).toBeHidden();
+  await manager
+    .getByRole("textbox", { name: "搜索风格", exact: true })
+    .fill("不存在的风格");
+  await expect(manager.getByText("暂无风格", { exact: true })).toBeVisible();
+  await manager
+    .getByRole("textbox", { name: "搜索风格", exact: true })
+    .fill("");
+  await page.getByRole("tab", { name: "提示词", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "新增提示词", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("tab", { name: "公共风格", exact: true }).click();
+  await expect(
+    manager.getByRole("row").filter({ hasText: "公共风格验收" }),
+  ).toBeVisible();
+  await page.screenshot({ path: ".codex-temp/style-management-tabs.png" });
+
   await page.getByRole("link", { name: "项目", exact: true }).click();
   await page.getByLabel("项目名称", { exact: true }).fill("风格库验收");
   await page.getByRole("button", { name: "创建项目", exact: true }).click();

@@ -13,6 +13,7 @@ import {
   useConfirm,
   useFeedback,
 } from "@tuyile/ui";
+import { Plus, Search } from "lucide-react";
 import { client } from "./api";
 import { useSessionState } from "./session-state";
 export function PublicStylesManager() {
@@ -20,8 +21,8 @@ export function PublicStylesManager() {
     api = client(state.session.csrfToken),
     confirm = useConfirm(),
     feedback = useFeedback();
-  const [open, setOpen] = useState(false),
-    [draft, setDraft] = useState<StyleInput | null>(null),
+  const [search, setSearch] = useState("");
+  const [draft, setDraft] = useState<StyleInput | null>(null),
     [baseline, setBaseline] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
@@ -30,7 +31,6 @@ export function PublicStylesManager() {
     queryKey: state.key("admin-styles"),
     queryFn: ({ signal }) =>
       api<{ styles: SavedStyle[] }>("/admin/styles", undefined, signal),
-    enabled: open,
   });
   const dirty = !!draft && JSON.stringify(draft) !== baseline;
   const leave = useRef({ dirty, busy });
@@ -66,11 +66,10 @@ export function PublicStylesManager() {
     setBaseline(JSON.stringify(next));
     setError("");
   }
-  async function back(close = false) {
+  async function back() {
     if (busy || (dirty && !(await confirm("放弃未保存的风格修改？")))) return;
     setDraft(null);
     setError("");
-    if (close) setOpen(false);
   }
   async function save() {
     if (!draft || pending.current) return;
@@ -94,25 +93,97 @@ export function PublicStylesManager() {
       setBusy(false);
     }
   }
+  const rows = (query.data?.styles ?? []).filter(
+    (row) =>
+      !search.trim() ||
+      `${row.name} ${row.text}`
+        .toLocaleLowerCase()
+        .includes(search.trim().toLocaleLowerCase()),
+  );
   return (
-    <>
-      <Button type="button" onClick={() => setOpen(true)}>
-        管理公共风格
-      </Button>
+    <div className="public-style-manager">
+      <div className="prompt-admin-toolbar">
+        <Input
+          aria-label="搜索风格"
+          placeholder="搜索名称或描述"
+          prefix={<Search size={15} />}
+          value={search}
+          maxLength={100}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <Button type="button" className="primary" onClick={() => edit()}>
+          <Plus size={16} />
+          新增风格
+        </Button>
+      </div>
+      {query.error && <Notice error>{query.error.message}</Notice>}
+      <Table<SavedStyle>
+        rowKey="id"
+        loading={query.isPending}
+        dataSource={rows}
+        pagination={{
+          pageSize: 10,
+          showSizeChanger: false,
+          hideOnSinglePage: true,
+        }}
+        locale={{ emptyText: "暂无风格" }}
+        columns={[
+          { title: "名称", dataIndex: "name", width: 180 },
+          { title: "描述", dataIndex: "text", ellipsis: true },
+          {
+            title: "状态",
+            width: 120,
+            render: (_, row) => (
+              <Tag color={row.published ? "success" : "default"}>
+                {row.published ? "已上架" : "未上架"}
+              </Tag>
+            ),
+          },
+          {
+            title: "",
+            width: 80,
+            render: (_, row) => (
+              <Button type="button" onClick={() => edit(row)}>
+                编辑
+              </Button>
+            ),
+          },
+        ]}
+      />
       <Drawer
-        title="公共风格"
-        open={open}
-        size={640}
-        onClose={() => void back(true)}
+        title={draft?.revision ? "编辑风格" : "新增风格"}
+        open={!!draft}
+        size={560}
+        onClose={() => void back()}
         destroyOnHidden
+        maskClosable={!busy}
+        keyboard={!busy}
+        footer={
+          <div className="actions">
+            <Button
+              className="primary"
+              type="submit"
+              form="public-style-editor"
+              loading={busy}
+              disabled={busy}
+            >
+              保存风格
+            </Button>
+            <Button type="button" disabled={busy} onClick={() => void back()}>
+              取消
+            </Button>
+          </div>
+        }
       >
-        {draft ? (
+        {draft && (
           <form
+            id="public-style-editor"
             onSubmit={(e) => {
               e.preventDefault();
               void save();
             }}
           >
+            {error && <Notice error>{error}</Notice>}
             <Field
               label="风格名称"
               value={draft.name}
@@ -142,48 +213,9 @@ export function PublicStylesManager() {
             >
               上架，所有用户可见
             </Checkbox>
-            {error && <Notice error>{error}</Notice>}
-            <div className="style-editor-footer">
-              <Button type="button" disabled={busy} onClick={() => void back()}>
-                返回
-              </Button>
-              <Button disabled={busy} className="primary">
-                保存风格
-              </Button>
-            </div>
           </form>
-        ) : (
-          <>
-            <Button type="button" onClick={() => edit()}>
-              新增风格
-            </Button>
-            {query.error && <Notice error>{query.error.message}</Notice>}
-            <Table<SavedStyle>
-              rowKey="id"
-              loading={query.isPending}
-              dataSource={query.data?.styles ?? []}
-              pagination={{ pageSize: 10 }}
-              columns={[
-                { title: "名称", dataIndex: "name" },
-                {
-                  title: "状态",
-                  render: (_, row) => (
-                    <Tag>{row.published ? "已上架" : "未上架"}</Tag>
-                  ),
-                },
-                {
-                  title: "",
-                  render: (_, row) => (
-                    <Button type="button" onClick={() => edit(row)}>
-                      编辑
-                    </Button>
-                  ),
-                },
-              ]}
-            />
-          </>
         )}
       </Drawer>
-    </>
+    </div>
   );
 }

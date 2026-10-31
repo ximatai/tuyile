@@ -17,6 +17,7 @@ import {
   Input,
   Notice,
   Table,
+  Tabs,
   Tag,
   useConfirm,
 } from "@tuyile/ui";
@@ -25,6 +26,30 @@ import { ApiError, client } from "./api";
 import { useSessionState } from "./session-state";
 
 export function PromptAdminPage() {
+  return (
+    <section className="prompt-admin-page">
+      <div className="page-heading">
+        <h1>提示池管理</h1>
+        <Link to="/prompts">查看提示池</Link>
+      </div>
+      <Tabs
+        items={[
+          {
+            key: "prompts",
+            label: "提示词",
+            children: <PromptTemplatesManager />,
+          },
+          {
+            key: "styles",
+            label: "公共风格",
+            children: <PublicStylesManager />,
+          },
+        ]}
+      />
+    </section>
+  );
+}
+function PromptTemplatesManager() {
   const feedback = useFeedback();
   const state = useSessionState(),
     api = client(state.session.csrfToken),
@@ -128,12 +153,7 @@ export function PromptAdminPage() {
     }
   }
   return (
-    <section className="prompt-admin-page">
-      <div className="page-heading">
-        <h1>提示池管理</h1>
-        <PublicStylesManager />
-        <Link to="/prompts">查看提示池</Link>
-      </div>
+    <div className="prompt-template-manager">
       <div className="prompt-admin-toolbar">
         <Input
           aria-label="搜索提示词"
@@ -260,6 +280,6 @@ export function PromptAdminPage() {
           </form>
         )}
       </Drawer>
-    </section>
+    </div>
   );
 }
