@@ -112,6 +112,7 @@ export function PromptComposer({
           open={assistOpen}
           onOpenChange={setAssistOpen}
           title="灵感与风格"
+          classNames={{ root: "creation-popover prompt-assist-popover" }}
           content={
             <div
               className="prompt-assist-content"

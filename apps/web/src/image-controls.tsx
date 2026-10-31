@@ -1,3 +1,4 @@
+import { modelDisplayName } from "./model-presentation";
 import { X, Upload as UploadIcon } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import type { ImageUsage } from "@tuyile/contracts";
@@ -71,11 +72,7 @@ export function ImageControls({
       return "历史模型（已不可用）";
     const model =
       usage?.modelOptions?.find((m) => m.id === key)?.modelId ?? key;
-    const names: Record<string, string> = {
-      "gpt-image-2.5-sunburst": "Sunburst",
-      "gpt-image-2.5-flare": "Flare",
-    };
-    return names[model] ?? model;
+    return modelDisplayName(model);
   };
   const label = (text: string) =>
     labelPrefix ? `${labelPrefix} ${text}` : text;
@@ -169,7 +166,7 @@ export function ImageControls({
   );
   return (
     <div
-      className={`image-controls${compact ? " compact-image-controls" : ""}`}
+      className={`image-controls${compact ? " compact-image-controls" : ""}${count ? "" : " image-controls-single-output"}`}
     >
       <div className={compact ? "parameter-grid" : "model-control-row"}>
         <ChoiceField
@@ -186,7 +183,11 @@ export function ImageControls({
           optionRender={(option) => (
             <span className="model-choice-option">
               <span>
-                {modelName(String(option.value))}
+                {usage?.modelOptions?.find((m) => m.id === option.value)
+                  ?.modelId ??
+                  (choices.some((choice) => choice.value === option.value)
+                    ? String(option.value)
+                    : option.label)}
                 {usage?.modelOptions?.find((m) => m.id === option.value)
                   ?.serviceName
                   ? ` · ${usage.modelOptions.find((m) => m.id === option.value)!.serviceName}`
@@ -272,7 +273,9 @@ export function ImageControls({
           }}
         />
       </div>
-      <div className={`parameter-grid${count ? " image-output-options" : ""}`}>
+      <div
+        className={`parameter-grid${count || compact ? " image-output-options" : ""}`}
+      >
         {!compact && qualityControl}
         {count && (
           <ChoiceField

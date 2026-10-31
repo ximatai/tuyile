@@ -119,7 +119,7 @@ function TaskTile({
           open={detailsOpen}
           onOpenChange={setDetailsOpen}
           placement="topRight"
-          classNames={{ root: "task-details-popover" }}
+          classNames={{ root: "creation-popover task-details-popover" }}
           content={
             <div className="task-tile-details" onKeyDown={closeDetails}>
               <TaskDetails
@@ -140,11 +140,12 @@ function TaskTile({
           <Button
             ref={detailsTrigger}
             type="button"
+            className="help-trigger"
             aria-label="任务详情"
             aria-expanded={detailsOpen}
             onKeyDown={closeDetails}
           >
-            <Info size={16} />
+            <Info size={16} aria-hidden="true" />
           </Button>
         </Popover>
       </div>

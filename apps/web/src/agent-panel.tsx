@@ -1,3 +1,4 @@
+import { modelDisplayName } from "./model-presentation";
 import { ChevronDown, Settings2, Sparkles } from "lucide-react";
 import { useDraftValue } from "./project-draft";
 import { composeCreativePrompt } from "@tuyile/contracts";
@@ -440,6 +441,7 @@ export function AgentPanel({
                 trigger="click"
                 placement="topRight"
                 title="创作设置"
+                classNames={{ root: "creation-popover agent-settings-popover" }}
                 open={settingsOpen}
                 onOpenChange={setSettingsOpen}
                 content={
@@ -458,6 +460,15 @@ export function AgentPanel({
                         conversationModel) && (
                         <ChoiceField
                           label="对话模型"
+                          labelRender={(option) => {
+                            const model = modelPools.data?.conversation.find(
+                              (m) => m.id === option.value,
+                            );
+                            return model
+                              ? modelDisplayName(model.modelId)
+                              : option.label;
+                          }}
+                          popupMatchSelectWidth={280}
                           value={conversationModel}
                           onValueChange={setConversationModel}
                           options={[
@@ -474,6 +485,7 @@ export function AgentPanel({
                               (m) => ({
                                 value: m.id,
                                 label: `${m.modelId} · ${m.serviceName}`,
+                                title: "",
                               }),
                             ),
                           ]}
@@ -497,7 +509,7 @@ export function AgentPanel({
                       usage={usage}
                       value={settings}
                       onChange={setSettings}
-                      modelLabel="Agent 图片模型"
+                      compact
                       count={false}
                     />
                   </div>
@@ -965,7 +977,8 @@ function PlanCard({
                         disabled={locked || confirmed}
                         usage={usage}
                         labelPrefix={`步骤 ${index + 1}`}
-                        modelLabel="模型"
+                        modelLabel="图片模型"
+                        compact
                         value={{
                           ...step,
                           modelKey: usage?.modelOptions
@@ -1111,6 +1124,7 @@ function PlanStepParameters({
       trigger="click"
       placement="leftTop"
       title="图片设置"
+      classNames={{ root: "creation-popover agent-settings-popover" }}
       open={open}
       onOpenChange={setOpen}
       content={

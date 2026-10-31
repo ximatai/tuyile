@@ -4556,6 +4556,24 @@ test("shared creation controls respect parent locks and dismiss helpers across m
   await page.getByLabel("项目名称", { exact: true }).fill("共享创作控件验收");
   await page.getByRole("button", { name: "创建项目", exact: true }).click();
   await page.getByRole("link", { name: /共享创作控件验收 .*创建/ }).click();
+  const quota = page.locator("header .header-usage");
+  await quota.click();
+  const billingHelp = page.getByRole("button", {
+    name: "额度与计费说明",
+    exact: true,
+  });
+  await billingHelp.click();
+  await expect(page.locator(".help-content:visible")).toContainText(
+    "次数额度不代表账单上限",
+  );
+  await expect(
+    page.locator(".help-popover:visible .ant-popover-container"),
+  ).toHaveCSS("border-radius", "10px");
+  await page.locator(".help-content:visible").press("Escape");
+  await expect(billingHelp).toBeFocused();
+  await expect(quota).toHaveAttribute("aria-expanded", "true");
+  await quota.click();
+  await expect(page.locator(".help-content:visible")).toHaveCount(0);
   const prompt = page.getByLabel("创作需求", { exact: true });
   await prompt.fill("共享控件测试：暖色咖啡店海报");
   const style = page.getByRole("combobox", { name: "风格", exact: true });

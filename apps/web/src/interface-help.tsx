@@ -32,6 +32,7 @@ export function HelpPopover({
   return (
     <Popover
       title={title}
+      classNames={{ root: "creation-popover help-popover" }}
       content={
         <div className="help-content" tabIndex={0} onKeyDown={escape}>
           {children}

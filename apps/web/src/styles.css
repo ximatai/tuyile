@@ -1186,6 +1186,9 @@ form {
 .agent-options .field {
   margin: 0;
 }
+.agent-options > .field:only-child {
+  grid-column: 1 / -1;
+}
 .agent-references {
   display: flex;
   align-items: center;
@@ -1929,16 +1932,35 @@ form {
 .heading-with-help h2 {
   margin: 0;
 }
-.help-trigger.button {
+.help-trigger.button.ant-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
   min-height: 28px;
   height: 28px;
   width: 28px;
-  padding: 4px;
+  padding: 0;
   border: 0;
   background: transparent;
   box-shadow: none;
   color: var(--muted);
   flex-shrink: 0;
+}
+.help-trigger.button.ant-btn:not(:disabled):hover {
+  color: var(--brand-blue);
+  background: var(--focus-soft);
+}
+.help-trigger svg { display: block; flex-shrink: 0; }
+.creation-popover .ant-popover-container {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px #172f4b18;
+}
+.creation-popover .ant-popover-title {
+  font-size: var(--text-body);
+  line-height: 20px;
 }
 .help-content {
   max-width: 300px;
@@ -2327,7 +2349,11 @@ h3 {
 .creation-panel .field > label,
 .creation-panel .field-heading > label,
 .creation-panel label.field > span:not(.sr-only),
-.creation-panel .editor-field-label {
+.creation-panel .editor-field-label,
+.creation-popover .field > label,
+.creation-popover .field-heading > label,
+.creation-popover label.field > span:not(.sr-only),
+.creation-popover .editor-field-label {
   font-size: 13px;
   font-weight: 500;
   line-height: 20px;
@@ -2562,11 +2588,6 @@ h3 {
   font-size: 12px;
   color: var(--muted);
 }
-.execution-note .help-trigger {
-  width: 24px;
-  height: 24px;
-  min-height: 24px;
-}
 
 .image-output-options {
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -2668,7 +2689,7 @@ h3 {
 }
 .task-tile-actions .button,
 .task-tile-icon,
-.task-tile-footer > .button {
+.task-tile-footer > .button:not(.help-trigger) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2713,12 +2734,6 @@ h3 {
 .task-tile > .product-notice,
 .task-tile > .button {
   margin: 0 8px;
-}
-.task-details-popover .ant-popover-inner {
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  box-shadow: 0 8px 28px #172f4b18;
 }
 .task-tile-details {
   width: 340px;
@@ -2927,6 +2942,9 @@ h3 {
 .compact-image-controls .image-output-options {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
+.compact-image-controls.image-controls-single-output .image-output-options {
+  grid-template-columns: 1fr;
+}
 .model-control-row {
   display: contents;
 }
@@ -2955,12 +2973,6 @@ h3 {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-}
-.style-editor-popover .ant-popover-container {
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  box-shadow: 0 8px 28px #172f4b18;
 }
 .style-editor {
   display: grid;
@@ -3617,10 +3629,6 @@ h3 {
   padding-inline: 8px;
   font-size: 12px;
 }
-.header-usage-popover .ant-popover-inner {
-  padding: 16px;
-  border-radius: 10px;
-}
 .header-usage-popover .header-usage-close.ant-btn {
   position: absolute;
   top: 10px;
@@ -3689,14 +3697,6 @@ h3 {
   justify-content: space-between;
   gap: 8px;
   margin: 12px 0 8px;
-}
-.quota-billing-help.ant-btn {
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  border: 0;
-  box-shadow: none;
-  color: var(--muted);
 }
 .header-usage-popover .header-usage-details {
   display: flex;

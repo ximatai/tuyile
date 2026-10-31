@@ -1,8 +1,15 @@
-import { Infinity as InfinityIcon, Info } from "lucide-react";
-import { Button, Progress, Tooltip } from "@tuyile/ui";
+import { HelpPopover } from "./interface-help";
+import { Infinity as InfinityIcon } from "lucide-react";
+import { Progress } from "@tuyile/ui";
 import { formatStorage, quotaPercentage } from "./usage-metrics";
 import type { ImageUsage } from "@tuyile/contracts";
-export function UsageSummary({ usage }: { usage: ImageUsage }) {
+export function UsageSummary({
+  usage,
+  visible = true,
+}: {
+  usage: ImageUsage;
+  visible?: boolean;
+}) {
   const unlimited = usage.available === null;
   const storage = usage.storageUsed + usage.storageReserved;
   return (
@@ -40,9 +47,7 @@ export function UsageSummary({ usage }: { usage: ImageUsage }) {
           {unlimited ? (
             <strong className="quota-unlimited-label">图片不限额</strong>
           ) : (
-            <span className="sr-only">
-              可用 {usage.available} 张
-            </span>
+            <span className="sr-only">可用 {usage.available} 张</span>
           )}
           <span>
             已生成 <strong>{usage.used}</strong> 张
@@ -88,15 +93,9 @@ export function UsageSummary({ usage }: { usage: ImageUsage }) {
       </div>
       <div className="quota-reset hint">
         <span>每日 00:00 重置 · 上海时间</span>
-        <Tooltip title="次数额度不代表账单上限。">
-          <Button
-            type="button"
-            className="quota-billing-help"
-            aria-label="额度与计费说明"
-          >
-            <Info size={14} />
-          </Button>
-        </Tooltip>
+        <HelpPopover title="额度与计费说明" visible={visible}>
+          次数额度不代表账单上限。
+        </HelpPopover>
       </div>
     </div>
   );

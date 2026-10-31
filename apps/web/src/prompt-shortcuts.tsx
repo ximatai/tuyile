@@ -145,7 +145,7 @@ export function PromptShortcuts({
         placement="leftTop"
         open={open}
         onOpenChange={toggle}
-        classNames={{ root: "prompt-picker-popover" }}
+        classNames={{ root: "creation-popover prompt-picker-popover" }}
         content={
           <div
             className="prompt-picker"

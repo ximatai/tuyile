@@ -216,7 +216,7 @@ export function StyleSelector({
           placement="leftTop"
           open={open}
           onOpenChange={edit}
-          classNames={{ root: "style-editor-popover" }}
+          classNames={{ root: "creation-popover style-editor-popover" }}
           content={
             <div className="style-editor" onKeyDown={escape}>
               <Field

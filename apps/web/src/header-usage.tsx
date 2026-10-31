@@ -35,7 +35,7 @@ export function HeaderUsage({ csrfToken }: { csrfToken: string }) {
       placement="bottomRight"
       open={open}
       onOpenChange={setOpen}
-      classNames={{ root: "header-usage-popover" }}
+      classNames={{ root: "creation-popover header-usage-popover" }}
       content={
         <div onKeyDown={escape}>
           <Button
@@ -47,8 +47,12 @@ export function HeaderUsage({ csrfToken }: { csrfToken: string }) {
             <X size={16} />
           </Button>
           {query.error && <p role="alert">额度暂时无法更新</p>}
-          {query.data && <UsageSummary usage={query.data} />}
-          <Link className="header-usage-details" to="/usage" onClick={() => setOpen(false)}>
+          {query.data && <UsageSummary usage={query.data} visible={open} />}
+          <Link
+            className="header-usage-details"
+            to="/usage"
+            onClick={() => setOpen(false)}
+          >
             <span>查看额度</span>
             <ArrowRight size={15} aria-hidden="true" />
           </Link>
