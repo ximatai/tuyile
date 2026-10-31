@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 const auth = JSON.parse(
   await readFile(".codex-temp/e2e-auth.json", "utf8"),
 ) as { username: string; password: string };
@@ -948,7 +948,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     reopened.getByRole("heading", { name: "我的额度" }),
   ).toBeVisible();
   await expect(
-    reopened.getByRole("heading", { name: "上传的参考图" }),
+    reopened.getByRole("link", { name: "管理图片", exact: true }),
   ).toBeVisible();
   await reopened.getByRole("link", { name: "模型服务", exact: true }).click();
   await expect(
@@ -2451,5 +2451,137 @@ test("user search reaches older pages and unsaved policies block history and rel
   ).toHaveCount(0);
   await expect(
     page.getByRole("heading", { name: "我的项目", exact: true }),
+  ).toBeVisible();
+});
+
+test("usage dashboard summarizes quotas and refreshes task details without a duplicate gallery", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.getByRole("link", { name: "额度", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "我的额度", exact: true }),
+  ).toBeVisible();
+  const imageQuota = page.getByRole("region", {
+    name: "图片额度",
+    exact: true,
+  });
+  const storage = page.getByRole("region", { name: "存储空间", exact: true });
+  await expect(imageQuota.getByText("不限额", { exact: true })).toBeVisible();
+  await expect(page.getByText("暂无使用记录", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "上传的参考图", exact: true }),
+  ).toHaveCount(0);
+  const session = await (await page.request.get("/api/auth/me")).json();
+  const headers = {
+    Origin: "http://127.0.0.1:5180",
+    "X-CSRF-Token": session.csrfToken,
+  };
+  const projectResponse = await page.request.post("/api/projects", {
+    headers,
+    data: { name: "Usage dashboard synthetic" },
+  });
+  expect(projectResponse.status()).toBe(201);
+  const project = await projectResponse.json();
+  const png = await (
+    await import("sharp")
+  )
+    .default({
+      create: { width: 256, height: 256, channels: 3, background: "#0062b0" },
+    })
+    .png()
+    .toBuffer();
+  expect(
+    (
+      await page.request.post("/api/images/uploads", {
+        headers: { ...headers, "Content-Type": "image/png" },
+        data: png,
+      })
+    ).status(),
+  ).toBe(201);
+  const submitted = await page.request.post("/api/images/tasks", {
+    headers,
+    data: {
+      projectId: project.id,
+      requestKey: randomUUID(),
+      prompt: "Usage dashboard synthetic image",
+      model: "test-image",
+      count: 1,
+      width: 256,
+      height: 256,
+      quality: "medium",
+      format: "png",
+      referenceIds: [],
+    },
+  });
+  expect(submitted.status()).toBe(202);
+  const records = page.getByRole("region", { name: "使用记录", exact: true });
+  await expect(
+    records.getByRole("button", { name: "查看任务详情", exact: true }),
+  ).toHaveCount(1);
+  await expect(records.getByRole("img")).toHaveCount(0);
+  await records
+    .getByRole("button", { name: "查看任务详情", exact: true })
+    .click();
+  const drawer = page.getByRole("dialog", { name: "任务详情", exact: true });
+  await expect(
+    drawer.getByText("Usage dashboard synthetic image", { exact: true }),
+  ).toBeVisible();
+  await expect(drawer.getByText("已完成", { exact: true })).toBeVisible();
+  await expect(
+    drawer.getByRole("img", { name: "已保存图片，256 × 256", exact: true }),
+  ).toBeVisible();
+  await expect(
+    drawer.getByRole("link", { name: "下载原图", exact: true }),
+  ).toBeVisible();
+  await expect(
+    drawer.getByRole("button", { name: "删除原图", exact: true }),
+  ).toHaveCount(0);
+  await drawer.getByRole("button", { name: "关闭", exact: true }).click();
+  await expect(drawer).toBeHidden();
+  await expect(
+    imageQuota.getByText("已生成 1 张", { exact: true }),
+  ).toBeVisible();
+  const policy = await (
+    await page.request.get(`/api/image-admin/policies/${session.user.id}`)
+  ).json();
+  expect(
+    (
+      await page.request.post(`/api/image-admin/policies/${session.user.id}`, {
+        headers,
+        data: { ...policy, imageLimit: 100 },
+      })
+    ).status(),
+  ).toBe(200);
+  await page.getByRole("button", { name: "刷新额度", exact: true }).click();
+  await expect(imageQuota.getByText("99", { exact: true })).toBeVisible();
+  await expect(
+    imageQuota.getByRole("progressbar", {
+      name: "今日图片额度使用比例",
+      exact: true,
+    }),
+  ).toHaveAttribute("aria-valuenow", "1");
+  await page.getByRole("button", { name: "额度详情", exact: true }).click();
+  await expect(page.getByText("今日模型调用", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "额度详情", exact: true }).click();
+  for (const width of [1440, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    const left = await imageQuota.boundingBox(),
+      right = await storage.boundingBox();
+    expect(left && right).toBeTruthy();
+    expect(Math.abs(left!.y - right!.y)).toBeLessThan(1);
+    expect(Math.abs(left!.height - right!.height)).toBeLessThan(1);
+    await page.screenshot({
+      path: `.codex-temp/usage-dashboard-${width}.png`,
+      fullPage: true,
+    });
+  }
+  await page.getByRole("link", { name: "管理图片", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "我的图库", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("img", { name: "上传图片 256 × 256", exact: true }),
   ).toBeVisible();
 });

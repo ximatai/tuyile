@@ -228,6 +228,8 @@ export {
   Input,
   Tag,
   Statistic,
+  Progress,
+  Descriptions,
   Empty,
   Tabs,
   Form,

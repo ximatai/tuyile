@@ -49,7 +49,7 @@ const ProjectNavigation = lazy(() =>
   import("./projects").then((m) => ({ default: m.ProjectNavigation })),
 );
 const UsagePage = lazy(() =>
-  import("./creation").then((m) => ({ default: m.UsagePage })),
+  import("./usage-page").then((m) => ({ default: m.UsagePage })),
 );
 const ImageAdminPage = lazy(() =>
   import("./image-admin").then((m) => ({ default: m.ImageAdminPage })),

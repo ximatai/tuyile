@@ -1,5 +1,4 @@
 import { useAdaptivePromptHeight } from "./use-adaptive-prompt-height";
-import { UsageSummary } from "./usage-summary";
 import { Download, ImagePlus, MoreHorizontal, Info } from "lucide-react";
 import { Excerpt } from "./interface-help";
 import { composeCreativePrompt, type CreationStyle } from "@tuyile/contracts";
@@ -20,7 +19,7 @@ import { lazy, Suspense, useCallback } from "react";
 const CanvasEditor = lazy(() =>
   import("./editor/canvas").then((m) => ({ default: m.CanvasEditor })),
 );
-import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useSessionState } from "./session-state";
 import {
   useState,
@@ -949,145 +948,6 @@ export function CreationPage({
           </div>
         </aside>
       </div>
-    </section>
-  );
-}
-export function UsagePage({ csrfToken }: { csrfToken: string }) {
-  const state = useSessionState();
-  const api = client(csrfToken);
-  const [error, setError] = useState("");
-  const usageQuery = useQuery({
-    queryKey: state.key("usage"),
-    queryFn: ({ signal }) =>
-      api<ImageUsage>("/images/usage", undefined, signal),
-  });
-  const tasksQuery = useInfiniteQuery({
-    queryKey: state.key("all-image-tasks"),
-    initialPageParam: 0,
-    queryFn: ({ signal, pageParam }) =>
-      api<{ tasks: ImageTask[]; hasMore: boolean }>(
-        `/images/tasks?offset=${pageParam}`,
-        undefined,
-        signal,
-      ),
-    getNextPageParam: (p, pages) => (p.hasMore ? pages.length * 50 : undefined),
-  });
-  const usage = usageQuery.data,
-    tasks = [
-      ...new Map(
-        (tasksQuery.data?.pages.flatMap((p) => p.tasks) ?? []).map((t) => [
-          t.id,
-          t,
-        ]),
-      ).values(),
-    ];
-  async function refresh() {
-    setError("");
-    try {
-      await Promise.all([
-        usageQuery.refetch({ throwOnError: true }),
-        tasksQuery.refetch({ throwOnError: true }),
-      ]);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
-  async function load() {
-    try {
-      await tasksQuery.fetchNextPage({ throwOnError: true });
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
-  return (
-    <section>
-      <h1>我的额度</h1>
-      {(error || usageQuery.error || tasksQuery.error) && (
-        <Notice error>
-          {error || usageQuery.error?.message || tasksQuery.error?.message}
-        </Notice>
-      )}
-      {usage && <UsageSummary usage={usage} />}
-      <Button onClick={() => void refresh()}>刷新状态</Button>
-      <TaskResults
-        tasks={tasks}
-        csrfToken={csrfToken}
-        refresh={() => void refresh()}
-      />
-      {tasksQuery.hasNextPage && (
-        <Button
-          disabled={tasksQuery.isFetchingNextPage}
-          onClick={() => void load()}
-        >
-          加载更多任务
-        </Button>
-      )}
-      <UploadedReferences csrfToken={csrfToken} />
-    </section>
-  );
-}
-
-export function UploadedReferences({ csrfToken }: { csrfToken: string }) {
-  const confirm = useConfirm();
-  const state = useSessionState();
-  const [error, setError] = useState("");
-  const query = useInfiniteQuery({
-    queryKey: state.key("uploads"),
-    initialPageParam: 0,
-    queryFn: ({ signal, pageParam }) =>
-      client(csrfToken)<{
-        assets: { id: string; width: number; height: number }[];
-        hasMore: boolean;
-      }>(`/images/uploads?offset=${pageParam}`, undefined, signal),
-    getNextPageParam: (p, pages) => (p.hasMore ? pages.length * 50 : undefined),
-  });
-  const assets = [
-    ...new Map(
-      (query.data?.pages.flatMap((p) => p.assets) ?? []).map((a) => [a.id, a]),
-    ).values(),
-  ];
-  async function load() {
-    try {
-      await query.fetchNextPage({ throwOnError: true });
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
-  async function remove(id: string) {
-    if (!(await confirm("删除这张上传的参考图？正在被任务引用时不会删除。")))
-      return;
-    try {
-      await client(csrfToken)(`/images/assets/${id}/delete`, {});
-      await Promise.all(
-        ["uploads", "gallery", "usage"].map((key) =>
-          state.queries.invalidateQueries({ queryKey: state.key(key) }),
-        ),
-      );
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
-  return (
-    <section className="settings-section">
-      <h2>上传的参考图</h2>
-      <p className="hint">解除引用后可删除不再使用的图片，释放存储空间。</p>
-      {(error || query.error) && (
-        <Notice error>{error || query.error?.message}</Notice>
-      )}
-      <div className="output-grid">
-        {assets.map((a) => (
-          <figure key={a.id}>
-            <img
-              src={`/api/images/assets/${a.id}/preview`}
-              alt={`参考图 ${a.width} × ${a.height}`}
-            />
-            <Button onClick={() => void remove(a.id)}>删除参考图</Button>
-          </figure>
-        ))}
-      </div>
-      {query.hasNextPage && (
-        <Button onClick={() => void load()}>加载更多参考图</Button>
-      )}
     </section>
   );
 }
