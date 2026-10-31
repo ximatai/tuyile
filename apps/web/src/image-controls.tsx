@@ -38,6 +38,17 @@ export function ImageControls({
   labelPrefix?: string;
 }) {
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const modelName = (key: string) => {
+    if (!choices.some((option) => option.value === key))
+      return "历史模型（已不可用）";
+    const model =
+      usage?.modelOptions?.find((m) => m.id === key)?.modelId ?? key;
+    const names: Record<string, string> = {
+      "gpt-image-2.5-sunburst": "Sunburst",
+      "gpt-image-2.5-flare": "Flare",
+    };
+    return names[model] ?? model;
+  };
   const label = (text: string) =>
     labelPrefix ? `${labelPrefix} ${text}` : text;
   const cap = usage && selectedCapability(usage, value.modelKey),
@@ -139,44 +150,35 @@ export function ImageControls({
             (choices.length === 1 && choices[0]?.value === value.modelKey)
           }
           onValueChange={(modelKey) => patch({ modelKey })}
-          showSearch={{ optionFilterProp: "label" }}
-          popupMatchSelectWidth={440}
+          showSearch={false}
+          popupMatchSelectWidth={280}
           optionRender={(option) => (
             <span className="model-choice-option">
-              <span>{option.label}</span>
+              <span>
+                {modelName(String(option.value))}
+                {usage?.modelOptions?.find((m) => m.id === option.value)
+                  ?.serviceName
+                  ? ` · ${usage.modelOptions.find((m) => m.id === option.value)!.serviceName}`
+                  : ""}
+              </span>
               {usage?.modelOptions?.find((m) => m.id === option.value)
                 ?.isDefault && <span className="model-default-mark">默认</span>}
             </span>
           )}
-          options={
-            choices.some((m) => m.value === value.modelKey) || !value.modelKey
-              ? choices
-              : [
-                  {
-                    value: value.modelKey,
-                    label: "历史模型（已不可用）",
-                    disabled: true,
-                  },
-                  ...choices,
-                ]
-          }
+          options={(choices.some((m) => m.value === value.modelKey) ||
+          !value.modelKey
+            ? choices
+            : [
+                {
+                  value: value.modelKey,
+                  label: "历史模型（已不可用）",
+                  disabled: true,
+                },
+                ...choices,
+              ]
+          ).map((option) => ({ ...option, title: "" }))}
           labelRender={
-            compact
-              ? (option) => {
-                  const model =
-                    usage?.modelOptions?.find((m) => m.id === option.value)
-                      ?.modelId ?? String(option.value);
-                  const shortNames: Record<string, string> = {
-                    "gpt-image-2.5-sunburst": "Sunburst",
-                    "gpt-image-2.5-flare": "Flare",
-                  };
-                  return (
-                    <span title={String(option.label)}>
-                      {shortNames[model] ?? model}
-                    </span>
-                  );
-                }
-              : undefined
+            compact ? (option) => modelName(String(option.value)) : undefined
           }
         />
         {compact && qualityControl}
