@@ -140,7 +140,7 @@ export class PgAssetsRepository extends PgCreationContext {
     if (
       (
         await c.query(
-          "SELECT 1 FROM image_references WHERE asset_id=$1 UNION ALL SELECT 1 FROM canvas_references WHERE asset_id=$1 UNION ALL SELECT 1 FROM agent_references WHERE asset_id=$1 UNION ALL SELECT 1 FROM library_favorites WHERE asset_id=$1 UNION ALL SELECT 1 FROM image_outputs o JOIN image_tasks d ON d.depends_on=o.task_id WHERE o.asset_id=$1 AND o.ordinal=0 AND (d.state IN ('queued','running') OR d.pending_review) LIMIT 1",
+          "SELECT 1 FROM image_references WHERE asset_id=$1 UNION ALL SELECT 1 FROM draft_references WHERE asset_id=$1 UNION ALL SELECT 1 FROM canvas_references WHERE asset_id=$1 UNION ALL SELECT 1 FROM agent_references WHERE asset_id=$1 UNION ALL SELECT 1 FROM library_favorites WHERE asset_id=$1 UNION ALL SELECT 1 FROM image_outputs o JOIN image_tasks d ON d.depends_on=o.task_id WHERE o.asset_id=$1 AND o.ordinal=0 AND (d.state IN ('queued','running') OR d.pending_review) LIMIT 1",
           [id],
         )
       ).rowCount

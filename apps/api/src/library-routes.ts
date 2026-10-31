@@ -1,12 +1,14 @@
 import type { Hono } from "hono";
 import {
   AppError,
-  promptTemplates,
   type LibraryService,
   type CreationService,
 } from "@tuyile/core";
 import {
+  promptPickerQuery,
+  styleInput,
   favoriteInput,
+  promptTemplateInput,
   id,
   libraryExportInput,
   pageOffset,
@@ -19,6 +21,43 @@ export function libraryRoutes(
   library: LibraryService,
   creation: CreationService,
 ) {
+  app.get("/api/library/prompt-picker", async (c) =>
+    c.json(
+      await library.promptPicker(
+        c.get("session").user,
+        promptPickerQuery.parse(c.req.query()),
+      ),
+    ),
+  );
+  app.get("/api/library/styles", async (c) =>
+    c.json({ styles: await library.styles(c.get("session").user) }),
+  );
+  app.get("/api/admin/styles", async (c) =>
+    c.json({ styles: await library.styles(c.get("session").user, true) }),
+  );
+  for (const shared of [false, true])
+    app.post(shared ? "/api/admin/styles" : "/api/library/styles", async (c) =>
+      c.json(
+        await library.saveStyle(
+          c.get("session").user,
+          styleInput.parse(await c.req.json()),
+          shared,
+        ),
+        201,
+      ),
+    );
+  app.post("/api/library/styles/:id/delete", async (c) => {
+    const input = z
+      .object({ revision: z.number().int().positive() })
+      .strict()
+      .parse(await c.req.json());
+    await library.removeStyle(
+      c.get("session").user,
+      id.parse(c.req.param("id")),
+      input.revision,
+    );
+    return c.json({ ok: true });
+  });
   app.get("/api/library/assets", async (c) => {
     const rows = await library.assets(
       c.get("session").user,
@@ -30,14 +69,49 @@ export function libraryRoutes(
     const rows = await library.favorites(
       c.get("session").user,
       pageOffset.parse(c.req.query("offset")),
-      z.string().max(60).optional().parse(c.req.query("group")),
+      z
+        .array(
+          z
+            .string()
+            .max(60)
+            .refine((value) => !value.includes("\0")),
+        )
+        .max(200)
+        .parse(c.req.queries("group") ?? []),
+      promptPickerQuery.shape.search.parse(c.req.query("search")),
     );
     return c.json({ favorites: rows.slice(0, 50), hasMore: rows.length > 50 });
   });
   app.get("/api/library/groups", async (c) =>
     c.json({ groups: await library.groups(c.get("session").user) }),
   );
-  app.get("/api/library/prompts", (c) => c.json({ prompts: promptTemplates }));
+  app.get("/api/library/prompts", async (c) => {
+    return c.json(
+      await library.promptPage(
+        c.get("session").user,
+        pageOffset.parse(c.req.query("offset")),
+        c.req.queries("category") ?? [],
+        promptPickerQuery.shape.search.parse(c.req.query("search")),
+      ),
+    );
+  });
+  app.get("/api/admin/prompts", async (c) => {
+    const rows = await library.managedPrompts(
+      c.get("session").user,
+      pageOffset.parse(c.req.query("offset")),
+      z.string().trim().max(100).default("").parse(c.req.query("search")),
+    );
+    return c.json({ prompts: rows.slice(0, 50), hasMore: rows.length > 50 });
+  });
+  app.post("/api/admin/prompts", async (c) =>
+    c.json(
+      await library.savePrompt(
+        c.get("session").user,
+        promptTemplateInput.parse(await c.req.json()),
+      ),
+      201,
+    ),
+  );
   app.post("/api/library/favorites", async (c) =>
     c.json(
       await library.saveFavorite(

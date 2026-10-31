@@ -21,6 +21,7 @@ import {
   poolEntryInput,
 } from "@tuyile/contracts";
 import {
+  useFeedback,
   Button,
   Collapse,
   ChoiceField,
@@ -58,8 +59,9 @@ export function ModelServicesAdmin() {
   const [selected, setSelected] = useState(""),
     [search, setSearch] = useState(""),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState(""),
-    [message, setMessage] = useState("");
+    [error, setError] = useState("");
+  const feedback = useFeedback();
+  const notifySuccess = feedback.success;
   const [draft, setDraft] = useState<{
       revision: number;
       entries: PoolEntryInput[];
@@ -95,19 +97,19 @@ export function ModelServicesAdmin() {
     if (busy) return;
     setBusy(true);
     setError("");
-    setMessage("");
     try {
       await work();
       await refresh();
     } catch (e) {
-      setError((e as Error).message);
+      if (editor || advanced || manual || adding || managing || draft)
+        setError((e as Error).message);
+      else feedback.error((e as Error).message);
     } finally {
       setBusy(false);
     }
   }
   function change(next: PoolEntryInput[]) {
     setDraft({ revision: draft?.revision ?? data!.revision, entries: next });
-    setMessage("");
   }
   function add(model: string, kind: ModelKind) {
     if (!service) return;
@@ -143,7 +145,7 @@ export function ModelServicesAdmin() {
       }
       await api("/model-admin/pools", { revision: draft!.revision, entries });
       setDraft(null);
-      setMessage("模型开放配置已保存，新的创作可以使用。");
+      notifySuccess("模型配置已保存");
     });
   }
   function editService(s?: ModelServiceView) {
@@ -177,7 +179,7 @@ export function ModelServicesAdmin() {
       );
       setSelected(saved.id);
       setEditor(null);
-      setMessage("服务已保存，可以获取模型列表。");
+      notifySuccess("服务已保存");
     });
   }
   async function toggleService(
@@ -198,12 +200,8 @@ export function ModelServicesAdmin() {
         enabled,
         revoke,
       });
-      setMessage(
-        revoke
-          ? "服务已撤销。"
-          : enabled
-            ? "服务已启用，请检查并开放需要的模型。"
-            : "服务已停用，已接受任务仍按绑定版本处理。",
+      notifySuccess(
+        revoke ? "服务已撤销" : enabled ? "服务已启用" : "服务已停用",
       );
     });
   }
@@ -216,10 +214,15 @@ export function ModelServicesAdmin() {
   return (
     <ControlScope componentDisabled={busy}>
       <div className="model-services-admin">
-        {(error || query.error) && (
-          <Notice error>{error || query.error?.message}</Notice>
+        {(query.error ||
+          (error &&
+            !editor &&
+            !advanced &&
+            !manual &&
+            !adding &&
+            !managing)) && (
+          <Notice error>{query.error?.message || error}</Notice>
         )}
-        {message && <Notice>{message}</Notice>}
         {!data?.managed && (
           <Notice>
             现有服务仍在正常工作。
@@ -228,7 +231,7 @@ export function ModelServicesAdmin() {
               onClick={() =>
                 void run(async () => {
                   await api("/model-admin/bootstrap", {});
-                  setMessage("现有服务和开放模型已接入。");
+                  notifySuccess("已接入现有配置");
                 })
               }
             >
@@ -452,7 +455,7 @@ export function ModelServicesAdmin() {
               onClick={() =>
                 void run(async () => {
                   await api(`/model-admin/services/${service!.id}/refresh`, {});
-                  setMessage("模型列表已更新，开放范围保持不变。");
+                  notifySuccess("模型列表已更新");
                 })
               }
             >
@@ -753,7 +756,7 @@ export function ModelServicesAdmin() {
                 });
                 setManual(false);
                 setManualId("");
-                setMessage("已登记为候选模型，尚未开放。");
+                notifySuccess("候选模型已登记");
               });
             }}
           >

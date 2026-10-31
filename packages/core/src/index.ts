@@ -62,7 +62,11 @@ export interface Repository {
   ): Promise<{ principal: Principal; session: SessionRecord } | null>;
   deleteSession(hash: string): Promise<void>;
   consumeLoginBudget(key: string, limit?: number): Promise<boolean>;
-  listProjects(workspaceId: string, offset?: number): Promise<Project[]>;
+  listProjects(
+    workspaceId: string,
+    offset?: number,
+    search?: string,
+  ): Promise<Project[]>;
   projectById(workspaceId: string, id: string): Promise<Project | null>;
   createProject(workspaceId: string, name: string): Promise<Project>;
 }
@@ -326,10 +330,10 @@ export class Workbench {
       await r.deleteTokens(p.id);
     });
   }
-  async projects(p: Principal, offset = 0) {
+  async projects(p: Principal, offset = 0, search = "") {
     return this.store.transaction(async (r) => {
       await this.actor(r, p);
-      return r.listProjects(p.workspaceId, offset);
+      return r.listProjects(p.workspaceId, offset, search);
     });
   }
   async project(p: Principal, id: string) {

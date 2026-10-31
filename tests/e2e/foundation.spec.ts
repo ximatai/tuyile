@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 const auth = JSON.parse(
   await readFile(".codex-temp/e2e-auth.json", "utf8"),
 ) as { username: string; password: string };
@@ -88,7 +88,7 @@ test("desktop and mobile: persistent projects, initial password, account boundar
   await drawer
     .getByRole("button", { name: "保存用户配置", exact: true })
     .click();
-  await expect(drawer.getByText("已保存。", { exact: true })).toBeVisible();
+  await expect(page.getByText("已保存", { exact: true })).toBeVisible();
   await drawer.getByRole("button", { name: "关闭", exact: true }).click();
   await expect(drawer).toBeHidden();
   await page
@@ -103,7 +103,7 @@ test("desktop and mobile: persistent projects, initial password, account boundar
   await drawer
     .getByRole("button", { name: "保存用户配置", exact: true })
     .click();
-  await expect(drawer.getByText("已保存。", { exact: true })).toBeVisible();
+  await expect(page.getByText("已保存", { exact: true })).toBeVisible();
   await drawer.getByRole("button", { name: "关闭", exact: true }).click();
   await expect(drawer).toBeHidden();
   await page
@@ -122,7 +122,7 @@ test("desktop and mobile: persistent projects, initial password, account boundar
   await drawer
     .getByRole("button", { name: "保存用户配置", exact: true })
     .click();
-  await expect(drawer.getByText("已保存。", { exact: true })).toBeVisible();
+  await expect(page.getByText("已保存", { exact: true })).toBeVisible();
   await drawer.getByRole("button", { name: "关闭", exact: true }).click();
   await expect(drawer).toBeHidden();
 
@@ -371,8 +371,8 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     .click();
   await expect(page.getByText("本地测试模型：生成测试色块")).toBeVisible();
   const projectUrl = page.url();
-  await page.getByRole("button", { name: "产品海报", exact: true }).click();
-  await expect(page.getByLabel("创作需求")).toHaveValue(/高端商业海报/);
+  await page.getByRole("button", { name: "简洁商品展示", exact: true }).click();
+  await expect(page.getByLabel("创作需求")).toHaveValue(/棚拍展示图/);
   const authoredPrompt = await page.getByLabel("创作需求").inputValue();
   await page.getByRole("combobox", { name: "风格", exact: true }).click();
   await page
@@ -394,7 +394,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     presetDescription,
   );
   await page.getByLabel("风格描述", { exact: true }).fill("临时修改");
-  await page.getByRole("button", { name: "恢复预设", exact: true }).click();
+  await page.getByRole("button", { name: "恢复原风格", exact: true }).click();
   await expect(page.getByLabel("风格描述", { exact: true })).toHaveValue(
     presetDescription,
   );
@@ -407,7 +407,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     .getByRole("button", { name: "应用", exact: true })
     .click();
   const styledDraft = await page.getByLabel("创作需求").inputValue();
-  await page.getByRole("button", { name: "城市夜景", exact: true }).click();
+  await page.getByRole("button", { name: "叙事插画场景", exact: true }).click();
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "取消", exact: true })
@@ -541,7 +541,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
       .filter({
         has: page.getByRole("combobox", { name: "风格", exact: true }),
       })
-      .getByText("真实摄影 · 已修改", { exact: true }),
+      .getByText("真实摄影 · 本次创作", { exact: true }),
   ).toBeVisible();
 
   let releaseSubmission!: () => void;
@@ -575,7 +575,9 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   await expect(
     page.getByRole("status", { name: "图片生成状态" }),
   ).toContainText(/正在生成图片|排队中/);
-  await expect(page.getByLabel("创作需求")).toHaveValue("");
+  await expect(page.getByLabel("创作需求")).toHaveValue(
+    "合成测试：关闭页面后继续执行",
+  );
   await expect(
     page.locator(".direct-creation .generation-submit-row > .primary"),
   ).toHaveClass(/ant-btn-loading/);
@@ -589,7 +591,11 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   expect(Math.abs(progressBefore.x - progressAfter.x)).toBeLessThan(2);
   expect(Math.abs(progressBefore.y - progressAfter.y)).toBeLessThan(2);
   await page.getByRole("button", { name: "查看任务", exact: true }).click();
-  await expect(page.getByText("合成测试：关闭页面后继续执行")).toBeVisible();
+  await expect(
+    page
+      .locator(".canvas-task-history")
+      .getByText("合成测试：关闭页面后继续执行", { exact: true }),
+  ).toBeVisible();
   const context = page.context();
   await page.close();
   const reopened = await context.newPage();
@@ -643,6 +649,10 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     .getByRole("button", { name: "任务详情", exact: true })
     .first();
   await taskDetails.click();
+  await reopened
+    .locator(".task-tile-details .ant-collapse-header")
+    .first()
+    .click();
   await expect(reopened.locator(".task-tile-details")).toContainText(
     "合成风格：柔和自然光",
   );
@@ -651,6 +661,10 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   await expect(taskDetails).toBeFocused();
   await taskDetails.click();
   await reopened.getByRole("button", { name: "复用设置", exact: true }).click();
+  await reopened
+    .getByRole("dialog", { name: "请确认", exact: true })
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
   await expect(reopened.getByLabel("创作需求")).toHaveValue(
     "合成测试：关闭页面后继续执行",
   );
@@ -658,7 +672,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     reopened.locator(".direct-creation .field").filter({
       has: reopened.getByRole("combobox", { name: "风格", exact: true }),
     }),
-  ).toContainText("真实摄影 · 已修改");
+  ).toContainText("真实摄影 · 本次创作");
   await reopened.getByRole("button", { name: "编辑风格", exact: true }).click();
   await expect(reopened.getByLabel("风格描述", { exact: true })).toHaveValue(
     "合成风格：柔和自然光",
@@ -676,8 +690,13 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   await expect(reopened.locator(".ant-image-preview")).toBeHidden();
   await reopened.locator(".task-tile-images figure").first().hover();
   await reopened
-    .getByRole("button", { name: "继续修改", exact: true })
+    .locator(".task-tile-images")
     .first()
+    .getByRole("button", { name: "更多图片操作", exact: true })
+    .first()
+    .click();
+  await reopened
+    .getByRole("menuitem", { name: "作为参考图", exact: true })
     .click();
   await expect(
     reopened
@@ -755,14 +774,16 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   const sentStyleRequest = (await styledRequest).postDataJSON();
   expect(sentStyleRequest.prompt).toBe("合成测试：注销后继续");
   expect(sentStyleRequest.style.name).toBe("海报视觉");
-  expect(sentStyleRequest.style.text).toContain("鲜明的海报构图");
+  expect(sentStyleRequest.style.text).toContain("采用海报式视觉组织");
   await expect(
     reopened.getByRole("status", { name: "图片生成状态" }),
   ).toContainText("提交结果待确认");
   await reopened
     .getByRole("button", { name: "查找这次提交", exact: true })
     .click();
-  await expect(reopened.getByLabel("创作需求")).toHaveValue("");
+  await expect(reopened.getByLabel("创作需求")).toHaveValue(
+    "合成测试：注销后继续",
+  );
   expect(
     (
       await (
@@ -772,7 +793,11 @@ test("background creation survives refresh, page closure and ordinary logout, wi
       ).json()
     ).tasks,
   ).toHaveLength(2);
-  await expect(reopened.getByText("合成测试：注销后继续")).toBeVisible();
+  await expect(
+    reopened
+      .locator(".canvas-task-history")
+      .getByText("合成测试：注销后继续", { exact: true }),
+  ).toBeVisible();
   await reopened.reload();
   await logoutFromMenu(reopened);
   await expect(
@@ -813,8 +838,13 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   ).toBeVisible();
   await reopened.locator(".task-tile-images figure").first().hover();
   await reopened
-    .getByRole("button", { name: "继续修改", exact: true })
+    .locator(".task-tile-images")
     .first()
+    .getByRole("button", { name: "更多图片操作", exact: true })
+    .first()
+    .click();
+  await reopened
+    .getByRole("menuitem", { name: "作为参考图", exact: true })
     .click();
   const referenceItems = reopened
     .getByTestId("reference-upload")
@@ -868,6 +898,13 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   }
   await reopened.setViewportSize({ width: 1440, height: 900 });
   await reopened.getByLabel("创作需求").fill("合成测试：参考图");
+  await reopened
+    .getByRole("combobox", { name: "图片张数", exact: true })
+    .click();
+  await reopened
+    .locator(".ant-select-dropdown:visible")
+    .getByText("1 张", { exact: true })
+    .click();
   await reopened
     .getByRole("button", { name: "提交图片任务", exact: true })
     .click();
@@ -924,6 +961,9 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   await expect(reopened.getByRole("tooltip")).toBeHidden();
   await expect(quotaTrigger).toBeFocused();
   await quotaTrigger.click();
+  await reopened.getByRole("button", { name: "关闭额度详情", exact: true }).click();
+  await expect(quotaTrigger).toBeFocused();
+  await expect(quotaTrigger).toHaveAttribute("aria-expanded", "false");
   await reopened.getByRole("tab", { name: "Agent", exact: true }).click();
   await expect(reopened.getByRole("tooltip")).toBeHidden();
   await reopened.getByRole("tab", { name: "直接创作", exact: true }).click();
@@ -948,7 +988,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     reopened.getByRole("heading", { name: "我的额度" }),
   ).toBeVisible();
   await expect(
-    reopened.getByRole("heading", { name: "上传的参考图" }),
+    reopened.getByRole("link", { name: "管理图片", exact: true }),
   ).toBeVisible();
   await reopened.getByRole("link", { name: "模型服务", exact: true }).click();
   await expect(
@@ -1163,9 +1203,7 @@ test("desktop administration publishes service model pools and preserves version
     .getByRole("button", { name: "关闭", exact: true })
     .click();
   await page.getByRole("button", { name: "保存开放配置", exact: true }).click();
-  await expect(
-    page.getByText("模型开放配置已保存，新的创作可以使用。", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText("模型配置已保存", { exact: true })).toBeVisible();
   const catalog = await (
     await page.request.get("/api/model-admin/catalog")
   ).json();
@@ -1592,7 +1630,7 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
   await expect(
     page
       .getByRole("tooltip")
-      .getByRole("button", { name: "产品海报", exact: true }),
+      .getByRole("button", { name: "简洁商品展示", exact: true }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(
@@ -1827,6 +1865,32 @@ test("Gallery reuse, ZIP export, favorites, prompt application and project clean
     .locator(".project-card")
     .filter({ hasText: "素材复用目标" })
     .getAttribute("href");
+  if (
+    !(await (await page.request.get("/api/library/assets")).json()).assets
+      .length
+  ) {
+    const session = await (await page.request.get("/api/auth/me")).json();
+    const png = await (
+      await import("sharp")
+    )
+      .default({
+        create: { width: 256, height: 256, channels: 3, background: "#0062b0" },
+      })
+      .png()
+      .toBuffer();
+    expect(
+      (
+        await page.request.post("/api/images/uploads", {
+          headers: {
+            Origin: "http://127.0.0.1:5180",
+            "X-CSRF-Token": session.csrfToken,
+            "Content-Type": "image/png",
+          },
+          data: png,
+        })
+      ).status(),
+    ).toBe(201);
+  }
   const before = await (await page.request.get("/api/images/usage")).json();
   await page.getByRole("link", { name: "图库", exact: true }).click();
   await expect(
@@ -1840,7 +1904,9 @@ test("Gallery reuse, ZIP export, favorites, prompt application and project clean
   await page.getByLabel("收藏分组名称", { exact: true }).fill("验收分组");
   await page.getByRole("button", { name: "保存收藏", exact: true }).click();
   await expect(page.locator(".ant-drawer:visible")).toHaveCount(0);
-  await expect(page.getByText("收藏已保存。", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("status").filter({ hasText: /^已收藏$/ }),
+  ).toBeVisible();
   await card.getByRole("button", { name: "图片更多操作", exact: true }).click();
   await page.getByRole("menuitem", { name: "删除原图", exact: true }).click();
   await page
@@ -1897,7 +1963,7 @@ test("Gallery reuse, ZIP export, favorites, prompt application and project clean
   await expect(
     page
       .getByTestId("reference-upload")
-      .getByText("图库参考图", { exact: true }),
+      .getByRole("button", { name: "图库参考图", exact: true }),
   ).toBeVisible();
   await page.getByRole("link", { name: "提示池", exact: true }).click();
   await expect(
@@ -1907,15 +1973,20 @@ test("Gallery reuse, ZIP export, favorites, prompt application and project clean
   await template
     .getByRole("button", { name: "收藏提示词", exact: true })
     .click();
-  await page.getByLabel("收藏标题", { exact: true }).fill("提示收藏验收");
-  await page.getByLabel("收藏分组名称", { exact: true }).fill("写作");
-  await page.getByRole("button", { name: "保存收藏", exact: true }).click();
+  await expect(
+    template.getByRole("button", { name: "已收藏提示词", exact: true }),
+  ).toBeDisabled();
   await expect(page.locator(".ant-drawer:visible")).toHaveCount(0);
-  await expect(page.getByText("收藏已保存。", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("status").filter({ hasText: /^已收藏$/ }),
+  ).toBeVisible();
   const prompt = (await (await page.request.get("/api/library/prompts")).json())
     .prompts[0].prompt;
   await template
-    .getByRole("button", { name: "用于目标项目", exact: true })
+    .getByRole("button", { name: "使用提示词", exact: true })
+    .click();
+  await page
+    .getByRole("menuitem", { name: "素材复用目标", exact: true })
     .click();
   await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
     prompt,
@@ -1927,7 +1998,10 @@ test("Gallery reuse, ZIP export, favorites, prompt application and project clean
   const favorite = page.locator(".favorite-card").filter({
     has: page.getByRole("heading", { name: "素材测试收藏", exact: true }),
   });
-  await favorite.getByRole("button", { name: "编辑收藏", exact: true }).click();
+  await favorite
+    .getByRole("button", { name: "收藏更多操作", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: "编辑收藏", exact: true }).click();
   await page.getByLabel("收藏标题", { exact: true }).fill("更新素材收藏");
   await page.getByLabel("收藏分组名称", { exact: true }).fill("归档");
   await page.getByRole("button", { name: "保存收藏", exact: true }).click();
@@ -1935,18 +2009,21 @@ test("Gallery reuse, ZIP export, favorites, prompt application and project clean
   await expect(
     page.getByRole("heading", { name: "更新素材收藏", exact: true }),
   ).toBeVisible();
-  await page.getByLabel("收藏分组", { exact: true }).click();
   await page
-    .locator(".ant-select-dropdown:visible")
-    .getByText("归档", { exact: true })
-    .click();
+    .getByRole("complementary", { name: "收藏分组", exact: true })
+    .getByRole("checkbox", { name: "归档", exact: true })
+    .check();
   await expect(page.locator(".favorite-card")).toHaveCount(1);
   await page.setViewportSize({ width: 1920, height: 1080 });
   await page.screenshot({
     path: ".codex-temp/m3-favorites-1920.png",
     animations: "disabled",
   });
-  await page.getByRole("button", { name: "移除收藏", exact: true }).click();
+  await page
+    .locator(".favorite-card")
+    .getByRole("button", { name: "收藏更多操作", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: "移除收藏", exact: true }).click();
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "确认", exact: true })
@@ -1986,9 +2063,7 @@ test("administration saves bounded execution policies and clearing ended Agent h
   await page.getByLabel("全局规划并发", { exact: true }).fill("3");
   await page.getByLabel("全局规划排队上限", { exact: true }).fill("32");
   await page.getByRole("button", { name: "保存执行设置", exact: true }).click();
-  await expect(
-    page.getByText("执行设置已保存。", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText("已保存", { exact: true })).toBeVisible();
   const settings = await (
     await page.request.get("/api/image-admin/execution-settings")
   ).json();
@@ -2004,9 +2079,7 @@ test("administration saves bounded execution policies and clearing ended Agent h
   await page.getByLabel("每日规划次数", { exact: true }).fill("45");
   await page.getByLabel("每用户规划排队上限", { exact: true }).fill("8");
   await page.getByRole("button", { name: "保存规划策略", exact: true }).click();
-  await expect(
-    page.getByText("规划策略已保存。", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText("已保存", { exact: true })).toBeVisible();
   expect(
     (await (await page.request.get("/api/agent/usage")).json()).dailyLimit,
   ).toBe(45);
@@ -2066,9 +2139,7 @@ test("administrators add a service and users select same-named models from the c
     .getByText("本地合成测试（不调用模型）", { exact: true })
     .click();
   await page.getByRole("button", { name: "保存服务", exact: true }).click();
-  await expect(
-    page.getByText("服务已保存，可以获取模型列表。", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText("服务已保存", { exact: true })).toBeVisible();
   await page
     .getByRole("button", { name: "添加图片生成模型", exact: true })
     .click();
@@ -2094,9 +2165,7 @@ test("administrators add a service and users select same-named models from the c
     .getByRole("button", { name: "将 test-planner 加入对话池", exact: true })
     .click();
   await page.getByRole("button", { name: "保存开放配置", exact: true }).click();
-  await expect(
-    page.getByText("模型开放配置已保存，新的创作可以使用。", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText("模型配置已保存", { exact: true })).toBeVisible();
   const catalog = await (
     await page.request.get("/api/model-admin/catalog")
   ).json();
@@ -2452,4 +2521,1734 @@ test("user search reaches older pages and unsaved policies block history and rel
   await expect(
     page.getByRole("heading", { name: "我的项目", exact: true }),
   ).toBeVisible();
+});
+
+test("usage dashboard summarizes quotas and refreshes task details without a duplicate gallery", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.getByRole("link", { name: "额度", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "我的额度", exact: true }),
+  ).toBeVisible();
+  const imageQuota = page.getByRole("region", {
+    name: "图片额度",
+    exact: true,
+  });
+  const storage = page.getByRole("region", { name: "存储空间", exact: true });
+  await expect(imageQuota.getByText("不限额", { exact: true })).toBeVisible();
+  await expect(page.getByText("暂无使用记录", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "上传的参考图", exact: true }),
+  ).toHaveCount(0);
+  const session = await (await page.request.get("/api/auth/me")).json();
+  const headers = {
+    Origin: "http://127.0.0.1:5180",
+    "X-CSRF-Token": session.csrfToken,
+  };
+  const projectResponse = await page.request.post("/api/projects", {
+    headers,
+    data: { name: "Usage dashboard synthetic" },
+  });
+  expect(projectResponse.status()).toBe(201);
+  const project = await projectResponse.json();
+  const png = await (
+    await import("sharp")
+  )
+    .default({
+      create: { width: 256, height: 256, channels: 3, background: "#0062b0" },
+    })
+    .png()
+    .toBuffer();
+  expect(
+    (
+      await page.request.post("/api/images/uploads", {
+        headers: { ...headers, "Content-Type": "image/png" },
+        data: png,
+      })
+    ).status(),
+  ).toBe(201);
+  const submitted = await page.request.post("/api/images/tasks", {
+    headers,
+    data: {
+      projectId: project.id,
+      requestKey: randomUUID(),
+      prompt: "Usage dashboard synthetic image",
+      model: "test-image",
+      count: 1,
+      width: 256,
+      height: 256,
+      quality: "medium",
+      format: "png",
+      referenceIds: [],
+    },
+  });
+  expect(submitted.status()).toBe(202);
+  const records = page.getByRole("region", { name: "使用记录", exact: true });
+  await expect(
+    records.getByRole("button", { name: "查看任务详情", exact: true }),
+  ).toHaveCount(1);
+  await expect(records.getByRole("img")).toHaveCount(0);
+  await records
+    .getByRole("button", { name: "查看任务详情", exact: true })
+    .click();
+  const drawer = page.getByRole("dialog", { name: "任务详情", exact: true });
+  await expect(
+    drawer.getByText("Usage dashboard synthetic image", { exact: true }),
+  ).toBeVisible();
+  await expect(drawer.getByText("已完成", { exact: true })).toBeVisible();
+  await expect(
+    drawer.getByRole("img", { name: "已保存图片，256 × 256", exact: true }),
+  ).toBeVisible();
+  await expect(
+    drawer.getByRole("link", { name: "下载原图", exact: true }),
+  ).toBeVisible();
+  await expect(
+    drawer.getByRole("button", { name: "删除原图", exact: true }),
+  ).toHaveCount(0);
+  await drawer.getByRole("button", { name: "关闭", exact: true }).click();
+  await expect(drawer).toBeHidden();
+  await expect(
+    imageQuota.getByText("已生成 1 张", { exact: true }),
+  ).toBeVisible();
+  const policy = await (
+    await page.request.get(`/api/image-admin/policies/${session.user.id}`)
+  ).json();
+  expect(
+    (
+      await page.request.post(`/api/image-admin/policies/${session.user.id}`, {
+        headers,
+        data: { ...policy, imageLimit: 100 },
+      })
+    ).status(),
+  ).toBe(200);
+  await page.getByRole("button", { name: "刷新额度", exact: true }).click();
+  await expect(imageQuota.getByText("99", { exact: true })).toBeVisible();
+  await expect(
+    imageQuota.getByRole("progressbar", {
+      name: "今日图片额度使用比例",
+      exact: true,
+    }),
+  ).toHaveAttribute("aria-valuenow", "1");
+  await page.getByRole("button", { name: "额度详情", exact: true }).click();
+  await expect(page.getByText("今日模型调用", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "额度详情", exact: true }).click();
+  for (const width of [1440, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    const left = await imageQuota.boundingBox(),
+      right = await storage.boundingBox();
+    expect(left && right).toBeTruthy();
+    expect(Math.abs(left!.y - right!.y)).toBeLessThan(1);
+    expect(Math.abs(left!.height - right!.height)).toBeLessThan(1);
+    await page.screenshot({
+      path: `.codex-temp/usage-dashboard-${width}.png`,
+      fullPage: true,
+    });
+  }
+  await page.getByRole("link", { name: "管理图片", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "我的图库", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("img", { name: "上传图片 256 × 256", exact: true }),
+  ).toBeVisible();
+});
+
+test("prompt library keeps project selection compact and reuses full prompts", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const session = await (await page.request.get("/api/auth/me")).json();
+  const headers = {
+    Origin: "http://127.0.0.1:5180",
+    "X-CSRF-Token": session.csrfToken,
+  };
+  const projects = [];
+  for (const name of ["Prompt first", "Prompt target"]) {
+    const response = await page.request.post("/api/projects", {
+      headers,
+      data: { name },
+    });
+    expect(response.status()).toBe(201);
+    projects.push(await response.json());
+  }
+  await page.getByRole("link", { name: "提示池", exact: true }).click();
+  await expect(page.getByLabel("目标项目", { exact: true })).toHaveCount(0);
+  const card = page.locator(".prompt-card").first();
+  const prompt = (await (await page.request.get("/api/library/prompts")).json())
+    .prompts[0];
+  if (
+    await card.getByRole("button", { name: "收藏提示词", exact: true }).count()
+  )
+    await card.getByRole("button", { name: "收藏提示词", exact: true }).click();
+  await expect(
+    card.getByRole("button", { name: "已收藏提示词", exact: true }),
+  ).toBeDisabled();
+  for (const width of [1440, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    const rowSpreads = await page
+      .locator(".prompt-card")
+      .evaluateAll((cards) => {
+        const rows = new Map<number, number[]>();
+        for (const card of cards) {
+          const top = Math.round(card.getBoundingClientRect().top);
+          const bottom = card
+            .querySelector(".actions")!
+            .getBoundingClientRect().bottom;
+          rows.set(top, [...(rows.get(top) ?? []), bottom]);
+        }
+        return [...rows.values()].map(
+          (values) => Math.max(...values) - Math.min(...values),
+        );
+      });
+    expect(Math.max(...rowSpreads)).toBeLessThan(2);
+  }
+  await card.getByRole("button", { name: "使用提示词", exact: true }).click();
+  await page
+    .getByRole("menuitem", { name: "Prompt target", exact: true })
+    .click();
+  await expect(page).toHaveURL(new RegExp(`/projects/${projects[1].id}$`));
+  await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
+    prompt.prompt,
+  );
+});
+
+test("managed prompt pool supports drafts, publication, cross-tab updates, reuse and private snapshots", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const session = await (await page.request.get("/api/auth/me")).json();
+  const headers = {
+    Origin: "http://127.0.0.1:5180",
+    "X-CSRF-Token": session.csrfToken,
+  };
+  const project = await (
+    await page.request.post("/api/projects", {
+      headers,
+      data: { name: "Template target" },
+    })
+  ).json();
+  await page.getByRole("link", { name: "提示池", exact: true }).click();
+  await page.getByRole("link", { name: "管理创作预设", exact: true }).click();
+  await page.getByRole("button", { name: "新增提示词", exact: true }).click();
+  let drawer = page.getByRole("dialog", { name: "新增提示词", exact: true });
+  await drawer.getByLabel("标题", { exact: true }).fill("公开模板验收");
+  await drawer.getByLabel("分类", { exact: true }).fill("验收");
+  await drawer
+    .getByLabel("提示词正文", { exact: true })
+    .fill("合成模板的完整正文，保留所有内容。");
+  await drawer.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(drawer).toBeHidden();
+  const row = page.getByRole("row").filter({ hasText: "公开模板验收" });
+  await expect(row.getByText("未上架", { exact: true })).toBeVisible();
+  const viewer = await page.context().newPage();
+  await viewer.goto("/prompts");
+  await expect(viewer.locator(".prompt-card")).toHaveCount(36);
+  await expect(
+    viewer.getByRole("heading", { name: "公开模板验收", exact: true }),
+  ).toHaveCount(0);
+  await row.getByRole("button", { name: "编辑", exact: true }).click();
+  drawer = page.getByRole("dialog", { name: "编辑提示词", exact: true });
+  await drawer
+    .getByRole("checkbox", { name: "上架，所有用户可见", exact: true })
+    .check();
+  await drawer.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(drawer).toBeHidden();
+  const template = viewer
+    .locator(".prompt-card")
+    .filter({ hasText: "公开模板验收" });
+  await expect(template).toBeVisible({ timeout: 20000 });
+  await template
+    .getByRole("button", { name: "收藏提示词", exact: true })
+    .click();
+  await expect(
+    template.getByRole("button", { name: "已收藏提示词", exact: true }),
+  ).toBeDisabled();
+  await template
+    .getByRole("button", { name: "使用提示词", exact: true })
+    .click();
+  await viewer
+    .getByRole("menuitem", { name: "Template target", exact: true })
+    .click();
+  await expect(viewer).toHaveURL(new RegExp(`/projects/${project.id}$`));
+  await expect(viewer.getByLabel("创作需求", { exact: true })).toHaveValue(
+    "合成模板的完整正文，保留所有内容。",
+  );
+  await row.getByRole("button", { name: "编辑", exact: true }).click();
+  await drawer
+    .getByLabel("提示词正文", { exact: true })
+    .fill("修改后的公共正文");
+  await drawer
+    .getByRole("checkbox", { name: "上架，所有用户可见", exact: true })
+    .uncheck();
+  await drawer.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(drawer).toBeHidden();
+  await viewer.getByRole("link", { name: "提示池", exact: true }).click();
+  await expect(viewer.locator(".prompt-card")).toHaveCount(36);
+  const favorites = (
+    await (await viewer.request.get("/api/library/favorites")).json()
+  ).favorites;
+  expect(
+    favorites.find((f: { title: string }) => f.title === "公开模板验收").prompt,
+  ).toBe("合成模板的完整正文，保留所有内容。");
+  // Closing a dirty editor must ask before discarding it.
+  await row.getByRole("button", { name: "编辑", exact: true }).click();
+  await drawer.getByLabel("标题", { exact: true }).fill("未保存修改");
+  await drawer.getByRole("button", { name: "取消", exact: true }).click();
+  const confirmation = page.getByRole("dialog", {
+    name: "请确认",
+    exact: true,
+  });
+  await expect(confirmation).toBeVisible();
+  await confirmation.getByRole("button", { name: "取消", exact: true }).click();
+  await expect(drawer.getByLabel("标题", { exact: true })).toHaveValue(
+    "未保存修改",
+  );
+  await drawer.getByRole("button", { name: "取消", exact: true }).click();
+  await confirmation.getByRole("button", { name: "确认", exact: true }).click();
+  await expect(drawer).toBeHidden();
+  await viewer.close();
+});
+
+test("prompt category panel supports multiple selection, deselection and full-catalog filtering", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.getByRole("link", { name: "提示池", exact: true }).click();
+  const panel = page.getByRole("complementary", {
+    name: "提示词分类",
+    exact: true,
+  });
+  const cards = page.locator(".prompt-card");
+  await expect(cards).toHaveCount(36);
+  await panel.getByRole("checkbox", { name: "商品", exact: true }).check();
+  await expect(cards).toHaveCount(4);
+  await expect(
+    panel.getByRole("checkbox", { name: "摄影", exact: true }),
+  ).toBeVisible();
+  await panel.getByRole("checkbox", { name: "摄影", exact: true }).check();
+  await expect(cards).toHaveCount(8);
+  await panel.getByRole("checkbox", { name: "商品", exact: true }).uncheck();
+  await expect(cards).toHaveCount(4);
+  await expect(
+    page.getByRole("heading", { name: "美食自然光摄影", exact: true }),
+  ).toBeVisible();
+  await panel.getByRole("checkbox", { name: "摄影", exact: true }).uncheck();
+  await expect(cards).toHaveCount(36);
+  await expect(
+    panel.getByRole("button", { name: "全部分类", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await panel.getByRole("checkbox", { name: "空间", exact: true }).check();
+  await expect(cards).toHaveCount(3);
+  await panel.getByRole("button", { name: "全部分类", exact: true }).click();
+  await expect(cards).toHaveCount(36);
+  await expect(
+    panel.getByRole("checkbox", { name: "空间", exact: true }),
+  ).not.toBeChecked();
+  for (const width of [1440, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    const left = await panel.boundingBox(),
+      right = await page
+        .getByRole("region", { name: "提示词列表", exact: true })
+        .boundingBox();
+    expect(left!.x + left!.width).toBeLessThan(right!.x);
+    expect(Math.abs(left!.y - right!.y)).toBeLessThan(2);
+  }
+});
+
+test("prompt use menu supports hover, complete project search and creating a destination", async ({
+  page,
+}) => {
+  await login(page);
+  await page.getByRole("link", { name: "提示池", exact: true }).click();
+  const card = page.locator(".prompt-card").first();
+  const prompt = (await (await page.request.get("/api/library/prompts")).json())
+    .prompts[0].prompt;
+  const use = card.getByRole("button", { name: "使用提示词", exact: true });
+  await use.hover();
+  const popup = page.locator(".prompt-use-popover:visible");
+  await expect(
+    popup.getByRole("heading", { name: "我的项目", exact: true }),
+  ).toBeVisible();
+  await expect(popup.getByLabel("搜索我的项目", { exact: true })).toHaveCount(
+    0,
+  );
+  await popup.getByRole("button", { name: "搜索项目", exact: true }).click();
+  await popup.getByLabel("搜索我的项目", { exact: true }).hover();
+  await expect(popup).toBeVisible();
+  await popup.getByLabel("搜索我的项目", { exact: true }).fill("不存在的名称");
+  await expect(popup.getByText("未找到项目", { exact: true })).toBeVisible();
+  await popup.getByRole("button", { name: "搜索项目", exact: true }).click();
+  await expect(popup.getByLabel("搜索我的项目", { exact: true })).toHaveCount(
+    0,
+  );
+  await expect(popup.getByText("未找到项目", { exact: true })).toHaveCount(0);
+  await popup.getByRole("button", { name: "新建项目", exact: true }).click();
+  const modal = page.getByRole("dialog", { name: "新建项目", exact: true });
+  await modal.getByLabel("项目名称", { exact: true }).fill("从提示词新建");
+  await modal.getByRole("button", { name: "创建并使用", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "从提示词新建", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
+    prompt,
+  );
+});
+
+test("favorite library groups cards and reuses prompts, images and references through project menus", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const initialUsage = (
+    await (await page.request.get("/api/images/usage")).json()
+  ).used;
+  const initialFavorites = (
+    await (await page.request.get("/api/library/favorites")).json()
+  ).favorites.length;
+  const session = await (await page.request.get("/api/auth/me")).json();
+  const headers = {
+    Origin: "http://127.0.0.1:5180",
+    "X-CSRF-Token": session.csrfToken,
+  };
+  for (const name of ["收藏画布目标", "收藏创作目标"])
+    expect(
+      (
+        await page.request.post("/api/projects", { headers, data: { name } })
+      ).status(),
+    ).toBe(201);
+  const png = await (
+    await import("sharp")
+  )
+    .default({
+      create: { width: 256, height: 256, channels: 3, background: "#0062b0" },
+    })
+    .png()
+    .toBuffer();
+  const uploaded = await (
+    await page.request.post("/api/images/uploads", {
+      headers: { ...headers, "Content-Type": "image/png" },
+      data: png,
+    })
+  ).json();
+  const assetId = uploaded.id;
+  for (const data of [
+    { id: randomUUID(), title: "场景图片", groupName: "图片组", assetId },
+    {
+      id: randomUUID(),
+      title: "收藏需求",
+      groupName: "提示词组",
+      prompt: "完整收藏提示词，不截断。",
+    },
+    {
+      id: randomUUID(),
+      title: "默认分组需求",
+      groupName: "",
+      prompt: "默认分组正文",
+    },
+  ])
+    expect(
+      (
+        await page.request.post("/api/library/favorites", { headers, data })
+      ).status(),
+    ).toBe(201);
+  await page.getByRole("link", { name: "收藏", exact: true }).click();
+  const panel = page.getByRole("complementary", {
+    name: "收藏分组",
+    exact: true,
+  });
+  await expect(page.getByLabel("目标项目", { exact: true })).toHaveCount(0);
+  await expect(page.locator(".favorite-card")).toHaveCount(
+    initialFavorites + 3,
+  );
+  for (const width of [1440, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    const left = await panel.boundingBox(),
+      right = await page
+        .getByRole("region", { name: "收藏列表", exact: true })
+        .boundingBox();
+    expect(left!.x + left!.width).toBeLessThan(right!.x);
+    const visual = page.locator(".favorite-visual").first();
+    const visualBox = await visual.boundingBox(),
+      imageBox = await visual.getByRole("img").boundingBox();
+    expect(imageBox!.height).toBeLessThanOrEqual(visualBox!.height + 1);
+    if (width === 1440)
+      await page.screenshot({
+        path: ".codex-temp/favorite-library-demo.png",
+        fullPage: false,
+      });
+  }
+
+  await panel.getByRole("checkbox", { name: "图片组", exact: true }).check();
+  await expect(page.locator(".favorite-card")).toHaveCount(1);
+  await panel.getByRole("checkbox", { name: "提示词组", exact: true }).check();
+  await expect(page.locator(".favorite-card")).toHaveCount(2);
+  await panel.getByRole("checkbox", { name: "图片组", exact: true }).uncheck();
+  await expect(page.locator(".favorite-card")).toHaveCount(1);
+  const promptCard = page
+    .locator(".favorite-card")
+    .filter({ hasText: "收藏需求" });
+  await promptCard
+    .getByRole("button", { name: "使用收藏", exact: true })
+    .click();
+  await page
+    .getByRole("menuitem", { name: "收藏创作目标", exact: true })
+    .click();
+  await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
+    "完整收藏提示词，不截断。",
+  );
+  await page.getByRole("link", { name: "收藏", exact: true }).click();
+  const imageCard = page
+    .locator(".favorite-card")
+    .filter({ hasText: "场景图片" });
+  await imageCard.getByRole("img", { name: "场景图片", exact: true }).click();
+  await expect(page.locator(".ant-image-preview")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".ant-image-preview")).toBeHidden();
+  await imageCard
+    .getByRole("button", { name: "使用收藏", exact: true })
+    .click();
+  await page
+    .getByRole("menuitem", { name: "收藏画布目标", exact: true })
+    .click();
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(1);
+  await page.getByRole("link", { name: "收藏", exact: true }).click();
+  await imageCard
+    .getByRole("button", { name: "使用收藏", exact: true })
+    .click();
+  await page
+    .locator(".prompt-use-popover:visible")
+    .getByText("用作参考", { exact: true })
+    .click();
+  await page
+    .getByRole("menuitem", { name: "收藏创作目标", exact: true })
+    .click();
+  await expect(
+    page
+      .getByTestId("reference-upload")
+      .getByRole("button", { name: "图库参考图", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: "收藏", exact: true }).click();
+  await promptCard
+    .getByRole("button", { name: "收藏更多操作", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: "编辑收藏", exact: true }).click();
+  await page.getByLabel("收藏标题", { exact: true }).fill("修改后的收藏");
+  await page.getByRole("button", { name: "保存收藏", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "修改后的收藏", exact: true }),
+  ).toBeVisible();
+  await page
+    .locator(".favorite-card")
+    .filter({ hasText: "修改后的收藏" })
+    .getByRole("button", { name: "收藏更多操作", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: "移除收藏", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "请确认", exact: true })
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "修改后的收藏", exact: true }),
+  ).toHaveCount(0);
+  expect(
+    (await (await page.request.get("/api/images/usage")).json()).used,
+  ).toBe(initialUsage);
+  await page.getByRole("button", { name: "新增提示词", exact: true }).click();
+  await page.getByLabel("收藏标题", { exact: true }).fill("手动新增需求");
+  await page.getByLabel("收藏提示词", { exact: true }).fill("新增收藏正文");
+  await page.getByRole("button", { name: "保存收藏", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "手动新增需求", exact: true }),
+  ).toBeVisible();
+});
+
+test("operation feedback is transient, replaces previous messages and leaves form errors in place", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.getByRole("link", { name: "收藏", exact: true }).click();
+  const originalTop = (await page
+    .getByRole("complementary", { name: "收藏分组", exact: true })
+    .boundingBox())!.y;
+  await page.getByRole("button", { name: "新增提示词", exact: true }).click();
+  const drawer = page.getByRole("dialog", { name: "编辑收藏", exact: true });
+  await drawer.getByLabel("收藏标题", { exact: true }).fill("反馈测试收藏");
+  await drawer
+    .getByLabel("收藏提示词", { exact: true })
+    .fill("需要保留的完整输入内容");
+  await page.route("**/api/library/favorites", async (route) => {
+    if (route.request().method() === "POST")
+      await route.fulfill({
+        status: 500,
+        json: { error: { code: "INTERNAL_ERROR" } },
+      });
+    else await route.continue();
+  });
+  await drawer.getByRole("button", { name: "保存收藏", exact: true }).click();
+  await expect(drawer.getByRole("alert")).toBeVisible();
+  await expect(page.locator(".operation-feedback")).toHaveCount(0);
+  await expect(drawer.getByLabel("收藏提示词", { exact: true })).toHaveValue(
+    "需要保留的完整输入内容",
+  );
+  await page.unroute("**/api/library/favorites");
+  await drawer.getByRole("button", { name: "保存收藏", exact: true }).click();
+  await expect(drawer).toBeHidden();
+  const toast = page.locator(".operation-feedback");
+  await expect(toast.getByText("已收藏", { exact: true })).toBeVisible();
+  expect(
+    Math.abs(
+      (await page
+        .getByRole("complementary", { name: "收藏分组", exact: true })
+        .boundingBox())!.y - originalTop,
+    ),
+  ).toBeLessThan(1);
+  await expect(page.locator(".product-notice")).toHaveCount(0);
+  await page.screenshot({
+    path: ".codex-temp/operation-feedback-success.png",
+    fullPage: false,
+  });
+  const card = page
+    .locator(".favorite-card")
+    .filter({ hasText: "反馈测试收藏" });
+  await page.route("**/api/library/favorites/*/delete", (route) =>
+    route.fulfill({ status: 500, json: { error: { code: "INTERNAL_ERROR" } } }),
+  );
+  await card.getByRole("button", { name: "收藏更多操作", exact: true }).click();
+  await page.getByRole("menuitem", { name: "移除收藏", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "请确认", exact: true })
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await expect(toast.getByRole("alert")).toBeVisible();
+  await expect(toast).toHaveCount(1);
+  await expect(card).toBeVisible();
+  await expect(page.locator(".product-notice")).toHaveCount(0);
+  await page.unroute("**/api/library/favorites/*/delete");
+  await card.getByRole("button", { name: "收藏更多操作", exact: true }).click();
+  await page.getByRole("menuitem", { name: "移除收藏", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "请确认", exact: true })
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await expect(toast.getByText("已移除", { exact: true })).toBeVisible();
+  await expect(toast.getByRole("alert")).toHaveCount(0);
+  await expect(toast).toHaveCount(1);
+  await expect(toast).toHaveCount(0, { timeout: 5000 });
+});
+
+test("task recovery shares details and image actions without automatically generating", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const session = await (await page.request.get("/api/auth/me")).json();
+  const headers = {
+    Origin: "http://127.0.0.1:5180",
+    "X-CSRF-Token": session.csrfToken,
+  };
+  const project = await (
+    await page.request.post("/api/projects", {
+      headers,
+      data: { name: "Task recovery synthetic" },
+    })
+  ).json();
+  const response = await page.request.post("/api/images/tasks", {
+    headers,
+    data: {
+      projectId: project.id,
+      requestKey: randomUUID(),
+      prompt: "合成任务：保留完整需求",
+      model: "test-image",
+      count: 1,
+      width: 256,
+      height: 256,
+      quality: "medium",
+      format: "png",
+      referenceIds: [],
+    },
+  });
+  expect(response.status()).toBe(202);
+  let completed: any;
+  await expect
+    .poll(async () => {
+      const data = await (
+        await page.request.get(`/api/images/tasks?projectId=${project.id}`)
+      ).json();
+      completed = data.tasks[0];
+      return completed?.state;
+    })
+    .toBe("succeeded");
+  let mode = "failed";
+  let dispatched = 0;
+  page.on("request", (request) => {
+    if (
+      request.method() === "POST" &&
+      new URL(request.url()).pathname === "/api/images/tasks"
+    )
+      dispatched++;
+  });
+  await page.route("**/api/images/tasks?**", async (route) => {
+    const task =
+      mode === "failed"
+        ? {
+            ...completed,
+            state: "failed",
+            used: 0,
+            outputs: [],
+            errorCode: "UPSTREAM_RATE_LIMIT",
+          }
+        : mode === "unknown"
+          ? {
+              ...completed,
+              state: "partial",
+              pendingReview: true,
+              errorCode: "RESULT_UNKNOWN",
+            }
+          : completed;
+    await route.fulfill({ json: { tasks: [task], hasMore: false } });
+  });
+  await page.getByRole("link", { name: "额度", exact: true }).click();
+  await page
+    .getByRole("button", { name: "查看任务详情", exact: true })
+    .first()
+    .click();
+  const drawer = page.getByRole("dialog", { name: "任务详情", exact: true });
+  await expect(drawer).toContainText("模型服务繁忙");
+  await expect(drawer).not.toContainText("UPSTREAM_RATE_LIMIT");
+  await drawer.getByRole("button", { name: "复用设置", exact: true }).click();
+  await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
+    completed.prompt,
+  );
+  expect(dispatched).toBe(0);
+  await page
+    .locator(".canvas-task-history > .ant-collapse-item > .ant-collapse-header")
+    .click();
+  await page
+    .getByRole("button", { name: "任务详情", exact: true })
+    .first()
+    .click();
+  await expect(page.locator(".task-tile-details")).toContainText(
+    "合成任务：保留完整需求",
+  );
+  await page.keyboard.press("Escape");
+  mode = "unknown";
+  await page.getByRole("link", { name: "额度", exact: true }).click();
+  await page.getByRole("button", { name: "刷新额度", exact: true }).click();
+  await page
+    .getByRole("button", { name: "查看任务详情", exact: true })
+    .first()
+    .click();
+  await expect(drawer).toContainText("不要重复生成");
+  await expect(
+    drawer.getByRole("button", { name: "复用设置", exact: true }),
+  ).toHaveCount(0);
+  // Already saved images remain useful even when another output needs review.
+  await drawer
+    .getByRole("button", { name: "更多图片操作", exact: true })
+    .click();
+  await expect(
+    page.getByRole("menuitem", { name: "预览", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "复用设置", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("menuitem", { name: "作为参考图", exact: true }).click();
+  await expect(
+    page.getByTestId("reference-upload").locator(".attachment"),
+  ).toHaveCount(1);
+  expect(dispatched).toBe(0);
+  mode = "success";
+  await page.getByRole("link", { name: "额度", exact: true }).click();
+  await page.getByRole("button", { name: "刷新额度", exact: true }).click();
+  await page
+    .getByRole("button", { name: "查看任务详情", exact: true })
+    .first()
+    .click();
+  await drawer
+    .getByRole("button", { name: "更多图片操作", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: "预览", exact: true }).click();
+  await expect(page.locator(".ant-image-preview")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".ant-image-preview")).toBeHidden();
+  await page.screenshot({ path: ".codex-temp/task-details-unified.png" });
+  expect(dispatched).toBe(0);
+});
+
+test("custom size expansion reveals both fields in the editor scroll area", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 720 });
+  await login(page);
+  await page.getByLabel("项目名称", { exact: true }).fill("自定义尺寸滚动验收");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "自定义尺寸滚动验收" })
+    .click();
+  const prompt = page.getByLabel("创作需求", { exact: true });
+  await expect(prompt).toBeVisible();
+  const before = (await prompt.boundingBox())!.height;
+  await page.getByRole("button", { name: "自定义尺寸", exact: true }).click();
+  const width = page.getByLabel("宽度", { exact: true }),
+    height = page.getByLabel("高度", { exact: true });
+  await expect(width).toBeVisible();
+  await expect(height).toBeVisible();
+  await expect
+    .poll(async () =>
+      height.evaluate((el) => {
+        const scroll = el.closest("fieldset")!;
+        const box = el.getBoundingClientRect(),
+          bounds = scroll.getBoundingClientRect();
+        return box.bottom <= bounds.bottom && box.top >= bounds.top;
+      }),
+    )
+    .toBe(true);
+  expect(Math.abs((await prompt.boundingBox())!.height - before)).toBeLessThan(
+    1,
+  );
+  await expect(
+    page.getByRole("button", { name: "提交图片任务", exact: true }),
+  ).toBeVisible();
+  await page.screenshot({ path: ".codex-temp/custom-size-expanded.png" });
+  await page.getByRole("button", { name: "自定义尺寸", exact: true }).click();
+  await expect(height).toBeHidden();
+});
+
+test("style library supports public maintenance and private saved copies without generating", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const originalTasks = await (
+    await page.request.get("/api/images/tasks")
+  ).json();
+  await page.goto("/admin/prompts");
+  await page.getByRole("tab", { name: "公共风格", exact: true }).click();
+  const manager = page.getByRole("tabpanel", { name: "公共风格", exact: true });
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await manager.getByRole("button", { name: "新增风格", exact: true }).click();
+  const publicEditor = page.getByRole("dialog", {
+    name: "新增风格",
+    exact: true,
+  });
+  await publicEditor
+    .getByLabel("风格名称", { exact: true })
+    .fill("公共风格验收");
+  await publicEditor
+    .getByLabel("风格描述", { exact: true })
+    .fill("合成风格：柔和蓝色调");
+  await publicEditor
+    .getByRole("checkbox", { name: "上架，所有用户可见", exact: true })
+    .check();
+  await publicEditor
+    .getByRole("button", { name: "保存风格", exact: true })
+    .click();
+  await expect(
+    manager.getByRole("row").filter({ hasText: "公共风格验收" }),
+  ).toContainText("已上架");
+  await expect(publicEditor).toBeHidden();
+  await manager
+    .getByRole("textbox", { name: "搜索风格", exact: true })
+    .fill("不存在的风格");
+  await expect(manager.getByText("暂无风格", { exact: true })).toBeVisible();
+  await manager
+    .getByRole("textbox", { name: "搜索风格", exact: true })
+    .fill("");
+  await page.getByRole("tab", { name: "提示词", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "新增提示词", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("tab", { name: "公共风格", exact: true }).click();
+  await expect(
+    manager.getByRole("row").filter({ hasText: "公共风格验收" }),
+  ).toBeVisible();
+  await page.screenshot({ path: ".codex-temp/style-management-tabs.png" });
+
+  await page.getByRole("link", { name: "项目", exact: true }).click();
+  await page.getByLabel("项目名称", { exact: true }).fill("风格库验收");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await page.locator(".project-card").filter({ hasText: "风格库验收" }).click();
+  await page
+    .getByLabel("创作需求", { exact: true })
+    .fill("独立创作需求保持不变");
+  const select = page.getByRole("combobox", { name: "风格", exact: true });
+  await select.click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("公共风格验收", { exact: true })
+    .click();
+  await page.getByRole("button", { name: "编辑风格", exact: true }).click();
+  const editor = page.locator(".style-editor:visible");
+  await editor.getByLabel("风格名称", { exact: true }).fill("我的蓝色风格");
+  await editor
+    .getByLabel("风格描述", { exact: true })
+    .fill("个人修改后的风格描述");
+  await editor
+    .getByRole("button", { name: "保存为我的风格", exact: true })
+    .click();
+  await expect(editor).toBeHidden();
+  await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
+    "独立创作需求保持不变",
+  );
+  const styleData = await (
+    await page.request.get("/api/library/styles")
+  ).json();
+  expect(
+    styleData.styles.find((s: any) => s.name === "公共风格验收").text,
+  ).toBe("合成风格：柔和蓝色调");
+  await page.reload();
+  await select.click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("我的蓝色风格", { exact: true })
+    .click();
+  await page.getByRole("button", { name: "编辑风格", exact: true }).click();
+  await expect(editor.getByLabel("风格描述", { exact: true })).toHaveValue(
+    "个人修改后的风格描述",
+  );
+  await editor.getByRole("button", { name: "取消", exact: true }).click();
+  const stylesProjectId = new URL(page.url()).pathname.split("/").at(-1)!;
+  await page.route("**/api/images/tasks?projectId=*", (route) =>
+    route.fulfill({
+      json: {
+        tasks: [
+          {
+            id: randomUUID(),
+            projectId: stylesProjectId,
+            requestKey: randomUUID(),
+            state: "failed",
+            prompt: "历史任务的独立需求",
+            model: "test-image",
+            count: 1,
+            used: 0,
+            held: 0,
+            pendingReview: false,
+            cancelRequested: false,
+            errorCode: "UPSTREAM_RATE_LIMIT",
+            createdAt: new Date().toISOString(),
+            outputs: [],
+            settings: {
+              width: 256,
+              height: 256,
+              quality: "medium",
+              format: "png",
+              referenceIds: [],
+              style: {
+                name: "历史任务风格B",
+                text: "不属于个人风格A的历史快照",
+              },
+            },
+          },
+        ],
+      },
+    }),
+  );
+  await expect(
+    page.getByRole("button", { name: "任务与结果 · 1", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "任务与结果 · 1", exact: true })
+    .click();
+  await page.getByRole("button", { name: "任务详情", exact: true }).click();
+  await page
+    .locator(".task-tile-details")
+    .getByRole("button", { name: "复用设置", exact: true })
+    .click();
+  await page.getByRole("button", { name: "编辑风格", exact: true }).click();
+  await expect(
+    editor.getByRole("button", { name: "保存修改", exact: true }),
+  ).toHaveCount(0);
+  await editor
+    .getByRole("button", { name: "保存为我的风格", exact: true })
+    .click();
+  await expect(editor).toBeHidden();
+  const preserved = (
+    await (await page.request.get("/api/library/styles")).json()
+  ).styles.find((s: any) => s.name === "我的蓝色风格");
+  expect(preserved.text).toBe("个人修改后的风格描述");
+  await page.unroute("**/api/images/tasks?projectId=*");
+  await select.click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("我的蓝色风格", { exact: true })
+    .click();
+  await page.getByRole("button", { name: "编辑风格", exact: true }).click();
+  await editor
+    .getByLabel("风格描述", { exact: true })
+    .fill("保存失败也保留的编辑内容");
+  await page.route("**/api/library/styles", async (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({
+          status: 409,
+          json: { error: { code: "STYLE_CONFLICT" } },
+        })
+      : route.continue(),
+  );
+  await editor.getByRole("button", { name: "保存修改", exact: true }).click();
+  await expect(editor.getByRole("alert")).toBeVisible();
+  await expect(editor.getByLabel("风格描述", { exact: true })).toHaveValue(
+    "保存失败也保留的编辑内容",
+  );
+  await page.unroute("**/api/library/styles");
+  await editor.getByRole("button", { name: "保存修改", exact: true }).click();
+  await expect(editor).toBeHidden();
+  await page.getByRole("button", { name: "编辑风格", exact: true }).click();
+  await editor.getByRole("button", { name: "删除", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "请确认", exact: true })
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await expect(editor).toBeHidden();
+  await select.click();
+  await expect(
+    page
+      .locator(".ant-select-dropdown:visible")
+      .getByText("我的蓝色风格", { exact: true }),
+  ).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  const tasks = await (await page.request.get("/api/images/tasks")).json();
+  expect(tasks.tasks).toHaveLength(originalTasks.tasks.length);
+  await page.screenshot({ path: ".codex-temp/style-library.png" });
+});
+
+test("prompt shortcuts prefer text favorites and browse in place without changing style or references", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const session = await (await page.request.get("/api/auth/me")).json();
+  const headers = {
+    Origin: "http://127.0.0.1:5180",
+    "X-CSRF-Token": session.csrfToken,
+  };
+  for (;;) {
+    const current = await (
+      await page.request.get("/api/library/favorites")
+    ).json();
+    if (!current.favorites.length) break;
+    for (const item of current.favorites)
+      await page.request.post(`/api/library/favorites/${item.id}/delete`, {
+        headers,
+        data: {},
+      });
+  }
+  const project = await (
+    await page.request.post("/api/projects", {
+      headers,
+      data: { name: "提示词快捷验收" },
+    })
+  ).json();
+  await page.goto(`/projects/${project.id}`);
+  const shortcuts = page.getByRole("group", {
+    name: "快捷提示词",
+    exact: true,
+  });
+  await expect(shortcuts.getByRole("button")).toHaveCount(4);
+  await expect(
+    shortcuts.getByRole("button", { name: "简洁商品展示", exact: true }),
+  ).toBeVisible();
+  const more = shortcuts.getByRole("button", {
+    name: "更多提示词",
+    exact: true,
+  });
+  await more.click();
+  const picker = page.locator(".prompt-picker:visible");
+  await expect(
+    picker.getByRole("tab", { name: "公共提示词", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await expect(picker.locator(".prompt-picker-item")).toHaveCount(36);
+  const longItem = picker
+    .locator(".prompt-picker-item")
+    .filter({ hasText: "电商白底主图" });
+  await longItem.getByText("展开", { exact: true }).click();
+  await expect(picker).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue("");
+  await longItem.getByText("收起", { exact: true }).click();
+  await expect(picker).toBeVisible();
+  await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue("");
+
+  await expect(picker.locator(".prompt-picker-item").first()).toContainText(
+    "品牌宣传构图",
+  );
+  await picker
+    .getByRole("textbox", { name: "搜索提示词", exact: true })
+    .fill("电商白底主图");
+  await expect(picker.locator(".prompt-picker-item")).toHaveCount(1);
+  await expect(picker.locator(".prompt-picker-item")).toContainText(
+    "电商白底主图",
+  );
+  await picker.getByRole("tab", { name: "我的收藏", exact: true }).click();
+  await expect(
+    picker.getByText("还没有收藏提示词", { exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(more).toBeFocused();
+  for (let n = 1; n <= 5; n++)
+    expect(
+      (
+        await page.request.post("/api/library/favorites", {
+          headers,
+          data: {
+            id: randomUUID(),
+            title: `收藏提示${n}`,
+            groupName: n === 1 ? "A组" : "B组",
+            prompt: `完整收藏正文${n}`,
+          },
+        })
+      ).status(),
+    ).toBe(201);
+  const png = await (
+    await import("sharp")
+  )
+    .default({
+      create: { width: 256, height: 256, channels: 3, background: "#0062b0" },
+    })
+    .png()
+    .toBuffer();
+  const asset = await (
+    await page.request.post("/api/images/uploads", {
+      headers: { ...headers, "Content-Type": "image/png" },
+      data: png,
+    })
+  ).json();
+  expect(
+    (
+      await page.request.post("/api/library/favorites", {
+        headers,
+        data: {
+          id: randomUUID(),
+          title: "不应出现的图片收藏",
+          groupName: "仅图片",
+          assetId: asset.id,
+        },
+      })
+    ).status(),
+  ).toBe(201);
+  await page.reload();
+  await expect(shortcuts.getByRole("button")).toHaveCount(4);
+  await expect(shortcuts).not.toContainText("不应出现的图片收藏");
+  await expect(shortcuts).not.toContainText("简洁商品展示");
+  await expect(
+    shortcuts.getByRole("button", { name: "收藏提示5", exact: true }),
+  ).toBeVisible();
+  await page.getByLabel("创作需求", { exact: true }).fill("已有的独立需求");
+  await page.getByRole("combobox", { name: "风格", exact: true }).click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("真实摄影", { exact: true })
+    .click();
+  await page
+    .getByTestId("reference-upload")
+    .locator('input[type="file"]')
+    .setInputFiles({ name: "参考.png", mimeType: "image/png", buffer: png });
+  await expect(
+    page.getByTestId("reference-upload").locator(".attachment"),
+  ).toHaveCount(1);
+  await more.click();
+  await expect(
+    picker.getByRole("tab", { name: "我的收藏", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await picker
+    .getByRole("textbox", { name: "搜索提示词", exact: true })
+    .fill("正文1");
+  await expect(picker.locator(".prompt-picker-item")).toHaveCount(1);
+  await picker.getByRole("combobox", { name: "收藏分组", exact: true }).click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("B组", { exact: true })
+    .click();
+  await expect(
+    picker.getByText("没有匹配的提示词", { exact: true }),
+  ).toBeVisible();
+  await picker.getByRole("combobox", { name: "收藏分组", exact: true }).click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("A组", { exact: true })
+    .click();
+  await picker.locator(".prompt-picker-item .content-excerpt").click();
+  const confirm = page.getByRole("dialog", { name: "请确认", exact: true });
+  await confirm.getByRole("button", { name: "取消", exact: true }).click();
+  await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
+    "已有的独立需求",
+  );
+  await expect(picker).toBeVisible();
+  await picker
+    .locator(".prompt-picker-item")
+    .click({ position: { x: 3, y: 3 } });
+  await confirm.getByRole("button", { name: "确认", exact: true }).click();
+  await expect(picker).toBeHidden();
+  await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
+    "完整收藏正文1",
+  );
+  await expect(
+    page.getByRole("combobox", { name: "风格", exact: true }).locator(".."),
+  ).toContainText("真实摄影");
+  await expect(
+    page.getByTestId("reference-upload").locator(".attachment"),
+  ).toHaveCount(1);
+  expect(
+    (
+      await (
+        await page.request.get(`/api/images/tasks?projectId=${project.id}`)
+      ).json()
+    ).tasks,
+  ).toHaveLength(0);
+  await more.click();
+  await picker
+    .getByRole("textbox", { name: "搜索提示词", exact: true })
+    .fill("正文");
+  await expect(picker.locator(".prompt-picker-item")).toHaveCount(5);
+  await page.screenshot({ path: ".codex-temp/prompt-shortcuts.png" });
+  await page.keyboard.press("Escape");
+  for (let n = 6; n <= 56; n++)
+    await page.request.post("/api/library/favorites", {
+      headers,
+      data: {
+        id: randomUUID(),
+        title: `分页收藏${n}`,
+        groupName: "分页",
+        prompt: `分页正文${n}`,
+      },
+    });
+  await more.click();
+  await expect(picker.locator(".prompt-picker-item")).toHaveCount(50);
+  await picker.getByRole("button", { name: "加载更多", exact: true }).click();
+  await expect(picker.locator(".prompt-picker-item")).toHaveCount(56);
+  await page.keyboard.press("Escape");
+  await page.goto("/admin/prompts");
+  const row = page.getByRole("row").filter({ hasText: "简洁商品展示" });
+  await row.getByRole("button", { name: "编辑", exact: true }).click();
+  const editor = page.getByRole("dialog", { name: "编辑提示词", exact: true });
+  await expect(
+    editor.getByRole("checkbox", { name: "优先展示", exact: true }),
+  ).toBeChecked();
+  await editor
+    .getByRole("checkbox", { name: "优先展示", exact: true })
+    .uncheck();
+  await editor.getByRole("button", { name: "保存", exact: true }).click();
+  await expect(editor).toBeHidden();
+  const recommended = await (
+    await page.request.get("/api/library/prompt-picker?source=recommended")
+  ).json();
+  expect(recommended.items).toHaveLength(36);
+  expect(
+    recommended.items.findIndex((p: any) => p.id === "product-studio"),
+  ).toBeGreaterThanOrEqual(2);
+});
+
+test("prompt bookmarks connect public browsing, private editing and protected creation drafts", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const session = await (await page.request.get("/api/auth/me")).json();
+  const headers = {
+    Origin: "http://127.0.0.1:5180",
+    "X-CSRF-Token": session.csrfToken,
+  };
+  const suffix = randomUUID().slice(0, 8),
+    title = `链路提示${suffix}`,
+    body = `完整链路正文 ${suffix}`;
+  const source = await page.request.post("/api/admin/prompts", {
+    headers,
+    data: {
+      id: `flow-${suffix}`,
+      title,
+      category: "链路",
+      prompt: body,
+      published: true,
+      revision: 0,
+    },
+  });
+  expect(source.status()).toBe(201);
+  const project = await (
+    await page.request.post("/api/projects", {
+      headers,
+      data: { name: `草稿保护${suffix}` },
+    })
+  ).json();
+  await page.goto(`/projects/${project.id}`);
+  const prompt = page.getByLabel("创作需求", { exact: true });
+  await prompt.fill("当前未提交草稿");
+  await page.getByLabel("风格", { exact: true }).click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("海报视觉", { exact: true })
+    .click();
+  await page.getByRole("link", { name: "提示池", exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "搜索提示词", exact: true })
+    .fill(suffix);
+  const card = page.locator(".prompt-card").filter({ hasText: title });
+  await expect(card).toHaveCount(1);
+  await card.getByRole("button", { name: "收藏提示词", exact: true }).click();
+  await expect(
+    card.getByRole("button", { name: "已收藏提示词", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("dialog", { name: "编辑收藏", exact: true }),
+  ).toHaveCount(0);
+  await card
+    .getByRole("button", { name: "使用提示词", exact: true })
+    .press("ArrowRight");
+  await expect(
+    page.getByRole("menuitem", { name: project.name, exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("menuitem", { name: project.name, exact: true })
+    .press("Enter");
+  await page
+    .getByRole("dialog", { name: "请确认", exact: true })
+    .press("Escape");
+  await expect(page).toHaveURL(/\/prompts$/);
+  await page.getByRole("link", { name: "项目", exact: true }).click();
+  await page.locator(".project-card").filter({ hasText: project.name }).click();
+  await expect(prompt).toHaveValue("当前未提交草稿");
+  await expect(
+    page.getByLabel("风格", { exact: true }).locator(".."),
+  ).toContainText("海报视觉");
+  await page.getByRole("button", { name: "更多提示词", exact: true }).click();
+  const picker = page.locator(".prompt-picker:visible");
+  await picker
+    .getByRole("textbox", { name: "搜索提示词", exact: true })
+    .fill(suffix);
+  await expect(picker.locator(".prompt-picker-item")).toHaveCount(1);
+  await picker.locator(".content-excerpt").click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await expect(prompt).toHaveValue(body);
+  await prompt.fill(`自定义收藏正文 ${suffix}`);
+  await page
+    .locator(".prompt-save-current")
+    .getByRole("button", { name: "收藏提示词", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "收藏提示词", exact: true });
+  await dialog.getByLabel("标题", { exact: true }).fill(`我的版本${suffix}`);
+  await dialog.getByRole("button", { name: "收藏", exact: true }).click();
+  await expect(dialog).toBeHidden();
+  await page.getByRole("button", { name: "更多提示词", exact: true }).click();
+  await expect(
+    picker.getByRole("button", { name: `选用 我的版本${suffix}`, exact: true }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.getByRole("link", { name: "收藏", exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "搜索提示词", exact: true })
+    .fill(suffix);
+  await expect(page.locator(".favorite-prompt-card")).toHaveCount(2);
+  const personal = page
+    .locator(".favorite-prompt-card")
+    .filter({ hasText: `我的版本${suffix}` });
+  await personal
+    .getByRole("button", { name: "收藏更多操作", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: "编辑收藏", exact: true }).click();
+  await page.getByLabel("收藏分组名称", { exact: true }).fill("链路");
+  await page.getByRole("button", { name: "保存收藏", exact: true }).click();
+  await expect(
+    page.getByRole("dialog", { name: "编辑收藏", exact: true }),
+  ).toBeHidden();
+  await expect(personal).toContainText("链路");
+  const submitted = await page.request.post("/api/images/tasks", {
+    headers,
+    data: {
+      projectId: project.id,
+      requestKey: randomUUID(),
+      prompt: `历史任务${suffix}`,
+      model: "test-image",
+      count: 1,
+      width: 256,
+      height: 256,
+      quality: "medium",
+      format: "png",
+      referenceIds: [],
+    },
+  });
+  expect(submitted.status()).toBe(202);
+  await page.getByRole("link", { name: "额度", exact: true }).click();
+  await page
+    .getByRole("region", { name: "使用记录", exact: true })
+    .getByRole("button", { name: "查看任务详情", exact: true })
+    .first()
+    .click();
+  const taskDetails = page.getByRole("dialog", {
+    name: "任务详情",
+    exact: true,
+  });
+  await expect(taskDetails).toContainText(`历史任务${suffix}`);
+  await taskDetails
+    .getByRole("button", { name: "复用设置", exact: true })
+    .click();
+  await page
+    .getByRole("dialog", { name: "请确认", exact: true })
+    .getByRole("button", { name: "取消", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/usage$/);
+  await taskDetails
+    .getByRole("button", { name: "复用设置", exact: true })
+    .click();
+  await page
+    .getByRole("dialog", { name: "请确认", exact: true })
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`));
+  await expect(prompt).toHaveValue(`历史任务${suffix}`);
+});
+
+test("server drafts persist direct and Agent inputs across refresh and login and protect concurrent edits", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const session = await (await page.request.get("/api/auth/me")).json();
+  const headers = {
+    Origin: "http://127.0.0.1:5180",
+    "X-CSRF-Token": session.csrfToken,
+  };
+  const project = await (
+    await page.request.post("/api/projects", {
+      headers,
+      data: { name: `服务端草稿 ${randomUUID().slice(0, 8)}` },
+    })
+  ).json();
+  const url = `/projects/${project.id}`;
+  await page.goto(url);
+  const prompt = page.getByLabel("创作需求", { exact: true });
+  await prompt.fill("刷新后应恢复的创作需求");
+  await page.getByRole("combobox", { name: "风格", exact: true }).click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("真实摄影", { exact: true })
+    .click();
+  await page.getByRole("combobox", { name: "图片张数", exact: true }).click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("2 张", { exact: true })
+    .click();
+  const png = await (
+    await import("sharp")
+  )
+    .default({
+      create: { width: 256, height: 256, channels: 3, background: "#0062b0" },
+    })
+    .png()
+    .toBuffer();
+  await page
+    .getByTestId("reference-upload")
+    .locator('input[type="file"]')
+    .setInputFiles({
+      name: "草稿参考.png",
+      mimeType: "image/png",
+      buffer: png,
+    });
+  await expect(
+    page.getByTestId("reference-upload").locator(".attachment"),
+  ).toHaveCount(1);
+  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  const agent = page.getByLabel("告诉 Agent 你的想法", { exact: true });
+  await agent.fill("独立保留的 Agent 想法");
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/projects/${project.id}/draft`)
+          ).json()
+        ).document,
+    )
+    .toMatchObject({
+      direct: {
+        prompt: "刷新后应恢复的创作需求",
+        settings: { count: 2 },
+        style: { name: "真实摄影" },
+      },
+      agent: { prompt: "独立保留的 Agent 想法" },
+      mode: "agent",
+    });
+  const saved = await (
+    await page.request.get(`/api/projects/${project.id}/draft`)
+  ).json();
+  expect(saved.document.referenceIds).toHaveLength(1);
+  await page.reload();
+  await expect(agent).toHaveValue("独立保留的 Agent 想法");
+  await expect(
+    page.getByRole("tab", { name: "Agent", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("tab", { name: "直接创作", exact: true }).click();
+  await expect(prompt).toHaveValue("刷新后应恢复的创作需求");
+  await expect(
+    page.getByRole("combobox", { name: "风格", exact: true }).locator(".."),
+  ).toContainText("真实摄影");
+  await expect(
+    page.getByRole("combobox", { name: "图片张数", exact: true }).locator(".."),
+  ).toContainText("2 张");
+  await expect(
+    page.getByTestId("reference-upload").locator(".attachment"),
+  ).toHaveCount(1);
+  await page.getByRole("link", { name: "项目", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "我的项目", exact: true }),
+  ).toBeVisible();
+  await logoutFromMenu(page);
+  await expect(
+    page.getByRole("button", { name: "登录", exact: true }),
+  ).toBeVisible();
+  await login(page);
+  await page.goto(url);
+  await expect(prompt).toHaveValue("刷新后应恢复的创作需求");
+  await expect(
+    page.getByTestId("reference-upload").locator(".attachment"),
+  ).toHaveCount(1);
+  const second = await page.context().newPage();
+  await second.goto(url);
+  const otherPrompt = second.getByLabel("创作需求", { exact: true });
+  await expect(otherPrompt).toHaveValue("刷新后应恢复的创作需求");
+  await prompt.fill("另一个标签页已保存");
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/projects/${project.id}/draft`)
+          ).json()
+        ).document.direct.prompt,
+    )
+    .toBe("另一个标签页已保存");
+  await otherPrompt.fill("冲突时必须保留的本地输入");
+  await expect(
+    second.getByText("草稿未保存：草稿已在其他页面更新，当前输入已保留。", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(otherPrompt).toHaveValue("冲突时必须保留的本地输入");
+  let releaseReload!: () => void, reloadStarted!: () => void;
+  const reloadGate = new Promise<void>((resolve) => (releaseReload = resolve)),
+    reloadRequest = new Promise<void>((resolve) => (reloadStarted = resolve));
+  await second.route(
+    `**/api/projects/${project.id}/draft`,
+    async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      const response = await route.fetch();
+      reloadStarted();
+      await reloadGate;
+      await route.fulfill({ response });
+    },
+    { times: 1 },
+  );
+  await second
+    .getByRole("button", { name: "加载最新草稿", exact: true })
+    .click();
+  await second
+    .getByRole("dialog", { name: "请确认", exact: true })
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await reloadRequest;
+  await otherPrompt.fill("在加载期间新输入的内容");
+  releaseReload();
+  await expect(
+    second.getByText(/加载期间内容已修改，当前输入已保留/),
+  ).toBeVisible();
+  await expect(otherPrompt).toHaveValue("在加载期间新输入的内容");
+  await second.unroute(`**/api/projects/${project.id}/draft`);
+  await second
+    .getByRole("button", { name: "加载最新草稿", exact: true })
+    .click();
+  await second
+    .getByRole("dialog", { name: "请确认", exact: true })
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await expect(otherPrompt).toHaveValue("另一个标签页已保存");
+  await prompt.fill("再次更新的服务器草稿");
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/projects/${project.id}/draft`)
+          ).json()
+        ).document.direct.prompt,
+    )
+    .toBe("再次更新的服务器草稿");
+  await otherPrompt.fill("明确选择保留的版本");
+  await expect(
+    second.getByRole("button", { name: "保留当前版本", exact: true }),
+  ).toBeVisible();
+  await second
+    .getByRole("button", { name: "保留当前版本", exact: true })
+    .click();
+  await second
+    .getByRole("dialog", { name: "请确认", exact: true })
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/projects/${project.id}/draft`)
+          ).json()
+        ).document.direct.prompt,
+    )
+    .toBe("明确选择保留的版本");
+  await expect(otherPrompt).toHaveValue("明确选择保留的版本");
+  expect(
+    (
+      await (
+        await page.request.get(`/api/images/tasks?projectId=${project.id}`)
+      ).json()
+    ).tasks,
+  ).toHaveLength(0);
+  await second.close();
+  // A failed save must leave the input intact and prevent route loss until retried.
+  await page.reload();
+  await expect(prompt).toHaveValue("明确选择保留的版本");
+  await page.route(`**/api/projects/${project.id}/draft`, (route) =>
+    route.request().method() === "POST" ? route.abort() : route.continue(),
+  );
+  await prompt.fill("网络失败后仍要保留的输入");
+  await expect(page.getByText(/草稿未保存：无法连接服务/)).toBeVisible();
+  await page.getByRole("link", { name: "项目", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`));
+  await expect(prompt).toHaveValue("网络失败后仍要保留的输入");
+  await expect(
+    page.getByText(/^未能保存当前修改，已留在当前页面/),
+  ).toBeVisible();
+  await page.unroute(`**/api/projects/${project.id}/draft`);
+  await page.getByRole("button", { name: "重试", exact: true }).click();
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/projects/${project.id}/draft`)
+          ).json()
+        ).document.direct.prompt,
+    )
+    .toBe("网络失败后仍要保留的输入");
+  await page.reload();
+  await expect(prompt).toHaveValue("网络失败后仍要保留的输入");
+});
+
+test("task reuse confirms changes to saved generation parameters even when text is identical", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  const session = await (await page.request.get("/api/auth/me")).json(),
+    headers = {
+      Origin: "http://127.0.0.1:5180",
+      "X-CSRF-Token": session.csrfToken,
+    };
+  const name = `参数保护 ${randomUUID().slice(0, 8)}`,
+    text = `相同需求 ${randomUUID().slice(0, 8)}`;
+  const project = await (
+    await page.request.post("/api/projects", { headers, data: { name } })
+  ).json();
+  const response = await page.request.post("/api/images/tasks", {
+    headers,
+    data: {
+      projectId: project.id,
+      requestKey: randomUUID(),
+      prompt: text,
+      model: "test-image",
+      width: 1024,
+      height: 1024,
+      count: 1,
+      quality: "medium",
+      format: "png",
+      referenceIds: [],
+    },
+  });
+  expect(response.status()).toBe(202);
+  await page.goto(`/projects/${project.id}`);
+  await page.getByLabel("创作需求", { exact: true }).fill(text);
+  const count = page.getByRole("combobox", { name: "图片张数", exact: true });
+  await count.click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("2 张", { exact: true })
+    .click();
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/projects/${project.id}/draft`)
+          ).json()
+        ).document.direct,
+    )
+    .toMatchObject({
+      prompt: text,
+      settings: {
+        modelKey: "test-image",
+        width: 1024,
+        height: 1024,
+        quality: "medium",
+        format: "png",
+        count: 2,
+      },
+    });
+  await page.getByRole("link", { name: "额度", exact: true }).click();
+  await page
+    .getByRole("region", { name: "使用记录", exact: true })
+    .getByRole("button", { name: "查看任务详情", exact: true })
+    .first()
+    .click();
+  const details = page.getByRole("dialog", { name: "任务详情", exact: true });
+  await expect(details).toContainText(text);
+  await details.getByRole("button", { name: "复用设置", exact: true }).click();
+  const confirmation = page.getByRole("dialog", {
+    name: "请确认",
+    exact: true,
+  });
+  await expect(confirmation).toBeVisible();
+  await confirmation.press("Escape");
+  await expect(page).toHaveURL(/\/usage$/);
+  expect(
+    (await (await page.request.get(`/api/projects/${project.id}/draft`)).json())
+      .document.direct.settings.count,
+  ).toBe(2);
+  await details.getByRole("button", { name: "复用设置", exact: true }).click();
+  await confirmation.getByRole("button", { name: "确认", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/projects/${project.id}$`));
+  await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(text);
+  await expect(count.locator("..")).toContainText("1 张");
+  await page.getByLabel("创作需求", { exact: true }).fill("");
+  await count.click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("2 张", { exact: true })
+    .click();
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/projects/${project.id}/draft`)
+          ).json()
+        ).document.direct,
+    )
+    .toMatchObject({ prompt: "", settings: { count: 2 } });
+  await page
+    .locator(".canvas-task-history > .ant-collapse-item > .ant-collapse-header")
+    .click();
+  await page
+    .getByRole("button", { name: "任务详情", exact: true })
+    .first()
+    .click();
+  await page.getByRole("button", { name: "复用设置", exact: true }).click();
+  await expect(confirmation).toBeVisible();
+  await confirmation.press("Escape");
+  await expect(count.locator("..")).toContainText("2 张");
+  await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue("");
 });

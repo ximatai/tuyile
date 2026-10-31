@@ -4,13 +4,20 @@ export const favoriteInput = z
     id: z.uuid(),
     title: z.string().trim().min(1).max(100),
     groupName: z.string().trim().max(60).default(""),
+    sourcePromptId: z
+      .string()
+      .regex(/^[a-z0-9][a-z0-9-]{0,79}$/)
+      .optional(),
     assetId: z.uuid().optional(),
     prompt: z.string().trim().min(1).max(12000).optional(),
   })
   .strict()
-  .refine((v) => !!v.assetId !== !!v.prompt, {
-    message: "Choose an image or a prompt",
-  });
+  .refine(
+    (v) => !!v.assetId !== !!v.prompt && (!v.sourcePromptId || !!v.prompt),
+    {
+      message: "Choose an image or a prompt",
+    },
+  );
 export type FavoriteInput = z.infer<typeof favoriteInput>;
 export interface Favorite extends FavoriteInput {
   createdAt: string;
@@ -25,12 +32,13 @@ export interface GalleryAsset {
   origin: "upload" | "generated";
 }
 export interface AssetReference {
-  kind: "canvas" | "task" | "agent" | "favorite";
+  kind: "canvas" | "draft" | "task" | "agent" | "favorite";
   id: string;
   label: string;
   projectId: string | null;
 }
 export interface PromptTemplate {
+  favoriteId?: string;
   id: string;
   title: string;
   category: string;
@@ -39,3 +47,92 @@ export interface PromptTemplate {
 export const libraryExportInput = z
   .object({ assetIds: z.array(z.uuid()).min(1).max(5) })
   .strict();
+
+const templateText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .min(1)
+    .max(max)
+    .refine((s) => !s.includes("\0"));
+export const promptTemplateInput = z
+  .object({
+    id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/),
+    title: templateText(100),
+    category: templateText(60),
+    prompt: templateText(12000),
+    published: z.boolean(),
+    featured: z.boolean().optional(),
+    revision: z.number().int().min(0).max(2147483646),
+  })
+  .strict();
+export type PromptTemplateInput = z.infer<typeof promptTemplateInput>;
+export interface ManagedPromptTemplate extends PromptTemplateInput {
+  createdAt: string;
+  updatedAt: string;
+}
+export const promptCategoryFilter = z
+  .array(
+    z
+      .string()
+      .trim()
+      .min(1)
+      .max(60)
+      .refine((s) => !s.includes("\0")),
+  )
+  .max(200)
+  .transform((values) => [...new Set(values)].sort());
+export interface PromptTemplatesPage {
+  categories: string[];
+  prompts: PromptTemplate[];
+  hasMore: boolean;
+}
+export interface ManagedPromptTemplatesPage {
+  prompts: ManagedPromptTemplate[];
+  hasMore: boolean;
+}
+
+export const styleInput = z
+  .object({
+    id: z.uuid(),
+    name: templateText(80),
+    text: templateText(2000),
+    revision: z.number().int().min(0).max(2147483646),
+    published: z.boolean().default(false),
+  })
+  .strict();
+export type StyleInput = z.infer<typeof styleInput>;
+export interface SavedStyle extends StyleInput {
+  scope: "public" | "personal";
+}
+
+export const promptPickerQuery = z
+  .object({
+    source: z.enum(["favorites", "recommended"]).default("favorites"),
+    offset: z.coerce.number().int().min(0).max(100000).default(0),
+    search: z
+      .string()
+      .trim()
+      .max(100)
+      .refine((s) => !s.includes("\0"))
+      .default(""),
+    group: z
+      .string()
+      .max(60)
+      .refine((s) => !s.includes("\0"))
+      .optional(),
+  })
+  .strict();
+export type PromptPickerQuery = z.infer<typeof promptPickerQuery>;
+export interface PromptPickerItem {
+  favoriteId?: string;
+  id: string;
+  title: string;
+  prompt: string;
+  groupName: string;
+}
+export interface PromptPickerPage {
+  items: PromptPickerItem[];
+  groups: string[];
+  hasMore: boolean;
+}

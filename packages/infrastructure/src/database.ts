@@ -177,11 +177,11 @@ class PgRepository implements Repository {
     );
     return r.rows[0].attempts <= limit;
   }
-  async listProjects(ws: string, offset = 0) {
+  async listProjects(ws: string, offset = 0, search = "") {
     return (
       await this.c.query(
-        "SELECT * FROM projects WHERE workspace_id=$1 AND deleted_at IS NULL ORDER BY created_at DESC,id LIMIT 51 OFFSET $2",
-        [ws, offset],
+        "SELECT * FROM projects WHERE workspace_id=$1 AND deleted_at IS NULL AND ($3='' OR strpos(lower(name),lower($3))>0) ORDER BY created_at DESC,id LIMIT 51 OFFSET $2",
+        [ws, offset, search],
       )
     ).rows.map(project);
   }
@@ -227,7 +227,7 @@ export async function assertSchema(pool: pg.Pool) {
     "SELECT version FROM schema_migrations ORDER BY version",
   );
   if (
-    result.rows.length !== 15 ||
+    result.rows.length !== 23 ||
     result.rows[0].version !== 1 ||
     result.rows[1].version !== 2 ||
     result.rows[2].version !== 3 ||
@@ -242,7 +242,15 @@ export async function assertSchema(pool: pg.Pool) {
     result.rows[11].version !== 12 ||
     result.rows[12].version !== 13 ||
     result.rows[13].version !== 14 ||
-    result.rows[14].version !== 15
+    result.rows[14].version !== 15 ||
+    result.rows[15].version !== 16 ||
+    result.rows[16].version !== 17 ||
+    result.rows[17].version !== 18 ||
+    result.rows[18].version !== 19 ||
+    result.rows[19].version !== 20 ||
+    result.rows[20].version !== 21 ||
+    result.rows[21].version !== 22 ||
+    result.rows[22].version !== 23
   )
     throw new Error("SCHEMA_VERSION_MISMATCH_RUN_MIGRATIONS");
   const r = await pool.query(

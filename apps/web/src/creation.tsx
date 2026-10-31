@@ -1,8 +1,16 @@
+import { LoadingState } from "./loading-state";
+import {
+  ProjectDraftBoundary,
+  useDraftValue,
+  useDraftMode,
+  useDraftReferences,
+} from "./project-draft";
+import { ResultImage } from "./result-image";
+import { TaskDetails, TaskProblem } from "./task-details";
+import { canReuseTask, taskStates as states } from "./task-presentation";
 import { useAdaptivePromptHeight } from "./use-adaptive-prompt-height";
-import { UsageSummary } from "./usage-summary";
-import { Download, ImagePlus, MoreHorizontal, Info } from "lucide-react";
-import { Excerpt } from "./interface-help";
-import { composeCreativePrompt, type CreationStyle } from "@tuyile/contracts";
+import { Info } from "lucide-react";
+import { composeCreativePrompt } from "@tuyile/contracts";
 import { HelpPopover } from "./interface-help";
 import { PromptComposer } from "./prompt-composer";
 import { GenerationFeedback } from "./generation-feedback";
@@ -13,14 +21,13 @@ import {
   selectedCapability,
   settingsIssues,
   taskSettings,
-  type ImageSettings,
 } from "./image-settings";
 import { AgentPanel } from "./agent-panel";
 import { lazy, Suspense, useCallback } from "react";
 const CanvasEditor = lazy(() =>
   import("./editor/canvas").then((m) => ({ default: m.CanvasEditor })),
 );
-import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useSessionState } from "./session-state";
 import {
   useState,
@@ -32,26 +39,16 @@ import {
 import type { ImageInput, ImageTask, ImageUsage } from "@tuyile/contracts";
 import {
   Tabs,
-  Dropdown,
-  Tooltip,
   Collapse,
   Popover,
   Button,
   Notice,
   useConfirm,
+  useFeedback,
   Input,
-  Image,
   ControlScope,
 } from "@tuyile/ui";
 import { client, ApiError } from "./api";
-const states: Record<string, string> = {
-  queued: "排队中",
-  running: "执行中",
-  succeeded: "已完成",
-  partial: "部分完成",
-  failed: "未完成",
-  cancelled: "已取消",
-};
 function TaskTile({
   task: t,
   busy,
@@ -85,63 +82,21 @@ function TaskTile({
       <div className="output-grid task-tile-images">
         {t.outputs.length ? (
           t.outputs.map((a) => (
-            <figure key={a.id}>
-              {a.deleted ? (
-                <div className="task-tile-placeholder">原图已删除</div>
-              ) : (
-                <>
-                  <Image
-                    src={`/api/images/assets/${a.id}/preview`}
-                    alt={`已保存图片，${a.width} × ${a.height}`}
-                    loading="lazy"
-                    preview={{
-                      src: `/api/images/assets/${a.id}/original`,
-                      motionName: "",
-                    }}
-                  />
-                  <div className="task-tile-actions">
-                    <Tooltip title="下载">
-                      <a
-                        className="task-tile-icon"
-                        aria-label="下载原图"
-                        href={`/api/images/assets/${a.id}/download`}
-                      >
-                        <Download size={16} />
-                      </a>
-                    </Tooltip>
-                    {onReference && (
-                      <Tooltip title="引用">
-                        <Button
-                          type="button"
-                          aria-label="继续修改"
-                          onClick={() => onReference(a.id)}
-                        >
-                          <ImagePlus size={16} />
-                        </Button>
-                      </Tooltip>
-                    )}
-                    <Dropdown
-                      trigger={["click"]}
-                      menu={{
-                        items: [
-                          {
-                            key: "delete",
-                            label: "删除原图",
-                            danger: true,
-                            disabled: busy,
-                          },
-                        ],
-                        onClick: () => onRemove(a.id),
-                      }}
-                    >
-                      <Button type="button" aria-label="更多图片操作">
-                        <MoreHorizontal size={16} />
-                      </Button>
-                    </Dropdown>
-                  </div>
-                </>
-              )}
-            </figure>
+            <ResultImage
+              key={a.id}
+              asset={a}
+              busy={busy}
+              onRemove={onRemove}
+              onReference={onReference}
+              onReuse={
+                onReuse && canReuseTask(t)
+                  ? () => {
+                      setDetailsOpen(false);
+                      onReuse(t);
+                    }
+                  : undefined
+              }
+            />
           ))
         ) : (
           <div className="task-tile-placeholder">
@@ -167,64 +122,18 @@ function TaskTile({
           classNames={{ root: "task-details-popover" }}
           content={
             <div className="task-tile-details" onKeyDown={closeDetails}>
-              <div className="task-detail-heading">
-                <span title={t.model}>{t.model}</span>
-                <time
-                  dateTime={t.createdAt}
-                  title={new Date(t.createdAt).toLocaleString("zh-CN")}
-                >
-                  {new Date(t.createdAt).toLocaleString("zh-CN", {
-                    month: "2-digit",
-                    day: "2-digit",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </time>
-              </div>
-              <div className="task-detail-specs">
-                {[
-                  ...new Set(t.outputs.map((a) => `${a.width} × ${a.height}`)),
-                ].map((size) => (
-                  <span key={size}>{size}</span>
-                ))}
-                <span>
-                  {t.used}/{t.count} 张
-                </span>
-              </div>
-              <div className="task-detail-body">
-                <p className="task-detail-prompt">{t.prompt}</p>
-                {t.settings?.style && (
-                  <div className="task-detail-style">
-                    <strong>{t.settings.style.name}</strong>
-                    <p>{t.settings.style.text}</p>
-                    <Collapse
-                      ghost
-                      size="small"
-                      items={[
-                        {
-                          key: "prompt",
-                          label: "实际提交提示词",
-                          children: <p>{t.finalPrompt}</p>,
-                        },
-                      ]}
-                    />
-                  </div>
-                )}
-              </div>
-              {t.settings && onReuse && t.outputs.length > 0 && (
-                <div className="task-detail-footer">
-                  <Button
-                    type="button"
-                    disabled={!!t.pendingReview || active}
-                    onClick={() => {
-                      setDetailsOpen(false);
-                      onReuse(t);
-                    }}
-                  >
-                    复用设置
-                  </Button>
-                </div>
-              )}
+              <TaskDetails
+                showProblem={false}
+                task={t}
+                onReuse={
+                  onReuse
+                    ? (task) => {
+                        setDetailsOpen(false);
+                        onReuse(task);
+                      }
+                    : undefined
+                }
+              />
             </div>
           }
         >
@@ -239,16 +148,7 @@ function TaskTile({
           </Button>
         </Popover>
       </div>
-      {t.pendingReview && (
-        <Notice>结果待核验，额度仍预留。请联系管理员，不要重复生成。</Notice>
-      )}
-      {t.errorCode && !t.pendingReview && (
-        <Notice error>
-          {t.errorCode === "WORKER_INTERRUPTED"
-            ? "后台执行中断，已保存图片仍可查看。"
-            : `任务未全部完成（${t.errorCode}），已保存图片保留。`}
-        </Notice>
-      )}
+      <TaskProblem task={t} />
       {active && (
         <Button disabled={busy || t.cancelRequested} onClick={onCancel}>
           {t.cancelRequested ? "正在取消…" : "取消任务"}
@@ -273,6 +173,7 @@ export function TaskResults({
   onReference?: (id: string) => void;
 }) {
   const confirm = useConfirm();
+  const feedback = useFeedback();
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   async function cancel(id: string) {
@@ -280,9 +181,10 @@ export function TaskResults({
     setError("");
     try {
       await client(csrfToken)(`/images/tasks/${id}/cancel`, {});
+      feedback.success("已请求取消");
       refresh();
     } catch (e) {
-      setError((e as Error).message);
+      feedback.error((e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -298,6 +200,7 @@ export function TaskResults({
     setError("");
     try {
       await client(csrfToken)(`/images/assets/${id}/delete`, {});
+      feedback.success("原图已删除");
       refresh();
     } catch (e) {
       setError((e as Error).message);
@@ -340,92 +243,19 @@ export function TaskResults({
                 {t.used} / {t.count} 张{t.held ? ` · ${t.held} 张预留` : ""}
               </span>
             </div>
-            <div className="task-prompt">
-              <Excerpt rows={2}>{t.prompt}</Excerpt>
-            </div>
-            {t.settings?.style && (
-              <Collapse
-                ghost
-                size="small"
-                items={[
-                  {
-                    key: "style",
-                    label: `风格 · ${t.settings.style.name}`,
-                    children: (
-                      <>
-                        <p>{t.settings.style.text}</p>
-                        <strong>实际提交提示词</strong>
-                        <p>{t.finalPrompt}</p>
-                      </>
-                    ),
-                  },
-                ]}
-              />
-            )}
-            <div className="task-meta">
-              <div
-                className="hint"
-                title={`${t.model} · ${new Date(t.createdAt).toLocaleString("zh-CN")}`}
-              >
-                {t.model} · {new Date(t.createdAt).toLocaleString("zh-CN")}
-              </div>
-              {t.settings && onReuse && t.outputs.length > 0 && (
-                <Button
-                  type="button"
-                  disabled={
-                    t.pendingReview || ["queued", "running"].includes(t.state)
-                  }
-                  onClick={() => onReuse(t)}
-                >
-                  复用设置
-                </Button>
-              )}
-            </div>
-            {t.pendingReview && (
-              <Notice>
-                上游结果暂不确定，相关额度仍预留。请联系管理员核验，不要重复生成。
-              </Notice>
-            )}
-            {t.errorCode && !t.pendingReview && (
-              <Notice error>
-                {t.errorCode === "WORKER_INTERRUPTED"
-                  ? "后台执行中断，已保存图片仍可查看。"
-                  : `任务未全部完成（${t.errorCode}）。已保存的图片会保留。`}
-              </Notice>
-            )}
+            <TaskDetails task={t} onReuse={onReuse} />
             <div className="output-grid">
               {t.outputs.map((a) => (
-                <figure key={a.id}>
-                  {a.deleted ? (
-                    <p>原图已删除</p>
-                  ) : (
-                    <>
-                      <Image
-                        src={`/api/images/assets/${a.id}/preview`}
-                        alt={`已保存图片，${a.width} × ${a.height}`}
-                        loading="lazy"
-                        preview={{
-                          src: `/api/images/assets/${a.id}/original`,
-                          motionName: "",
-                        }}
-                      />
-                      <figcaption>
-                        {a.width} × {a.height}
-                        <a href={`/api/images/assets/${a.id}/download`}>
-                          下载原图
-                        </a>
-                      </figcaption>
-                      {onReference && (
-                        <Button type="button" onClick={() => onReference(a.id)}>
-                          继续修改
-                        </Button>
-                      )}
-                      <Button disabled={busy} onClick={() => void remove(a.id)}>
-                        删除原图
-                      </Button>
-                    </>
-                  )}
-                </figure>
+                <ResultImage
+                  key={a.id}
+                  asset={a}
+                  busy={busy}
+                  onRemove={(id) => void remove(id)}
+                  onReference={onReference}
+                  onReuse={
+                    onReuse && canReuseTask(t) ? () => onReuse(t) : undefined
+                  }
+                />
               ))}
             </div>
             {["queued", "running"].includes(t.state) && (
@@ -442,7 +272,14 @@ export function TaskResults({
     </div>
   );
 }
-export function CreationPage({
+export function CreationPage(props: { csrfToken: string; projectId: string }) {
+  return (
+    <ProjectDraftBoundary projectId={props.projectId}>
+      <CreationEditor {...props} />
+    </ProjectDraftBoundary>
+  );
+}
+function CreationEditor({
   csrfToken,
   projectId,
 }: {
@@ -452,34 +289,16 @@ export function CreationPage({
   const sessionState = useSessionState();
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
-    [settings, setSettings] = useState<ImageSettings>({
-      modelKey: "",
-      width: 1024,
-      height: 1024,
-      quality: "medium",
-      format: "png",
-      count: 1,
-    }),
-    [prompt, setPrompt] = useState(""),
-    [style, setStyle] = useState<CreationStyle | undefined>(),
-    [references, setReferences] = useState<{ id: string; name: string }[]>([]),
+    [settings, setSettings] = useDraftValue("direct", "settings"),
+    [prompt, setPrompt] = useDraftValue("direct", "prompt"),
+    [style, setStyle] = useDraftValue("direct", "style"),
+    [references, setReferences] = useDraftReferences(),
     [canvasSelection, setCanvasSelection] = useState<
       { id: string; name: string }[]
     >([]),
     [pending, setPending] = useState<ImageInput | null>(null),
     [mobile, setMobile] = useState("create");
   const confirmDraft = useConfirm();
-  const transferredDraft = useRef(sessionState.creationDrafts.get(projectId));
-  useEffect(() => {
-    const draft = transferredDraft.current;
-    if (!draft) return;
-    if (draft.prompt !== undefined) setPrompt(draft.prompt);
-    if (draft.referenceIds)
-      setReferences(
-        draft.referenceIds.map((id) => ({ id, name: "图库参考图" })),
-      );
-    sessionState.creationDrafts.delete(projectId);
-  }, [projectId, sessionState]);
   const chooseReference = useCallback(
     (id: string) => {
       if (busy || pending) {
@@ -512,7 +331,7 @@ export function CreationPage({
     setReferences(next);
     setError("");
   }
-  const [mode, setMode] = useState("direct");
+  const [mode, setMode] = useDraftMode();
   const [phase, setPhase] = useState<GenerationPhase>("idle");
   const [submissionRejected, setSubmissionRejected] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -539,6 +358,27 @@ export function CreationPage({
   const generating = tasks.some(
     (t) => t.state === "running" || t.state === "queued",
   );
+  const sameActiveDraft = tasks.some((task) => {
+    if (
+      !["queued", "running"].includes(task.state) ||
+      task.prompt !== prompt.trim() ||
+      task.count !== settings.count
+    )
+      return false;
+    const saved = task.settings;
+    if (!saved) return true;
+    return (
+      (saved.modelSelectionId ?? task.model) === settings.modelKey &&
+      saved.width === settings.width &&
+      saved.height === settings.height &&
+      saved.quality === settings.quality &&
+      saved.format === settings.format &&
+      saved.style?.name === style?.name.trim() &&
+      saved.style?.text === style?.text.trim() &&
+      JSON.stringify(saved.referenceIds) ===
+        JSON.stringify(references.map((r) => r.id))
+    );
+  });
   const running = tasks.some((t) => t.state === "running");
   function showTasks() {
     setHistoryOpen(true);
@@ -567,7 +407,7 @@ export function CreationPage({
   useEffect(() => {
     if (usage && usage.models.length && !initialized.current) {
       initialized.current = true;
-      setSettings(initialSettings(usage));
+      setSettings((old) => (old.modelKey ? old : initialSettings(usage)));
     }
   }, [usage]);
   const issues = usage
@@ -595,7 +435,9 @@ export function CreationPage({
     const next = taskSettings(task, usage);
     if (!next) return;
     if (
-      (prompt.trim() || references.length) &&
+      (prompt.trim() ||
+        references.length ||
+        sessionState.replacesCreativeDraft(projectId, { task })) &&
       !(await confirmDraft("用这次任务的提示词、参数和参考图替换当前草稿？"))
     )
       return;
@@ -666,7 +508,6 @@ export function CreationPage({
       const task = await client(csrfToken)<ImageTask>("/images/tasks", input);
       await acceptTask(task);
       setPending(null);
-      setPrompt("");
       setMobile("results");
       void refresh();
     } catch (e) {
@@ -692,6 +533,7 @@ export function CreationPage({
       void send(pending);
       return;
     }
+    if (sameActiveDraft) return;
     if (!usage || issues.length) {
       setError(issues.join(" "));
       return;
@@ -724,7 +566,6 @@ export function CreationPage({
       await acceptTask(task);
       setPending(null);
       setError("");
-      setPrompt("");
       setMobile("results");
       void refresh();
     } catch (e) {
@@ -752,7 +593,7 @@ export function CreationPage({
       </div>
       <div className={`creation-layout show-${mobile}`}>
         <div className="creation-results" ref={resultsRef}>
-          <Suspense fallback={<p role="status">正在加载画布…</p>}>
+          <Suspense fallback={<LoadingState variant="canvas" />}>
             <CanvasEditor
               tasks={tasks}
               statusStale={!!taskQuery.error}
@@ -797,7 +638,7 @@ export function CreationPage({
           <Tabs
             activeKey={mode}
             onChange={(next) => {
-              setMode(next);
+              setMode(next as "direct" | "agent");
             }}
             items={[
               { key: "direct", label: "直接创作" },
@@ -878,14 +719,14 @@ export function CreationPage({
                   aria-busy={
                     busy ||
                     (!pending &&
-                      !prompt.trim() &&
+                      (!prompt.trim() || sameActiveDraft) &&
                       generating &&
                       !taskQuery.error)
                   }
                   loading={
                     busy ||
                     (!pending &&
-                      !prompt.trim() &&
+                      (!prompt.trim() || sameActiveDraft) &&
                       generating &&
                       !taskQuery.error)
                   }
@@ -897,7 +738,8 @@ export function CreationPage({
                   disabled={
                     busy ||
                     !usage?.models.length ||
-                    (!pending && (!prompt.trim() || issues.length > 0))
+                    (!pending &&
+                      (!prompt.trim() || sameActiveDraft || issues.length > 0))
                   }
                 >
                   {busy
@@ -908,7 +750,7 @@ export function CreationPage({
                         : "正在上传参考图…"
                     : pending
                       ? "重试同一提交"
-                      : !prompt.trim() && generating
+                      : (!prompt.trim() || sameActiveDraft) && generating
                         ? taskQuery.error
                           ? "状态暂不可用"
                           : running
@@ -949,145 +791,6 @@ export function CreationPage({
           </div>
         </aside>
       </div>
-    </section>
-  );
-}
-export function UsagePage({ csrfToken }: { csrfToken: string }) {
-  const state = useSessionState();
-  const api = client(csrfToken);
-  const [error, setError] = useState("");
-  const usageQuery = useQuery({
-    queryKey: state.key("usage"),
-    queryFn: ({ signal }) =>
-      api<ImageUsage>("/images/usage", undefined, signal),
-  });
-  const tasksQuery = useInfiniteQuery({
-    queryKey: state.key("all-image-tasks"),
-    initialPageParam: 0,
-    queryFn: ({ signal, pageParam }) =>
-      api<{ tasks: ImageTask[]; hasMore: boolean }>(
-        `/images/tasks?offset=${pageParam}`,
-        undefined,
-        signal,
-      ),
-    getNextPageParam: (p, pages) => (p.hasMore ? pages.length * 50 : undefined),
-  });
-  const usage = usageQuery.data,
-    tasks = [
-      ...new Map(
-        (tasksQuery.data?.pages.flatMap((p) => p.tasks) ?? []).map((t) => [
-          t.id,
-          t,
-        ]),
-      ).values(),
-    ];
-  async function refresh() {
-    setError("");
-    try {
-      await Promise.all([
-        usageQuery.refetch({ throwOnError: true }),
-        tasksQuery.refetch({ throwOnError: true }),
-      ]);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
-  async function load() {
-    try {
-      await tasksQuery.fetchNextPage({ throwOnError: true });
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
-  return (
-    <section>
-      <h1>我的额度</h1>
-      {(error || usageQuery.error || tasksQuery.error) && (
-        <Notice error>
-          {error || usageQuery.error?.message || tasksQuery.error?.message}
-        </Notice>
-      )}
-      {usage && <UsageSummary usage={usage} />}
-      <Button onClick={() => void refresh()}>刷新状态</Button>
-      <TaskResults
-        tasks={tasks}
-        csrfToken={csrfToken}
-        refresh={() => void refresh()}
-      />
-      {tasksQuery.hasNextPage && (
-        <Button
-          disabled={tasksQuery.isFetchingNextPage}
-          onClick={() => void load()}
-        >
-          加载更多任务
-        </Button>
-      )}
-      <UploadedReferences csrfToken={csrfToken} />
-    </section>
-  );
-}
-
-export function UploadedReferences({ csrfToken }: { csrfToken: string }) {
-  const confirm = useConfirm();
-  const state = useSessionState();
-  const [error, setError] = useState("");
-  const query = useInfiniteQuery({
-    queryKey: state.key("uploads"),
-    initialPageParam: 0,
-    queryFn: ({ signal, pageParam }) =>
-      client(csrfToken)<{
-        assets: { id: string; width: number; height: number }[];
-        hasMore: boolean;
-      }>(`/images/uploads?offset=${pageParam}`, undefined, signal),
-    getNextPageParam: (p, pages) => (p.hasMore ? pages.length * 50 : undefined),
-  });
-  const assets = [
-    ...new Map(
-      (query.data?.pages.flatMap((p) => p.assets) ?? []).map((a) => [a.id, a]),
-    ).values(),
-  ];
-  async function load() {
-    try {
-      await query.fetchNextPage({ throwOnError: true });
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
-  async function remove(id: string) {
-    if (!(await confirm("删除这张上传的参考图？正在被任务引用时不会删除。")))
-      return;
-    try {
-      await client(csrfToken)(`/images/assets/${id}/delete`, {});
-      await Promise.all(
-        ["uploads", "gallery", "usage"].map((key) =>
-          state.queries.invalidateQueries({ queryKey: state.key(key) }),
-        ),
-      );
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
-  return (
-    <section className="settings-section">
-      <h2>上传的参考图</h2>
-      <p className="hint">解除引用后可删除不再使用的图片，释放存储空间。</p>
-      {(error || query.error) && (
-        <Notice error>{error || query.error?.message}</Notice>
-      )}
-      <div className="output-grid">
-        {assets.map((a) => (
-          <figure key={a.id}>
-            <img
-              src={`/api/images/assets/${a.id}/preview`}
-              alt={`参考图 ${a.width} × ${a.height}`}
-            />
-            <Button onClick={() => void remove(a.id)}>删除参考图</Button>
-          </figure>
-        ))}
-      </div>
-      {query.hasNextPage && (
-        <Button onClick={() => void load()}>加载更多参考图</Button>
-      )}
     </section>
   );
 }

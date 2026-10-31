@@ -7,7 +7,15 @@ import type {
   UsersPage,
   ModelCatalogSnapshot,
 } from "@tuyile/contracts";
-import { Button, ChoiceField, Field, Notice, Table, Select } from "@tuyile/ui";
+import {
+  useFeedback,
+  Button,
+  ChoiceField,
+  Field,
+  Notice,
+  Table,
+  Select,
+} from "@tuyile/ui";
 import { useSessionState } from "./session-state";
 import { client } from "./api";
 export function OperationsAdmin() {
@@ -164,14 +172,14 @@ function ExecutionSettingsForm({ initial }: { initial: ExecutionSettings }) {
   const state = useSessionState(),
     [draft, setDraft] = useState<ExecutionSettings | null>(null),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState(""),
-    [message, setMessage] = useState("");
+    [error, setError] = useState("");
+  const notifySuccess = useFeedback().success;
   const current = draft ?? initial;
   async function save(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError("");
-    setMessage("");
+
     try {
       await client(state.session.csrfToken)(
         "/image-admin/execution-settings",
@@ -181,7 +189,7 @@ function ExecutionSettingsForm({ initial }: { initial: ExecutionSettings }) {
         queryKey: state.key("execution-settings"),
       });
       setDraft(null);
-      setMessage("执行设置已保存。");
+      notifySuccess("已保存");
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -237,7 +245,6 @@ function ExecutionSettingsForm({ initial }: { initial: ExecutionSettings }) {
         ))}
       </div>
       {error && <Notice error>{error}</Notice>}
-      {message && <Notice>{message}</Notice>}
       <Button disabled={busy}>保存执行设置</Button>
     </form>
   );
@@ -246,8 +253,8 @@ function PlanningPolicyForm({ userId }: { userId: string }) {
   const state = useSessionState(),
     [draft, setDraft] = useState<PlanningPolicy | null>(null),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState(""),
-    [message, setMessage] = useState("");
+    [error, setError] = useState("");
+  const notifySuccess = useFeedback().success;
   const modelCatalog = useQuery({
     queryKey: state.key("model-catalog"),
     queryFn: ({ signal }) =>
@@ -272,7 +279,7 @@ function PlanningPolicyForm({ userId }: { userId: string }) {
     if (!current) return;
     setBusy(true);
     setError("");
-    setMessage("");
+
     try {
       await client(state.session.csrfToken)(
         `/image-admin/planning-policies/${userId}`,
@@ -290,7 +297,7 @@ function PlanningPolicyForm({ userId }: { userId: string }) {
         }),
       ]);
       setDraft(null);
-      setMessage("规划策略已保存。");
+      notifySuccess("已保存");
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -361,7 +368,6 @@ function PlanningPolicyForm({ userId }: { userId: string }) {
         降低次数上限只阻止新的超额提交，已接受的预留继续保留。
       </p>
       {error && <Notice error>{error}</Notice>}
-      {message && <Notice>{message}</Notice>}
       <Button disabled={busy}>保存规划策略</Button>
     </form>
   );

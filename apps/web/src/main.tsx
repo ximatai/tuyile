@@ -1,3 +1,4 @@
+import { LoadingState } from "./loading-state";
 import { HeaderUsage } from "./header-usage";
 import React, { lazy, Suspense, useState, useEffect, useRef } from "react";
 import { createRoot } from "react-dom/client";
@@ -30,6 +31,9 @@ import { Button, Notice, UiProvider, Tooltip, Dropdown } from "@tuyile/ui";
 import { client, ApiError, notifySessionChange, sessionTabId } from "./api";
 import { SessionProvider, useSessionState } from "./session-state";
 import "./styles.css";
+const PromptAdminPage = lazy(() =>
+  import("./prompt-admin").then((m) => ({ default: m.PromptAdminPage })),
+);
 const LibraryPage = lazy(() =>
   import("./library").then((m) => ({ default: m.LibraryPage })),
 );
@@ -49,7 +53,7 @@ const ProjectNavigation = lazy(() =>
   import("./projects").then((m) => ({ default: m.ProjectNavigation })),
 );
 const UsagePage = lazy(() =>
-  import("./creation").then((m) => ({ default: m.UsagePage })),
+  import("./usage-page").then((m) => ({ default: m.UsagePage })),
 );
 const ImageAdminPage = lazy(() =>
   import("./image-admin").then((m) => ({ default: m.ImageAdminPage })),
@@ -112,12 +116,7 @@ function App() {
     };
   }, []);
   if (path === "/login") return <AuthPage />;
-  if (loading)
-    return (
-      <main className="loading" role="status">
-        正在打开你的工作区…
-      </main>
-    );
+  if (loading) return <LoadingState variant="app" />;
   if (!session)
     return (
       <main className="loading">
@@ -170,7 +169,7 @@ function Shell() {
       if (alive) blocker.proceed();
     })().catch((e) => {
       if (alive) {
-        setError(`未能保存画布，已留在当前项目。${e.message}`);
+        setError(`未能保存当前修改，已留在当前页面。${e.message}`);
         blocker.reset();
       }
     });
@@ -295,6 +294,7 @@ function Shell() {
                 {
                   "/gallery": "图库",
                   "/prompts": "提示池",
+                  "/admin/prompts": "创作预设",
                   "/favorites": "收藏",
                   "/usage": "额度",
                   "/admin/users": "用户管理",
@@ -349,7 +349,11 @@ function Shell() {
         </header>
         <main className="content">
           {error && <Notice error>{error}</Notice>}
-          <Suspense fallback={<p role="status">正在加载页面…</p>}>
+          <Suspense
+            fallback={
+              <LoadingState variant={workspace ? "workspace" : "page"} />
+            }
+          >
             <Routes>
               <Route
                 path="/gallery"
@@ -358,6 +362,16 @@ function Shell() {
               <Route
                 path="/prompts"
                 element={<LibraryPage key="prompts" mode="prompts" />}
+              />
+              <Route
+                path="/admin/prompts"
+                element={
+                  session.user.role === "admin" ? (
+                    <PromptAdminPage />
+                  ) : (
+                    <Notice error>你没有执行此操作的权限。</Notice>
+                  )
+                }
               />
               <Route
                 path="/favorites"
@@ -418,7 +432,7 @@ const router = createBrowserRouter([{ path: "*", element: <App /> }]);
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <UiProvider>
-      <Suspense fallback={<p role="status">正在加载…</p>}>
+      <Suspense fallback={<LoadingState variant="app" />}>
         <RouterProvider router={router} />
       </Suspense>
     </UiProvider>

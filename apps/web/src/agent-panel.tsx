@@ -1,11 +1,11 @@
-import { composeCreativePrompt, type CreationStyle } from "@tuyile/contracts";
+import { useDraftValue } from "./project-draft";
+import { composeCreativePrompt } from "@tuyile/contracts";
 import { PromptComposer } from "./prompt-composer";
 import { ImageControls, ReferenceAttachments } from "./image-controls";
 import {
   initialSettings,
   selectedCapability,
   settingsIssues,
-  type ImageSettings,
 } from "./image-settings";
 import { useEffect, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
@@ -69,18 +69,14 @@ export function AgentPanel({
 }) {
   const state = useSessionState(),
     api = client(state.session.csrfToken);
-  const [prompt, setPrompt] = useState(""),
-    [style, setStyle] = useState<CreationStyle | undefined>(),
-    [skillId, setSkillId] = useState(""),
-    [settings, setSettings] = useState<ImageSettings>({
-      modelKey: "",
-      width: 1024,
-      height: 1024,
-      quality: "medium",
-      format: "png",
-      count: 1,
-    }),
-    [conversationModel, setConversationModel] = useState(""),
+  const [prompt, setPrompt] = useDraftValue("agent", "prompt"),
+    [style, setStyle] = useDraftValue("agent", "style"),
+    [skillId, setSkillId] = useDraftValue("agent", "skillId"),
+    [settings, setSettings] = useDraftValue("agent", "settings"),
+    [conversationModel, setConversationModel] = useDraftValue(
+      "agent",
+      "conversationModel",
+    ),
     [current, setCurrent] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
@@ -128,7 +124,7 @@ export function AgentPanel({
   useEffect(() => {
     if (usage?.models.length && !initialized.current) {
       initialized.current = true;
-      setSettings(initialSettings(usage));
+      setSettings((old) => (old.modelKey ? old : initialSettings(usage)));
     }
   }, [usage]);
   const model = settings.modelKey;
@@ -197,7 +193,6 @@ export function AgentPanel({
       setCurrent(job.id);
       setSettingsOpen(false);
       setPending(null);
-      setPrompt("");
       await refresh();
     } catch (e) {
       if (e instanceof ApiError && e.code !== "INTERNAL_ERROR")

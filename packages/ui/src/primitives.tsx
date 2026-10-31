@@ -1,5 +1,6 @@
 import {
   useId,
+  useMemo,
   useState,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
@@ -72,10 +73,11 @@ export function UiProvider({ children }: { children: ReactNode }) {
             horizontalItemPaddingSM: "6px 0",
           },
           Drawer: { footerPaddingBlock: 8, footerPaddingInline: 16 },
+          Message: { contentBg: "#fff", contentPadding: "8px 14px" },
         },
       }}
     >
-      <App>{children}</App>
+      <App message={{ top: 60, maxCount: 1 }}>{children}</App>
     </ConfigProvider>
   );
 }
@@ -128,7 +130,7 @@ export function Notice({
         role={error ? "alert" : "status"}
         type={error ? "error" : "info"}
         showIcon
-        description={children}
+        title={children}
       />
     </div>
   );
@@ -155,6 +157,7 @@ export function ChoiceField({
   value,
   defaultValue,
   options,
+  groups,
   onValueChange,
   disabled,
   hideLabel = false,
@@ -169,6 +172,7 @@ export function ChoiceField({
   value?: string;
   defaultValue?: string;
   options: { value: string; label: string; disabled?: boolean }[];
+  groups?: SelectProps["options"];
   onValueChange?: (value: string) => void;
   disabled?: boolean;
   hideLabel?: boolean;
@@ -202,7 +206,7 @@ export function ChoiceField({
       <Select
         id={id}
         value={current}
-        options={options}
+        options={groups ?? options}
         disabled={disabled}
         showSearch={showSearch}
         optionRender={optionRender}
@@ -221,6 +225,7 @@ export {
   Modal,
   Collapse,
   Spin,
+  Skeleton,
   Image,
   Upload,
   Checkbox,
@@ -228,18 +233,21 @@ export {
   Input,
   Tag,
   Statistic,
+  Progress,
+  Descriptions,
   Empty,
   Tabs,
   Form,
   ConfigProvider as ControlScope,
 } from "antd";
-export { Select } from "antd";
+export { Select, AutoComplete } from "antd";
 export {
   Drawer,
   Card,
   Radio,
   Tooltip,
   Popover,
+  Menu,
   Dropdown,
   Affix,
   Typography,
@@ -247,4 +255,28 @@ export {
 
 export function useNotification() {
   return App.useApp().notification;
+}
+
+/** Transient operation feedback. Persistent state and validation stay with their controls. */
+export function useFeedback() {
+  const { message } = App.useApp();
+  return useMemo(() => {
+    const show = (type: "success" | "error", content: string) => {
+      if (!content.trim()) return;
+      void message.open({
+        key: "operation-feedback",
+        type,
+        content: (
+          <span role={type === "error" ? "alert" : "status"}>{content}</span>
+        ),
+        duration: type === "success" ? 2 : 5,
+        className: "operation-feedback",
+      });
+    };
+    return {
+      success: (content: string) => show("success", content),
+      error: (content: string) => show("error", content),
+      dismiss: () => message.destroy("operation-feedback"),
+    };
+  }, [message]);
 }

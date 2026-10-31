@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { createDatabase, PgStore, security } from "@tuyile/infrastructure";
 import { Workbench } from "@tuyile/core";
@@ -22,12 +23,56 @@ export async function resetDatabase() {
   await migrate(urls.owner);
   const { pool: owner } = createDatabase(urls.owner);
   try {
+    await owner.query("TRUNCATE tuyile.prompt_templates CASCADE");
+    const templatesSql = await readFile(
+      new URL("../migrations/0016_prompt_templates.sql", import.meta.url),
+      "utf8",
+    );
+    await owner.query("SET search_path=tuyile,pg_catalog");
+    await owner.query(
+      templatesSql.slice(templatesSql.indexOf("INSERT INTO prompt_templates")),
+    );
+    await owner.query(
+      await readFile(
+        new URL(
+          "../migrations/0018_starter_prompt_library.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    );
+    const featuredSql = await readFile(
+      new URL(
+        "../migrations/0021_featured_prompt_shortcuts.sql",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    await owner.query(
+      featuredSql.slice(featuredSql.indexOf("UPDATE prompt_templates")),
+    );
     await owner.query("TRUNCATE tuyile.model_services CASCADE");
     await owner.query(
       "UPDATE tuyile.model_catalog_state SET managed=false,revision=0 WHERE id=1",
     );
     await owner.query(
       "TRUNCATE tuyile.sessions,tuyile.password_tokens,tuyile.workspace_members,tuyile.projects,tuyile.workspaces,tuyile.users,tuyile.login_limits,tuyile.image_provider_versions,tuyile.planning_provider_versions,tuyile.skill_versions,tuyile.tool_controls CASCADE",
+    );
+    const stylesSql = await readFile(
+      new URL("../migrations/0019_creation_styles.sql", import.meta.url),
+      "utf8",
+    );
+    await owner.query(
+      stylesSql.slice(stylesSql.indexOf("INSERT INTO creation_styles")),
+    );
+    await owner.query(
+      await readFile(
+        new URL(
+          "../migrations/0020_refine_default_styles.sql",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
     );
     await owner.query(
       "INSERT INTO tuyile.tool_controls(tool_id,version) VALUES('image.generate',1),('image.edit',1)",

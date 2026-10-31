@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { type ReviewTask } from "@tuyile/contracts";
-import { Button, Field, Notice, Tabs } from "@tuyile/ui";
+import { useFeedback, Button, Field, Notice, Tabs } from "@tuyile/ui";
 import { useSessionState } from "./session-state";
 import { client } from "./api";
 import { ModelServicesAdmin } from "./model-services-admin";
@@ -11,9 +11,9 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
   const state = useSessionState(),
     api = client(csrfToken);
   const [section, setSection] = useState("models"),
-    [busy, setBusy] = useState(false),
-    [error, setError] = useState(""),
-    [message, setMessage] = useState("");
+    [busy, setBusy] = useState(false);
+  const feedback = useFeedback();
+  const notifySuccess = feedback.success;
   const review = useQuery({
     queryKey: state.key("image-review"),
     queryFn: ({ signal }) =>
@@ -22,8 +22,6 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
   async function run(work: () => Promise<void>) {
     if (busy) return;
     setBusy(true);
-    setError("");
-    setMessage("");
     try {
       await work();
       await Promise.all([
@@ -32,9 +30,9 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
           queryKey: state.key("image-review"),
         }),
       ]);
-      setMessage("已保存。");
+      notifySuccess("已保存");
     } catch (e) {
-      setError((e as Error).message);
+      feedback.error((e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -42,10 +40,7 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
   return (
     <section className="image-admin">
       <h1>模型服务</h1>
-      {(error || review.error) && (
-        <Notice error>{error || review.error?.message}</Notice>
-      )}
-      {message && <Notice>{message}</Notice>}
+      {review.error && <Notice error>{review.error.message}</Notice>}
       <Tabs
         activeKey={section}
         onChange={setSection}

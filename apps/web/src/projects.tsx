@@ -1,3 +1,4 @@
+import { LoadingState } from "./loading-state";
 import { useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams, useLocation } from "react-router-dom";
@@ -5,7 +6,7 @@ import type {
   Project,
   ProjectsPage as ProjectPageResponse,
 } from "@tuyile/contracts";
-import { Button, Field, Notice, useConfirm } from "@tuyile/ui";
+import { useFeedback, Button, Field, Notice, useConfirm } from "@tuyile/ui";
 import { useSessionState } from "./session-state";
 import { client } from "./api";
 import { lazy, Suspense } from "react";
@@ -13,6 +14,7 @@ const CreationPage = lazy(() =>
   import("./creation").then((m) => ({ default: m.CreationPage })),
 );
 export function ProjectsPage({ csrfToken }: { csrfToken: string }) {
+  const feedback = useFeedback();
   const state = useSessionState();
   const confirm = useConfirm();
   const [name, setName] = useState(""),
@@ -47,6 +49,7 @@ export function ProjectsPage({ csrfToken }: { csrfToken: string }) {
       await state.queries.invalidateQueries({
         queryKey: state.key("projects"),
       });
+      feedback.success("项目已创建");
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -65,12 +68,11 @@ export function ProjectsPage({ csrfToken }: { csrfToken: string }) {
     try {
       await state.flush();
       await client(csrfToken)(`/projects/${project.id}/delete`, {});
-      state.editors.get(project.id)?.dispose();
-      state.editors.delete(project.id);
-      state.creationDrafts.delete(project.id);
+      state.releaseProject(project.id);
       await state.queries.invalidateQueries({ queryKey: state.key() });
+      feedback.success("项目已删除");
     } catch (e) {
-      setError((e as Error).message);
+      feedback.error((e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -99,7 +101,7 @@ export function ProjectsPage({ csrfToken }: { csrfToken: string }) {
         <Notice error>{error || query.error?.message}</Notice>
       )}
       {query.isPending ? (
-        <p role="status">正在加载项目…</p>
+        <LoadingState />
       ) : (
         <div className="project-grid">
           {query.data?.projects.map((p) => (
@@ -142,10 +144,10 @@ export function ProjectWorkspace({ csrfToken }: { csrfToken: string }) {
       client(csrfToken)<Project>(`/projects/${projectId}`, undefined, signal),
   });
   if (query.error) return <Notice error>{query.error.message}</Notice>;
-  if (!query.data) return <p role="status">正在加载项目…</p>;
+  if (!query.data) return <LoadingState variant="workspace" />;
   return (
     <section className="project-workspace">
-      <Suspense fallback={<p role="status">正在加载创作面板…</p>}>
+      <Suspense fallback={<LoadingState variant="workspace" />}>
         <CreationPage
           key={projectId}
           csrfToken={csrfToken}

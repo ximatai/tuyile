@@ -159,7 +159,6 @@ it("reuses immutable selected identity and settings; legacy names cannot select 
   expect(taskSettings(task, usage)).toMatchObject({
     modelKey: "historical:old-task",
     count: 2,
-    referenceIds: ["ref"],
   });
   expect(settingsIssues(usage, taskSettings(task, usage)!, 1)).toHaveLength(1);
   const withIdentity = {
@@ -173,4 +172,29 @@ it("reuses immutable selected identity and settings; legacy names cannot select 
   expect(
     taskSettings(withIdentity, { ...usage, modelOptions: undefined })?.modelKey,
   ).toBe("historical:old-task");
+});
+
+it("restores only image settings fields, keeping style and references out of saved settings", () => {
+  const task = {
+    id: "task",
+    model: "same-name",
+    count: 2,
+    settings: {
+      width: 1024,
+      height: 1024,
+      quality: "medium",
+      format: "png",
+      referenceIds: ["reference"],
+      style: { name: "style", text: "text" },
+      modelSelectionId: "pool",
+    },
+  } as ImageTask;
+  expect(Object.keys(taskSettings(task, usage)!).sort()).toEqual([
+    "count",
+    "format",
+    "height",
+    "modelKey",
+    "quality",
+    "width",
+  ]);
 });

@@ -8,6 +8,7 @@ import type {
   ToolView,
 } from "@tuyile/contracts";
 import {
+  useFeedback,
   Button,
   Field,
   ChoiceField,
@@ -26,9 +27,9 @@ export function ExtensionsAdmin({
   hidePlanning?: boolean;
 }) {
   const [mode, setMode] = useState("openai"),
-    [error, setError] = useState(""),
-    [message, setMessage] = useState(""),
-    [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  const notifySuccess = useFeedback().success;
+  const [busy, setBusy] = useState(false),
     [formKey, setFormKey] = useState(0);
   const [draft, setDraft] = useState<Partial<SkillInput>>({ version: 1 }),
     [selected, setSelected] = useState<string[]>(["image.generate@1"]);
@@ -73,11 +74,11 @@ export function ExtensionsAdmin({
     if (busy) return;
     setBusy(true);
     setError("");
-    setMessage("");
+
     try {
       await action();
       await refresh();
-      setMessage("已保存配置版本。");
+      notifySuccess("配置版本已保存");
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -144,7 +145,6 @@ export function ExtensionsAdmin({
             toolQuery.error?.message}
         </Notice>
       )}
-      {message && <Notice>{message}</Notice>}
       {!hidePlanning && (
         <>
           <section className="settings-section">

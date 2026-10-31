@@ -85,13 +85,14 @@ export function createApp(
       maxSize:
         c.req.path.startsWith("/api/model-admin/") ||
         c.req.path.startsWith("/api/agent/") ||
-        /^\/api\/projects\/[^/]+\/canvas/.test(c.req.path)
+        /^\/api\/projects\/[^/]+\/(canvas|draft)/.test(c.req.path)
           ? 1024 * 1024
           : c.req.path === "/api/images/uploads"
             ? 20 * 1024 * 1024
             : c.req.path.startsWith("/api/images/") ||
                 c.req.path.startsWith("/api/image-admin/") ||
-                c.req.path.startsWith("/api/library/")
+                c.req.path.startsWith("/api/library/") ||
+                c.req.path === "/api/admin/prompts"
               ? 65536
               : 16384,
       onError: (c) =>
@@ -202,6 +203,7 @@ export function createApp(
     const projects = await service.projects(
       c.get("session").user,
       pageOffset.parse(c.req.query("offset")),
+      z.string().trim().max(80).default("").parse(c.req.query("search")),
     );
     return c.json({
       projects: projects.slice(0, 50),

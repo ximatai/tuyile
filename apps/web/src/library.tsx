@@ -9,9 +9,10 @@ import {
   type CanvasSave,
   type CanvasSnapshot,
   type ProjectsPage,
-  type PromptTemplate,
+  type PromptTemplatesPage,
 } from "@tuyile/contracts";
 import {
+  useFeedback,
   Button,
   Checkbox,
   ChoiceField,
@@ -21,8 +22,12 @@ import {
   Dropdown,
   Drawer,
   useConfirm,
+  Image,
+  AutoComplete,
 } from "@tuyile/ui";
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, Plus } from "lucide-react";
+import { PromptFavorite, refreshPrompts } from "./prompt-favorite";
+import { PromptUseMenu } from "./prompt-use-menu";
 import { HelpPopover, Excerpt } from "./interface-help";
 import { ApiError, client } from "./api";
 import { useSessionState } from "./session-state";
@@ -31,6 +36,7 @@ interface ReuseRequest {
   project: string;
   input: CanvasSave;
   newIds: string[];
+  assetIds: string[];
 }
 export function LibraryPage({ mode }: { mode: Mode }) {
   const state = useSessionState(),
@@ -38,14 +44,23 @@ export function LibraryPage({ mode }: { mode: Mode }) {
     navigate = useNavigate(),
     confirm = useConfirm();
   const [busy, setBusy] = useState(false),
-    [error, setError] = useState(""),
-    [message, setMessage] = useState(""),
-    [selected, setSelected] = useState<string[]>([]),
+    [error, setError] = useState("");
+  const feedback = useFeedback();
+  const notifySuccess = feedback.success;
+  const [selected, setSelected] = useState<string[]>([]),
     [target, setTarget] = useState(""),
-    [group, setGroup] = useState("__all__"),
+    [selectedGroups, setSelectedGroups] = useState<string[]>([]),
     [editing, setEditing] = useState<FavoriteInput | null>(null),
     [references, setReferences] = useState<AssetReference[]>([]),
     [pendingReuse, setPendingReuse] = useState<ReuseRequest | null>(null);
+  const [promptCategories, setPromptCategories] = useState<string[]>([]);
+  const [search, setSearch] = useState("");
+  const [term, setTerm] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => setTerm(search.trim()), 250);
+    return () => clearTimeout(timer);
+  }, [search]);
+  const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -58,6 +73,7 @@ export function LibraryPage({ mode }: { mode: Mode }) {
   const projects = useInfiniteQuery({
     queryKey: state.key("library-projects"),
     initialPageParam: 0,
+    enabled: mode === "gallery",
     queryFn: ({ signal, pageParam }) =>
       api<ProjectsPage>(`/projects?offset=${pageParam}`, undefined, signal),
     getNextPageParam: (p, pages) => (p.hasMore ? pages.length * 50 : undefined),
@@ -75,11 +91,11 @@ export function LibraryPage({ mode }: { mode: Mode }) {
     enabled: mode === "gallery",
   });
   const favorites = useInfiniteQuery({
-    queryKey: state.key("favorites", group),
+    queryKey: state.key("favorites", JSON.stringify(selectedGroups), term),
     initialPageParam: 0,
     queryFn: ({ signal, pageParam }) =>
       api<{ favorites: Favorite[]; hasMore: boolean }>(
-        `/library/favorites?offset=${pageParam}${group !== "__all__" ? `&group=${encodeURIComponent(group.slice(6))}` : ""}`,
+        `/library/favorites?${new URLSearchParams([["offset", String(pageParam)], ["search", term], ...selectedGroups.map((group) => ["group", group])])}`,
         undefined,
         signal,
       ),
@@ -91,36 +107,59 @@ export function LibraryPage({ mode }: { mode: Mode }) {
     queryFn: ({ signal }) =>
       api<{ groups: string[] }>("/library/groups", undefined, signal),
   });
-  const prompts = useQuery({
-    queryKey: state.key("prompt-templates"),
-    queryFn: ({ signal }) =>
-      api<{ prompts: PromptTemplate[] }>("/library/prompts", undefined, signal),
+  const prompts = useInfiniteQuery({
+    queryKey: state.key(
+      "prompt-templates",
+      JSON.stringify(promptCategories),
+      term,
+    ),
+    initialPageParam: 0,
+    queryFn: ({ signal, pageParam }) =>
+      api<PromptTemplatesPage>(
+        `/library/prompts?${new URLSearchParams([["offset", String(pageParam)], ["search", term], ...promptCategories.map((category) => ["category", category])])}`,
+        undefined,
+        signal,
+      ),
+    getNextPageParam: (p, pages) => (p.hasMore ? pages.length * 50 : undefined),
     enabled: mode === "prompts",
-    staleTime: Infinity,
+    staleTime: 0,
+    refetchInterval: mode === "prompts" ? 15000 : false,
   });
+  useEffect(() => {
+    const available = prompts.data?.pages[0]?.categories;
+    if (available) setCategoryOptions(available);
+  }, [prompts.data]);
+  const allPrompts = [
+    ...new Map(
+      (prompts.data?.pages.flatMap((p) => p.prompts) ?? []).map((p) => [
+        p.id,
+        p,
+      ]),
+    ).values(),
+  ];
   const allProjects = projects.data?.pages.flatMap((p) => p.projects) ?? [],
     project = target || allProjects[0]?.id || "",
     allAssets = assets.data?.pages.flatMap((p) => p.assets) ?? [];
   async function refresh() {
+    await refreshPrompts(state);
     await Promise.all([
       state.queries.invalidateQueries({ queryKey: state.key("gallery") }),
-      state.queries.invalidateQueries({ queryKey: state.key("favorites") }),
-      state.queries.invalidateQueries({
-        queryKey: state.key("favorite-groups"),
-      }),
       state.queries.invalidateQueries({ queryKey: state.key("usage") }),
     ]);
   }
   async function run(work: () => Promise<void>) {
-    if (action.current) return;
+    if (action.current) return false;
     action.current = true;
     setBusy(true);
     setError("");
-    setMessage("");
     try {
       await work();
+      return true;
     } catch (e) {
-      setError((e as Error).message);
+      if (editing || (e instanceof ApiError && e.code === "ASSET_REFERENCED"))
+        setError((e as Error).message);
+      else feedback.error((e as Error).message);
+      return false;
     } finally {
       action.current = false;
       setBusy(false);
@@ -128,7 +167,6 @@ export function LibraryPage({ mode }: { mode: Mode }) {
   }
   function startFavorite(input: Partial<FavoriteInput>) {
     setError("");
-    setMessage("");
     pendingFavorite.current = null;
     setEditing({
       id: input.id ?? crypto.randomUUID(),
@@ -155,14 +193,21 @@ export function LibraryPage({ mode }: { mode: Mode }) {
       pendingFavorite.current = null;
       setEditing(null);
       await refresh();
-      setMessage("收藏已保存。");
+      notifySuccess(
+        favorites.data?.pages.some((page) =>
+          page.favorites.some((f) => f.id === input.id),
+        )
+          ? "已保存"
+          : "已收藏",
+      );
     });
   }
   async function removeFavorite(id: string) {
-    if (!(await confirm("移除这条收藏？原图和生图计次不变。"))) return;
+    if (!(await confirm("移除这条收藏？"))) return;
     await run(async () => {
       await api(`/library/favorites/${id}/delete`, {});
       await refresh();
+      notifySuccess("已移除");
     });
   }
   async function removeAsset(id: string) {
@@ -187,19 +232,39 @@ export function LibraryPage({ mode }: { mode: Mode }) {
       }
       setSelected((old) => old.filter((v) => v !== id));
       await refresh();
-      setMessage("原图已删除。");
+      notifySuccess("原图已删除");
     });
   }
-  async function openProjectDraft(input: {
-    prompt?: string;
-    referenceIds?: string[];
-  }) {
-    await run(async () => {
-      if (!project) throw new Error("请先创建或选择目标项目。");
+  async function openProjectDraft(
+    input: {
+      prompt?: string;
+      referenceIds?: string[];
+    },
+    destination = project,
+  ) {
+    try {
+      await state.loadProjectDraft(destination);
+    } catch (e) {
+      feedback.error((e as Error).message);
+      return false;
+    }
+    if (
+      state.replacesCreativeDraft(destination, input) &&
+      !(await confirm(
+        input.prompt !== undefined
+          ? "用选中的提示词替换当前内容？"
+          : "替换该项目当前的参考图？",
+      ))
+    )
+      return false;
+    return run(async () => {
+      if (pendingReuse) throw new Error("请先重试上次加入画布的操作。");
+      if (!destination) throw new Error("请先创建或选择目标项目。");
+      await api(`/projects/${destination}`);
       await state.flush();
       if (!mounted.current) return;
-      state.creationDrafts.set(project, input);
-      navigate(`/projects/${project}`);
+      await state.queueDraftTransfer(destination, input);
+      navigate(`/projects/${destination}`);
     });
   }
   async function finishReuse(request: ReuseRequest) {
@@ -215,13 +280,21 @@ export function LibraryPage({ mode }: { mode: Mode }) {
     setPendingReuse(null);
     navigate(`/projects/${request.project}`);
   }
-  async function reuse(ids: string[]) {
-    await run(async () => {
-      if (!project) throw new Error("请先创建或选择目标项目。");
+  async function reuse(ids: string[], destination = project) {
+    return run(async () => {
+      if (!destination) throw new Error("请先创建或选择目标项目。");
       await state.flush();
       let request = pendingReuse;
+      if (
+        request &&
+        (request.project !== destination ||
+          JSON.stringify(request.assetIds) !== JSON.stringify(ids))
+      )
+        throw new Error("请先重试上次加入画布的操作。");
       if (!request) {
-        const latest = await api<CanvasSnapshot>(`/projects/${project}/canvas`);
+        const latest = await api<CanvasSnapshot>(
+          `/projects/${destination}/canvas`,
+        );
         if (latest.document.nodes.length + ids.length > 1000)
           throw new Error("画布节点超过 1000 个，请先移除不需要的节点。");
         const nodes = ids.map((id, i) => {
@@ -241,7 +314,8 @@ export function LibraryPage({ mode }: { mode: Mode }) {
           };
         });
         request = {
-          project,
+          project: destination,
+          assetIds: ids,
           input: {
             revision: latest.revision,
             requestKey: crypto.randomUUID(),
@@ -303,17 +377,38 @@ export function LibraryPage({ mode }: { mode: Mode }) {
       anchor.download = "tuyile-images.zip";
       anchor.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setMessage("导出文件已准备。");
+      notifySuccess("已准备下载");
     });
   }
   const queryError =
-    projects.error ||
+    (mode === "gallery" && projects.error) ||
     assets.error ||
     favorites.error ||
     prompts.error ||
     groups.error;
+  const projectPicker = (
+    <>
+      <ChoiceField
+        label="目标项目"
+        value={project}
+        onValueChange={setTarget}
+        disabled={busy || !!pendingReuse}
+        options={allProjects.map((p) => ({ value: p.id, label: p.name }))}
+      />
+      {projects.hasNextPage && (
+        <Button disabled={busy} onClick={() => void projects.fetchNextPage()}>
+          加载更多目标项目
+        </Button>
+      )}
+      {mode === "prompts" && !project && !projects.isPending && (
+        <Link to="/projects">新建项目</Link>
+      )}
+    </>
+  );
   return (
-    <section className="library-page">
+    <section
+      className={`library-page${mode === "prompts" ? " prompt-library" : mode === "favorites" ? " favorite-library" : ""}`}
+    >
       <div className="page-heading">
         <div>
           <h1>
@@ -324,11 +419,47 @@ export function LibraryPage({ mode }: { mode: Mode }) {
                 : "我的收藏"}
           </h1>
         </div>
+        <div className="actions library-heading-actions">
+          {mode !== "gallery" && (
+            <Input
+              aria-label="搜索提示词"
+              placeholder="搜索标题或正文"
+              maxLength={100}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="library-prompt-search"
+            />
+          )}
+          {mode === "favorites" && (
+            <Button
+              type="button"
+              className="primary"
+              disabled={busy}
+              onClick={() =>
+                startFavorite({
+                  title: "我的提示词",
+                  prompt: "",
+                  groupName:
+                    selectedGroups.length === 1 ? selectedGroups[0] : "",
+                })
+              }
+            >
+              <Plus size={15} />
+              新增提示词
+            </Button>
+          )}
+          {mode === "prompts" && (
+            <div className="prompt-project-picker">
+              {state.session.user.role === "admin" && (
+                <Link to="/admin/prompts">管理创作预设</Link>
+              )}
+            </div>
+          )}
+        </div>
       </div>
       {((!editing && error) || queryError) && (
         <Notice error>{error || queryError?.message}</Notice>
       )}
-      {message && <Notice>{message}</Notice>}
       {references.length > 0 && (
         <div className="library-references">
           <strong>仍在这些位置使用：</strong>
@@ -343,79 +474,50 @@ export function LibraryPage({ mode }: { mode: Mode }) {
           ))}
         </div>
       )}
-      <div className="library-toolbar">
-        <ChoiceField
-          label="目标项目"
-          value={project}
-          onValueChange={setTarget}
-          disabled={busy || !!pendingReuse}
-          options={allProjects.map((p) => ({ value: p.id, label: p.name }))}
-        />
-        {projects.hasNextPage && (
-          <Button disabled={busy} onClick={() => void projects.fetchNextPage()}>
-            加载更多目标项目
-          </Button>
-        )}
-        <Link to="/projects">管理项目</Link>
-        {mode === "gallery" && (
-          <>
-            <span>已选 {selected.length} 张</span>
-            <Button
-              disabled={busy || !selected.length}
-              onClick={() => void reuse(selected)}
-            >
-              {pendingReuse ? "重试本次复用" : "加入目标画布"}
-            </Button>
-            <Button
-              disabled={
-                busy ||
-                !!pendingReuse ||
-                selected.length < 1 ||
-                selected.length > 4
-              }
-              onClick={() => void openProjectDraft({ referenceIds: selected })}
-            >
-              设为参考图
-            </Button>
-            <Button
-              disabled={
-                busy ||
-                !!pendingReuse ||
-                selected.length < 1 ||
-                selected.length > 5
-              }
-              onClick={() => void exportImages()}
-            >
-              导出所选 ZIP
-            </Button>
-            <HelpPopover title="复用与导出">
-              跨项目复用不新增生图计次。参考图最多4张；每批导出最多5张、合计50MiB。
-            </HelpPopover>
-          </>
-        )}
-        {mode === "favorites" && (
-          <>
-            <ChoiceField
-              label="收藏分组"
-              value={group}
-              onValueChange={setGroup}
-              options={[
-                { value: "__all__", label: "全部分组" },
-                ...(groups.data?.groups ?? []).map((g) => ({
-                  value: `group:${g}`,
-                  label: g || "未分组",
-                })),
-              ]}
-            />
-            <Button
-              disabled={busy}
-              onClick={() => startFavorite({ title: "我的提示词", prompt: "" })}
-            >
-              新建提示词收藏
-            </Button>
-          </>
-        )}
-      </div>
+      {mode === "gallery" && (
+        <div className="library-toolbar">
+          {projectPicker}
+          <Link to="/projects">管理项目</Link>
+          {mode === "gallery" && (
+            <>
+              <span>已选 {selected.length} 张</span>
+              <Button
+                disabled={busy || !selected.length}
+                onClick={() => void reuse(selected)}
+              >
+                {pendingReuse ? "重试本次复用" : "加入目标画布"}
+              </Button>
+              <Button
+                disabled={
+                  busy ||
+                  !!pendingReuse ||
+                  selected.length < 1 ||
+                  selected.length > 4
+                }
+                onClick={() =>
+                  void openProjectDraft({ referenceIds: selected })
+                }
+              >
+                设为参考图
+              </Button>
+              <Button
+                disabled={
+                  busy ||
+                  !!pendingReuse ||
+                  selected.length < 1 ||
+                  selected.length > 5
+                }
+                onClick={() => void exportImages()}
+              >
+                导出所选 ZIP
+              </Button>
+              <HelpPopover title="复用与导出">
+                跨项目复用不新增生图计次。参考图最多4张；每批导出最多5张、合计50MiB。
+              </HelpPopover>
+            </>
+          )}
+        </div>
+      )}
       <Drawer
         title="编辑收藏"
         open={!!editing}
@@ -462,15 +564,31 @@ export function LibraryPage({ mode }: { mode: Mode }) {
                 setEditing({ ...editing, title: e.target.value })
               }
             />
-            <Field
-              label="收藏分组名称"
-              value={editing.groupName}
-              maxLength={60}
-              disabled={busy || !!pendingFavorite.current}
-              onChange={(e) =>
-                setEditing({ ...editing, groupName: e.target.value })
-              }
-            />
+            <label className="field">
+              <span>分组</span>
+              <AutoComplete
+                placement="topLeft"
+                filterOption={(input, option) =>
+                  String(option?.value ?? "")
+                    .toLowerCase()
+                    .includes(input.toLowerCase())
+                }
+                value={editing.groupName}
+                disabled={busy || !!pendingFavorite.current}
+                options={(groups.data?.groups ?? [])
+                  .filter(Boolean)
+                  .map((value) => ({ value }))}
+                onChange={(value) =>
+                  setEditing({ ...editing, groupName: value })
+                }
+              >
+                <Input
+                  aria-label="收藏分组名称"
+                  maxLength={60}
+                  placeholder="选择或输入分组"
+                />
+              </AutoComplete>
+            </label>
             {editing.prompt !== undefined && (
               <label className="field">
                 <span>收藏提示词</span>
@@ -610,103 +728,248 @@ export function LibraryPage({ mode }: { mode: Mode }) {
         </>
       )}
       {mode === "prompts" && (
-        <div className="prompt-grid">
-          {prompts.data?.prompts.map((p) => (
-            <article className="prompt-card" key={p.id}>
-              <span className="eyebrow">{p.category}</span>
-              <h2>{p.title}</h2>
-              <Excerpt>{p.prompt}</Excerpt>
-              <div className="actions">
-                <Button
-                  disabled={busy}
-                  onClick={() => void openProjectDraft({ prompt: p.prompt })}
-                >
-                  用于目标项目
-                </Button>
-                <Button
-                  disabled={busy}
-                  onClick={() =>
-                    startFavorite({
-                      title: p.title,
-                      prompt: p.prompt,
-                      groupName: p.category,
-                    })
+        <div className="prompt-browser">
+          <aside className="prompt-categories" aria-label="提示词分类">
+            <h2>分类</h2>
+            <Button
+              type="button"
+              aria-pressed={!promptCategories.length}
+              className={
+                !promptCategories.length
+                  ? "category-all active"
+                  : "category-all"
+              }
+              onClick={() => setPromptCategories([])}
+            >
+              全部分类
+            </Button>
+            {[...new Set([...categoryOptions, ...promptCategories])].map(
+              (category) => (
+                <Checkbox
+                  key={category}
+                  checked={promptCategories.includes(category)}
+                  onChange={() =>
+                    setPromptCategories((current) =>
+                      current.includes(category)
+                        ? current.filter((c) => c !== category)
+                        : [...current, category].sort(),
+                    )
                   }
                 >
-                  收藏提示词
-                </Button>
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
-      {mode === "favorites" && (
-        <>
-          <div className="prompt-grid">
-            {favorites.data?.pages
-              .flatMap((p) => p.favorites)
-              .map((f) => (
-                <article className="prompt-card favorite-card" key={f.id}>
-                  <span className="eyebrow">{f.groupName || "未分组"}</span>
-                  <h2>{f.title}</h2>
-                  {f.assetId ? (
-                    <img
-                      src={`/api/images/assets/${f.assetId}/preview`}
-                      alt={f.title}
-                    />
-                  ) : (
-                    <Excerpt>{f.prompt!}</Excerpt>
-                  )}
+                  {category}
+                </Checkbox>
+              ),
+            )}
+          </aside>
+          <div className="prompt-results" aria-label="提示词列表" role="region">
+            {prompts.isPending && <p role="status">正在加载提示词…</p>}
+            <div className="prompt-grid">
+              {!prompts.isPending && !prompts.error && !allPrompts.length && (
+                <div className="empty">
+                  {term
+                    ? "没有匹配的提示词"
+                    : promptCategories.length
+                      ? "该分类下暂无提示词"
+                      : "暂无提示词"}
+                </div>
+              )}
+              {allPrompts.map((p) => (
+                <article className="prompt-card" key={p.id}>
+                  <div className="prompt-card-heading">
+                    <h2>{p.title}</h2>
+                    <span className="eyebrow">{p.category}</span>
+                  </div>
+                  <Excerpt>{p.prompt}</Excerpt>
                   <div className="actions">
-                    <Button
+                    <PromptUseMenu
                       disabled={busy}
-                      onClick={() =>
-                        f.assetId
-                          ? void reuse([f.assetId])
-                          : void openProjectDraft({ prompt: f.prompt })
+                      onUse={(destination) =>
+                        openProjectDraft({ prompt: p.prompt }, destination)
                       }
-                    >
-                      用于目标项目
-                    </Button>
-                    {f.assetId && (
-                      <Button
-                        disabled={busy}
-                        onClick={() =>
-                          void openProjectDraft({ referenceIds: [f.assetId!] })
-                        }
-                      >
-                        作为参考图
-                      </Button>
-                    )}
-                    <Button
-                      disabled={busy || !!pendingReuse}
-                      onClick={() => startFavorite(f)}
-                    >
-                      编辑收藏
-                    </Button>
-                    <Button
-                      disabled={busy || !!pendingReuse}
-                      onClick={() => void removeFavorite(f.id)}
-                    >
-                      移除收藏
-                    </Button>
+                    />
+                    <PromptFavorite
+                      sourceId={p.id}
+                      favoriteId={p.favoriteId}
+                      title={p.title}
+                      prompt={p.prompt}
+                      groupName={p.category}
+                    />
                   </div>
                 </article>
               ))}
+              {prompts.hasNextPage && (
+                <Button
+                  type="button"
+                  loading={prompts.isFetchingNextPage}
+                  disabled={prompts.isFetchingNextPage}
+                  onClick={() => void prompts.fetchNextPage()}
+                >
+                  加载更多提示词
+                </Button>
+              )}
+            </div>
           </div>
-          {favorites.hasNextPage && (
+        </div>
+      )}
+      {mode === "favorites" && (
+        <div className="prompt-browser">
+          <aside className="prompt-categories" aria-label="收藏分组">
+            <h2>分组</h2>
             <Button
-              disabled={busy}
-              onClick={() => void favorites.fetchNextPage()}
+              type="button"
+              aria-pressed={!selectedGroups.length}
+              className={
+                !selectedGroups.length ? "category-all active" : "category-all"
+              }
+              onClick={() => setSelectedGroups([])}
             >
-              加载更多收藏
+              全部分组
             </Button>
-          )}
-          {!favorites.isPending &&
-            !favorites.data?.pages.some((p) => p.favorites.length) && (
-              <div className="empty">这个分组还没有收藏。</div>
+            {[
+              ...new Set([...(groups.data?.groups ?? []), ...selectedGroups]),
+            ].map((g) => (
+              <Checkbox
+                key={g}
+                checked={selectedGroups.includes(g)}
+                onChange={() =>
+                  setSelectedGroups((current) =>
+                    current.includes(g)
+                      ? current.filter((item) => item !== g)
+                      : [...current, g].sort(),
+                  )
+                }
+              >
+                {g || "未分组"}
+              </Checkbox>
+            ))}
+          </aside>
+          <div className="favorite-results" role="region" aria-label="收藏列表">
+            {pendingReuse && (
+              <Notice>
+                上次加入画布尚未确认。
+                <Button
+                  type="button"
+                  disabled={busy}
+                  onClick={() =>
+                    void reuse(pendingReuse.assetIds, pendingReuse.project)
+                  }
+                >
+                  重试加入画布
+                </Button>
+              </Notice>
             )}
-        </>
+            {favorites.isPending && <p role="status">正在加载收藏…</p>}
+            <div className="favorite-grid">
+              {[
+                ...new Map(
+                  (favorites.data?.pages.flatMap((p) => p.favorites) ?? []).map(
+                    (f) => [f.id, f],
+                  ),
+                ).values(),
+              ].map((f) => (
+                <article
+                  className={`favorite-card ${f.assetId ? "favorite-image-card" : "favorite-prompt-card"}`}
+                  key={f.id}
+                >
+                  {f.assetId && (
+                    <div className="favorite-visual">
+                      <Image
+                        src={`/api/images/assets/${f.assetId}/preview`}
+                        alt={f.title}
+                        preview={{
+                          src: `/api/images/assets/${f.assetId}/original`,
+                          motionName: "",
+                        }}
+                      />
+                    </div>
+                  )}
+                  <div className="favorite-card-content">
+                    <div className="favorite-card-heading">
+                      <h2>{f.title}</h2>
+                      <span className="eyebrow">{f.groupName || "未分组"}</span>
+                    </div>
+                    {!f.assetId && <Excerpt rows={5}>{f.prompt!}</Excerpt>}
+                    <div className="favorite-card-actions">
+                      <PromptUseMenu
+                        ariaLabel="使用收藏"
+                        disabled={busy}
+                        onUse={(destination) =>
+                          f.assetId
+                            ? reuse([f.assetId], destination)
+                            : openProjectDraft(
+                                { prompt: f.prompt },
+                                destination,
+                              )
+                        }
+                        onReference={
+                          f.assetId
+                            ? (destination) =>
+                                openProjectDraft(
+                                  { referenceIds: [f.assetId!] },
+                                  destination,
+                                )
+                            : undefined
+                        }
+                      />
+                      <Dropdown
+                        trigger={["click"]}
+                        menu={{
+                          items: [
+                            {
+                              key: "edit",
+                              label: "编辑收藏",
+                              disabled: busy || !!pendingReuse,
+                            },
+                            {
+                              key: "remove",
+                              label: "移除收藏",
+                              danger: true,
+                              disabled: busy || !!pendingReuse,
+                            },
+                          ],
+                          onClick: ({ key }) =>
+                            key === "edit"
+                              ? startFavorite(f)
+                              : void removeFavorite(f.id),
+                        }}
+                      >
+                        <Button
+                          type="button"
+                          className="favorite-more"
+                          aria-label="收藏更多操作"
+                          disabled={busy || !!pendingReuse}
+                        >
+                          <MoreHorizontal size={17} />
+                        </Button>
+                      </Dropdown>
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+            {favorites.hasNextPage && (
+              <Button
+                type="button"
+                loading={favorites.isFetchingNextPage}
+                disabled={favorites.isFetchingNextPage || busy}
+                onClick={() => void favorites.fetchNextPage()}
+              >
+                加载更多收藏
+              </Button>
+            )}
+            {!favorites.isPending &&
+              !favorites.error &&
+              !favorites.data?.pages.some((p) => p.favorites.length) && (
+                <div className="empty">
+                  {term
+                    ? "没有匹配的收藏"
+                    : selectedGroups.length
+                      ? "这个分组还没有收藏"
+                      : "还没有收藏"}
+                </div>
+              )}
+          </div>
+        </div>
       )}
     </section>
   );

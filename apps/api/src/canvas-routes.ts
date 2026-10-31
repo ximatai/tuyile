@@ -1,8 +1,25 @@
 import type { Hono } from "hono";
-import { id, z, canvasSave } from "@tuyile/contracts";
+import { id, z, canvasSave, projectDraftSave } from "@tuyile/contracts";
 import type { CanvasService } from "@tuyile/core";
 import type { ApiEnv } from "./app.js";
 export function canvasRoutes(app: Hono<ApiEnv>, service: CanvasService) {
+  app.get("/api/projects/:id/draft", async (c) =>
+    c.json(
+      await service.loadDraft(
+        c.get("session").user,
+        id.parse(c.req.param("id")),
+      ),
+    ),
+  );
+  app.post("/api/projects/:id/draft", async (c) =>
+    c.json(
+      await service.saveDraft(
+        c.get("session").user,
+        id.parse(c.req.param("id")),
+        projectDraftSave.parse(await c.req.json()),
+      ),
+    ),
+  );
   app.post("/api/projects/:id/delete", async (c) => {
     z.object({})
       .strict()
