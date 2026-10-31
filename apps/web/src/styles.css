@@ -3846,3 +3846,26 @@ h3 {
   box-shadow: none;
   color: var(--muted);
 }
+
+.header-usage-popover .header-usage-details {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px -16px -16px;
+  padding: 11px 20px;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 10px 10px;
+  color: var(--muted);
+  text-decoration: none;
+  transition: background-color 120ms, color 120ms;
+}
+.header-usage-popover .header-usage-details:hover,
+.header-usage-popover .header-usage-details:focus-visible {
+  background: var(--focus-soft);
+  color: var(--brand-blue);
+}
+.header-usage-popover .header-usage-details:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: -2px;
+}

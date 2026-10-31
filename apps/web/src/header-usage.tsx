@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ComponentRef } from "react";
-import { X } from "lucide-react";
+import { ArrowRight, X } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import type { ImageUsage } from "@tuyile/contracts";
@@ -48,8 +48,9 @@ export function HeaderUsage({ csrfToken }: { csrfToken: string }) {
           </Button>
           {query.error && <p role="alert">额度暂时无法更新</p>}
           {query.data && <UsageSummary usage={query.data} />}
-          <Link to="/usage" onClick={() => setOpen(false)}>
-            查看额度
+          <Link className="header-usage-details" to="/usage" onClick={() => setOpen(false)}>
+            <span>查看额度</span>
+            <ArrowRight size={15} aria-hidden="true" />
           </Link>
         </div>
       }
