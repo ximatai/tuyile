@@ -242,6 +242,7 @@ export {
   Radio,
   Tooltip,
   Popover,
+  Menu,
   Dropdown,
   Affix,
   Typography,

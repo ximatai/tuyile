@@ -203,6 +203,7 @@ export function createApp(
     const projects = await service.projects(
       c.get("session").user,
       pageOffset.parse(c.req.query("offset")),
+      z.string().trim().max(80).default("").parse(c.req.query("search")),
     );
     return c.json({
       projects: projects.slice(0, 50),

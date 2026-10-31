@@ -3554,3 +3554,13 @@ h3 {
 .prompt-results {
   min-width: 0;
 }
+
+.prompt-use-content { width: 260px; }
+.prompt-use-content h3 { margin: 0 0 10px; font-size: var(--text-body); }
+.prompt-use-project-list { max-height: 280px; overflow-y: auto; margin: 8px 0; }
+.prompt-use-project-list .ant-menu { border-inline-end: 0 !important; background: transparent; }
+.prompt-use-project-list .ant-menu-item { margin-inline: 0; width: 100%; }
+.prompt-use-project-list .hint { margin: 12px 8px; }
+.prompt-use-create { display: inline-flex; align-items: center; gap: 6px; width: 100%; }
+.prompt-library .prompt-card .actions > .ant-popover-open,
+.prompt-library .prompt-card .actions > button[aria-label="使用提示词"] { display: inline-flex; align-items: center; gap: 8px; color: var(--brand-blue); }

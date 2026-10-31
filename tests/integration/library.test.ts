@@ -615,3 +615,41 @@ it("filters published prompts by the union of categories before pagination and e
     ).status,
   ).toBe(400);
 });
+
+it("searches the complete private project list before pagination and excludes deleted or foreign projects", async () => {
+  const target = await f.service.createProject(
+    f.principal,
+    "Unique old destination",
+  );
+  for (let i = 0; i < 51; i++)
+    await f.service.createProject(f.principal, `New destination ${i}`);
+  expect(
+    (await f.service.projects(f.principal)).some((p) => p.id === target.id),
+  ).toBe(false);
+  expect(await f.service.projects(f.principal, 0, "unique old")).toEqual([
+    target,
+  ]);
+  const created = await f.service.createUser(
+    f.principal,
+    "project-search-member",
+  );
+  await finishTemporaryPassword(f.service, created, testPassword);
+  const login = await f.service.login("project-search-member", testPassword),
+    member = (await f.service.authenticate(login.token)).user;
+  expect(await f.service.projects(member, 0, "Unique old")).toEqual([]);
+  const app = createApp(
+    f.service,
+    f.store,
+    { origin: "http://127.0.0.1:5180", production: false },
+    async () => {},
+  );
+  const response = await app.request("/api/projects?search=unique%20old", {
+    headers: { cookie: `tuyile_session=${f.login.token}` },
+  });
+  expect(response.status).toBe(200);
+  expect((await response.json()).projects[0].id).toBe(target.id);
+  await f.pool.query("UPDATE projects SET deleted_at=now() WHERE id=$1", [
+    target.id,
+  ]);
+  expect(await f.service.projects(f.principal, 0, "unique old")).toEqual([]);
+});

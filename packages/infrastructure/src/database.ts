@@ -177,11 +177,11 @@ class PgRepository implements Repository {
     );
     return r.rows[0].attempts <= limit;
   }
-  async listProjects(ws: string, offset = 0) {
+  async listProjects(ws: string, offset = 0, search = "") {
     return (
       await this.c.query(
-        "SELECT * FROM projects WHERE workspace_id=$1 AND deleted_at IS NULL ORDER BY created_at DESC,id LIMIT 51 OFFSET $2",
-        [ws, offset],
+        "SELECT * FROM projects WHERE workspace_id=$1 AND deleted_at IS NULL AND ($3='' OR strpos(lower(name),lower($3))>0) ORDER BY created_at DESC,id LIMIT 51 OFFSET $2",
+        [ws, offset, search],
       )
     ).rows.map(project);
   }

@@ -1915,7 +1915,10 @@ test("Gallery reuse, ZIP export, favorites, prompt application and project clean
   const prompt = (await (await page.request.get("/api/library/prompts")).json())
     .prompts[0].prompt;
   await template
-    .getByRole("button", { name: "用于目标项目", exact: true })
+    .getByRole("button", { name: "使用提示词", exact: true })
+    .click();
+  await page
+    .getByRole("menuitem", { name: "素材复用目标", exact: true })
     .click();
   await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
     prompt,
@@ -2606,14 +2609,7 @@ test("prompt library keeps project selection compact and reuses full prompts", a
     projects.push(await response.json());
   }
   await page.getByRole("link", { name: "提示池", exact: true }).click();
-  const heading = page.getByRole("heading", { name: "提示池", exact: true });
-  const picker = page.getByLabel("目标项目", { exact: true });
-  await expect(picker).toBeVisible();
-  await picker.click();
-  await page
-    .locator(".ant-select-dropdown:visible")
-    .getByText("Prompt target", { exact: true })
-    .click();
+  await expect(page.getByLabel("目标项目", { exact: true })).toHaveCount(0);
   const card = page.locator(".prompt-card").first();
   const prompt = (await (await page.request.get("/api/library/prompts")).json())
     .prompts[0];
@@ -2626,16 +2622,6 @@ test("prompt library keeps project selection compact and reuses full prompts", a
   await expect(drawer).toBeHidden();
   for (const width of [1440, 1920]) {
     await page.setViewportSize({ width, height: 900 });
-    const titleBox = await heading.boundingBox(),
-      pickerBox = await picker.boundingBox();
-    expect(
-      Math.abs(
-        titleBox!.y +
-          titleBox!.height / 2 -
-          pickerBox!.y -
-          pickerBox!.height / 2,
-      ),
-    ).toBeLessThan(12);
     const rowSpreads = await page
       .locator(".prompt-card")
       .evaluateAll((cards) => {
@@ -2653,7 +2639,10 @@ test("prompt library keeps project selection compact and reuses full prompts", a
       });
     expect(Math.max(...rowSpreads)).toBeLessThan(2);
   }
-  await card.getByRole("button", { name: "用于目标项目", exact: true }).click();
+  await card.getByRole("button", { name: "使用提示词", exact: true }).click();
+  await page
+    .getByRole("menuitem", { name: "Prompt target", exact: true })
+    .click();
   await expect(page).toHaveURL(new RegExp(`/projects/${projects[1].id}$`));
   await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
     prompt.prompt,
@@ -2714,7 +2703,10 @@ test("managed prompt pool supports drafts, publication, cross-tab updates, reuse
     viewer.getByRole("dialog", { name: "编辑收藏", exact: true }),
   ).toBeHidden();
   await template
-    .getByRole("button", { name: "用于目标项目", exact: true })
+    .getByRole("button", { name: "使用提示词", exact: true })
+    .click();
+  await viewer
+    .getByRole("menuitem", { name: "Template target", exact: true })
     .click();
   await expect(viewer).toHaveURL(new RegExp(`/projects/${project.id}$`));
   await expect(viewer.getByLabel("创作需求", { exact: true })).toHaveValue(
@@ -2801,4 +2793,34 @@ test("prompt category panel supports multiple selection, deselection and full-ca
     expect(left!.x + left!.width).toBeLessThan(right!.x);
     expect(Math.abs(left!.y - right!.y)).toBeLessThan(2);
   }
+});
+
+test("prompt use menu supports hover, complete project search and creating a destination", async ({
+  page,
+}) => {
+  await login(page);
+  await page.getByRole("link", { name: "提示池", exact: true }).click();
+  const card = page.locator(".prompt-card").first();
+  const prompt = (await (await page.request.get("/api/library/prompts")).json())
+    .prompts[0].prompt;
+  const use = card.getByRole("button", { name: "使用提示词", exact: true });
+  await use.hover();
+  const popup = page.locator(".prompt-use-popover:visible");
+  await expect(
+    popup.getByRole("heading", { name: "我的项目", exact: true }),
+  ).toBeVisible();
+  await popup.getByLabel("搜索我的项目", { exact: true }).hover();
+  await expect(popup).toBeVisible();
+  await popup.getByLabel("搜索我的项目", { exact: true }).fill("不存在的名称");
+  await expect(popup.getByText("未找到项目", { exact: true })).toBeVisible();
+  await popup.getByRole("button", { name: "新建项目", exact: true }).click();
+  const modal = page.getByRole("dialog", { name: "新建项目", exact: true });
+  await modal.getByLabel("项目名称", { exact: true }).fill("从提示词新建");
+  await modal.getByRole("button", { name: "创建并使用", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "从提示词新建", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
+    prompt,
+  );
 });

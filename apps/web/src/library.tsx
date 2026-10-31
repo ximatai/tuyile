@@ -23,7 +23,8 @@ import {
   useConfirm,
   Tooltip,
 } from "@tuyile/ui";
-import { MoreHorizontal, Bookmark, ArrowRight } from "lucide-react";
+import { MoreHorizontal, Bookmark } from "lucide-react";
+import { PromptUseMenu } from "./prompt-use-menu";
 import { HelpPopover, Excerpt } from "./interface-help";
 import { ApiError, client } from "./api";
 import { useSessionState } from "./session-state";
@@ -61,6 +62,7 @@ export function LibraryPage({ mode }: { mode: Mode }) {
   const projects = useInfiniteQuery({
     queryKey: state.key("library-projects"),
     initialPageParam: 0,
+    enabled: mode !== "prompts",
     queryFn: ({ signal, pageParam }) =>
       api<ProjectsPage>(`/projects?offset=${pageParam}`, undefined, signal),
     getNextPageParam: (p, pages) => (p.hasMore ? pages.length * 50 : undefined),
@@ -134,15 +136,17 @@ export function LibraryPage({ mode }: { mode: Mode }) {
     ]);
   }
   async function run(work: () => Promise<void>) {
-    if (action.current) return;
+    if (action.current) return false;
     action.current = true;
     setBusy(true);
     setError("");
     setMessage("");
     try {
       await work();
+      return true;
     } catch (e) {
       setError((e as Error).message);
+      return false;
     } finally {
       action.current = false;
       setBusy(false);
@@ -212,16 +216,20 @@ export function LibraryPage({ mode }: { mode: Mode }) {
       setMessage("原图已删除。");
     });
   }
-  async function openProjectDraft(input: {
-    prompt?: string;
-    referenceIds?: string[];
-  }) {
-    await run(async () => {
-      if (!project) throw new Error("请先创建或选择目标项目。");
+  async function openProjectDraft(
+    input: {
+      prompt?: string;
+      referenceIds?: string[];
+    },
+    destination = project,
+  ) {
+    return run(async () => {
+      if (!destination) throw new Error("请先创建或选择目标项目。");
+      await api(`/projects/${destination}`);
       await state.flush();
       if (!mounted.current) return;
-      state.creationDrafts.set(project, input);
-      navigate(`/projects/${project}`);
+      state.creationDrafts.set(destination, input);
+      navigate(`/projects/${destination}`);
     });
   }
   async function finishReuse(request: ReuseRequest) {
@@ -329,7 +337,7 @@ export function LibraryPage({ mode }: { mode: Mode }) {
     });
   }
   const queryError =
-    projects.error ||
+    (mode !== "prompts" && projects.error) ||
     assets.error ||
     favorites.error ||
     prompts.error ||
@@ -369,7 +377,6 @@ export function LibraryPage({ mode }: { mode: Mode }) {
         </div>
         {mode === "prompts" && (
           <div className="prompt-project-picker">
-            {projectPicker}
             {state.session.user.role === "admin" && (
               <Link to="/admin/prompts">管理提示词</Link>
             )}
@@ -707,15 +714,12 @@ export function LibraryPage({ mode }: { mode: Mode }) {
                   </div>
                   <Excerpt>{p.prompt}</Excerpt>
                   <div className="actions">
-                    <Button
-                      disabled={busy || !project}
-                      aria-label="用于目标项目"
-                      onClick={() =>
-                        void openProjectDraft({ prompt: p.prompt })
+                    <PromptUseMenu
+                      disabled={busy}
+                      onUse={(destination) =>
+                        openProjectDraft({ prompt: p.prompt }, destination)
                       }
-                    >
-                      使用 <ArrowRight size={14} aria-hidden="true" />
-                    </Button>
+                    />
                     <Tooltip title="收藏">
                       <Button
                         className="prompt-bookmark"
