@@ -88,7 +88,7 @@ test("desktop and mobile: persistent projects, initial password, account boundar
   await drawer
     .getByRole("button", { name: "保存用户配置", exact: true })
     .click();
-  await expect(drawer.getByText("已保存。", { exact: true })).toBeVisible();
+  await expect(page.getByText("已保存", { exact: true })).toBeVisible();
   await drawer.getByRole("button", { name: "关闭", exact: true }).click();
   await expect(drawer).toBeHidden();
   await page
@@ -103,7 +103,7 @@ test("desktop and mobile: persistent projects, initial password, account boundar
   await drawer
     .getByRole("button", { name: "保存用户配置", exact: true })
     .click();
-  await expect(drawer.getByText("已保存。", { exact: true })).toBeVisible();
+  await expect(page.getByText("已保存", { exact: true })).toBeVisible();
   await drawer.getByRole("button", { name: "关闭", exact: true }).click();
   await expect(drawer).toBeHidden();
   await page
@@ -122,7 +122,7 @@ test("desktop and mobile: persistent projects, initial password, account boundar
   await drawer
     .getByRole("button", { name: "保存用户配置", exact: true })
     .click();
-  await expect(drawer.getByText("已保存。", { exact: true })).toBeVisible();
+  await expect(page.getByText("已保存", { exact: true })).toBeVisible();
   await drawer.getByRole("button", { name: "关闭", exact: true }).click();
   await expect(drawer).toBeHidden();
 
@@ -1163,9 +1163,7 @@ test("desktop administration publishes service model pools and preserves version
     .getByRole("button", { name: "关闭", exact: true })
     .click();
   await page.getByRole("button", { name: "保存开放配置", exact: true }).click();
-  await expect(
-    page.getByText("模型开放配置已保存，新的创作可以使用。", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText("模型配置已保存", { exact: true })).toBeVisible();
   const catalog = await (
     await page.request.get("/api/model-admin/catalog")
   ).json();
@@ -1840,7 +1838,7 @@ test("Gallery reuse, ZIP export, favorites, prompt application and project clean
   await page.getByLabel("收藏分组名称", { exact: true }).fill("验收分组");
   await page.getByRole("button", { name: "保存收藏", exact: true }).click();
   await expect(page.locator(".ant-drawer:visible")).toHaveCount(0);
-  await expect(page.getByText("收藏已保存。", { exact: true })).toBeVisible();
+  await expect(page.getByText("已收藏", { exact: true })).toBeVisible();
   await card.getByRole("button", { name: "图片更多操作", exact: true }).click();
   await page.getByRole("menuitem", { name: "删除原图", exact: true }).click();
   await page
@@ -1911,7 +1909,7 @@ test("Gallery reuse, ZIP export, favorites, prompt application and project clean
   await page.getByLabel("收藏分组名称", { exact: true }).fill("写作");
   await page.getByRole("button", { name: "保存收藏", exact: true }).click();
   await expect(page.locator(".ant-drawer:visible")).toHaveCount(0);
-  await expect(page.getByText("收藏已保存。", { exact: true })).toBeVisible();
+  await expect(page.getByText("已收藏", { exact: true })).toBeVisible();
   const prompt = (await (await page.request.get("/api/library/prompts")).json())
     .prompts[0].prompt;
   await template
@@ -1995,9 +1993,7 @@ test("administration saves bounded execution policies and clearing ended Agent h
   await page.getByLabel("全局规划并发", { exact: true }).fill("3");
   await page.getByLabel("全局规划排队上限", { exact: true }).fill("32");
   await page.getByRole("button", { name: "保存执行设置", exact: true }).click();
-  await expect(
-    page.getByText("执行设置已保存。", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText("已保存", { exact: true })).toBeVisible();
   const settings = await (
     await page.request.get("/api/image-admin/execution-settings")
   ).json();
@@ -2013,9 +2009,7 @@ test("administration saves bounded execution policies and clearing ended Agent h
   await page.getByLabel("每日规划次数", { exact: true }).fill("45");
   await page.getByLabel("每用户规划排队上限", { exact: true }).fill("8");
   await page.getByRole("button", { name: "保存规划策略", exact: true }).click();
-  await expect(
-    page.getByText("规划策略已保存。", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText("已保存", { exact: true })).toBeVisible();
   expect(
     (await (await page.request.get("/api/agent/usage")).json()).dailyLimit,
   ).toBe(45);
@@ -2075,9 +2069,7 @@ test("administrators add a service and users select same-named models from the c
     .getByText("本地合成测试（不调用模型）", { exact: true })
     .click();
   await page.getByRole("button", { name: "保存服务", exact: true }).click();
-  await expect(
-    page.getByText("服务已保存，可以获取模型列表。", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText("服务已保存", { exact: true })).toBeVisible();
   await page
     .getByRole("button", { name: "添加图片生成模型", exact: true })
     .click();
@@ -2103,9 +2095,7 @@ test("administrators add a service and users select same-named models from the c
     .getByRole("button", { name: "将 test-planner 加入对话池", exact: true })
     .click();
   await page.getByRole("button", { name: "保存开放配置", exact: true }).click();
-  await expect(
-    page.getByText("模型开放配置已保存，新的创作可以使用。", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText("模型配置已保存", { exact: true })).toBeVisible();
   const catalog = await (
     await page.request.get("/api/model-admin/catalog")
   ).json();
@@ -3003,4 +2993,79 @@ test("favorite library groups cards and reuses prompts, images and references th
   await expect(
     page.getByRole("heading", { name: "手动新增需求", exact: true }),
   ).toBeVisible();
+});
+
+test("operation feedback is transient, replaces previous messages and leaves form errors in place", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.getByRole("link", { name: "收藏", exact: true }).click();
+  const originalTop = (await page
+    .getByRole("complementary", { name: "收藏分组", exact: true })
+    .boundingBox())!.y;
+  await page.getByRole("button", { name: "新增提示词", exact: true }).click();
+  const drawer = page.getByRole("dialog", { name: "编辑收藏", exact: true });
+  await drawer.getByLabel("收藏标题", { exact: true }).fill("反馈测试收藏");
+  await drawer
+    .getByLabel("收藏提示词", { exact: true })
+    .fill("需要保留的完整输入内容");
+  await page.route("**/api/library/favorites", async (route) => {
+    if (route.request().method() === "POST")
+      await route.fulfill({
+        status: 500,
+        json: { error: { code: "INTERNAL_ERROR" } },
+      });
+    else await route.continue();
+  });
+  await drawer.getByRole("button", { name: "保存收藏", exact: true }).click();
+  await expect(drawer.getByRole("alert")).toBeVisible();
+  await expect(page.locator(".operation-feedback")).toHaveCount(0);
+  await expect(drawer.getByLabel("收藏提示词", { exact: true })).toHaveValue(
+    "需要保留的完整输入内容",
+  );
+  await page.unroute("**/api/library/favorites");
+  await drawer.getByRole("button", { name: "保存收藏", exact: true }).click();
+  await expect(drawer).toBeHidden();
+  const toast = page.locator(".operation-feedback");
+  await expect(toast.getByText("已收藏", { exact: true })).toBeVisible();
+  expect(
+    Math.abs(
+      (await page
+        .getByRole("complementary", { name: "收藏分组", exact: true })
+        .boundingBox())!.y - originalTop,
+    ),
+  ).toBeLessThan(1);
+  await expect(page.locator(".product-notice")).toHaveCount(0);
+  await page.screenshot({
+    path: ".codex-temp/operation-feedback-success.png",
+    fullPage: false,
+  });
+  const card = page
+    .locator(".favorite-card")
+    .filter({ hasText: "反馈测试收藏" });
+  await page.route("**/api/library/favorites/*/delete", (route) =>
+    route.fulfill({ status: 500, json: { error: { code: "INTERNAL_ERROR" } } }),
+  );
+  await card.getByRole("button", { name: "收藏更多操作", exact: true }).click();
+  await page.getByRole("menuitem", { name: "移除收藏", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "请确认", exact: true })
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await expect(toast.getByRole("alert")).toBeVisible();
+  await expect(toast).toHaveCount(1);
+  await expect(card).toBeVisible();
+  await expect(page.locator(".product-notice")).toHaveCount(0);
+  await page.unroute("**/api/library/favorites/*/delete");
+  await card.getByRole("button", { name: "收藏更多操作", exact: true }).click();
+  await page.getByRole("menuitem", { name: "移除收藏", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "请确认", exact: true })
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await expect(toast.getByText("已移除", { exact: true })).toBeVisible();
+  await expect(toast.getByRole("alert")).toHaveCount(0);
+  await expect(toast).toHaveCount(1);
+  await expect(toast).toHaveCount(0, { timeout: 5000 });
 });

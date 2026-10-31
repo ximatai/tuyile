@@ -7,6 +7,7 @@ import type {
   TemporaryPasswordResult,
 } from "@tuyile/contracts";
 import {
+  useFeedback,
   Button,
   Field,
   Notice,
@@ -46,6 +47,7 @@ export function AdminPage({
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [copied, setCopied] = useState(false);
+  const feedback = useFeedback();
   const state = useSessionState();
   const confirm = useConfirm();
   const leaveState = useRef({ dirty, busy: policyBusy || busy });
@@ -95,7 +97,7 @@ export function AdminPage({
     setSelectedAccount(users.find((user) => user.id === id) ?? null);
     setSelectedId(id);
   }
-  async function action(run: () => Promise<unknown>) {
+  async function action(run: () => Promise<unknown>, successText?: string) {
     setBusy(true);
     setError("");
     setPasswordResult(null);
@@ -107,8 +109,15 @@ export function AdminPage({
       await state.queries.invalidateQueries({
         queryKey: state.key("admin-users"),
       });
+      feedback.success(
+        successText ??
+          (result && typeof result === "object" && "temporaryPassword" in result
+            ? "临时密码已生成"
+            : "已保存"),
+      );
     } catch (e) {
-      setError((e as Error).message);
+      if (createOpen) setError((e as Error).message);
+      else feedback.error((e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -118,7 +127,7 @@ export function AdminPage({
     try {
       await query.fetchNextPage({ throwOnError: true });
     } catch (e) {
-      setError((e as Error).message);
+      feedback.error((e as Error).message);
     } finally {
       setBusy(false);
     }
@@ -236,8 +245,10 @@ export function AdminPage({
           </div>
         </form>
       </Modal>
-      {((!createOpen && error) || query.error) && (
-        <Notice error>{(!createOpen && error) || query.error?.message}</Notice>
+      {((!createOpen && !selectedUser && error) || query.error) && (
+        <Notice error>
+          {(!createOpen && !selectedUser && error) || query.error?.message}
+        </Notice>
       )}
       {!selectedUser && temporaryResult}
       {loading ? (
@@ -343,10 +354,12 @@ export function AdminPage({
                         ))
                       )
                         return;
-                      await action(() =>
-                        api(`/admin/users/${selectedUser.id}/enabled`, {
-                          enabled: !selectedUser.enabled,
-                        }),
+                      await action(
+                        () =>
+                          api(`/admin/users/${selectedUser.id}/enabled`, {
+                            enabled: !selectedUser.enabled,
+                          }),
+                        selectedUser.enabled ? "账号已停用" : "账号已启用",
                       );
                     })();
                 },

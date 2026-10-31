@@ -3589,3 +3589,22 @@ h3 {
 .ant-drawer .favorite-editor { padding: 0; background: transparent; border: 0; margin: 0; max-width: none; }
 .favorite-editor .field { max-width: none; }
 .favorite-library > .page-heading { align-items: center; margin-bottom: 24px; }
+
+.ant-message .operation-feedback {
+  max-width: 560px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px #172f4b14;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.product-notice .ant-alert {
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--surface);
+  border-color: var(--line);
+}
+.product-notice .ant-alert-error {
+  background: #fffafa;
+  border-color: #f0d7d7;
+}

@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { ImageTask, ImageUsage } from "@tuyile/contracts";
 import {
+  useFeedback,
   Card,
   Statistic,
   Progress,
@@ -189,13 +190,13 @@ function Overview({ usage }: { usage: ImageUsage }) {
 }
 
 export function UsagePage({ csrfToken }: { csrfToken: string }) {
+  const feedback = useFeedback();
   const state = useSessionState(),
     api = client(csrfToken);
   const [error, setError] = useState(""),
     [refreshing, setRefreshing] = useState(false);
   const [selected, setSelected] = useState<ImageTask | null>(null);
-  const [actionError, setActionError] = useState(""),
-    [cancelling, setCancelling] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const usageQuery = useQuery({
     queryKey: state.key("usage"),
     queryFn: ({ signal }) =>
@@ -267,15 +268,12 @@ export function UsagePage({ csrfToken }: { csrfToken: string }) {
   async function cancel() {
     if (!task || cancelling) return;
     setCancelling(true);
-    setActionError("");
     try {
       await api(`/images/tasks/${task.id}/cancel`, {});
-      await Promise.all([
-        tasksQuery.refetch({ throwOnError: true }),
-        usageQuery.refetch({ throwOnError: true }),
-      ]);
+      feedback.success("已请求取消");
+      await Promise.all([tasksQuery.refetch(), usageQuery.refetch()]);
     } catch (e) {
-      setActionError((e as Error).message);
+      feedback.error((e as Error).message);
     } finally {
       setCancelling(false);
     }
@@ -350,7 +348,6 @@ export function UsagePage({ csrfToken }: { csrfToken: string }) {
                     className="usage-icon-button"
                     aria-label="查看任务详情"
                     onClick={() => {
-                      setActionError("");
                       setSelected(item);
                     }}
                   >
@@ -434,7 +431,6 @@ export function UsagePage({ csrfToken }: { csrfToken: string }) {
             {task.errorCode && !task.pendingReview && (
               <Notice error>任务未全部完成，已保存的图片仍可查看。</Notice>
             )}
-            {actionError && <Notice error>{actionError}</Notice>}
             {!!task.outputs.length && (
               <div className="usage-result-grid">
                 {task.outputs.map((output) => (

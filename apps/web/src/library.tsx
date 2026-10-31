@@ -12,6 +12,7 @@ import {
   type PromptTemplatesPage,
 } from "@tuyile/contracts";
 import {
+  useFeedback,
   Button,
   Checkbox,
   ChoiceField,
@@ -42,9 +43,10 @@ export function LibraryPage({ mode }: { mode: Mode }) {
     navigate = useNavigate(),
     confirm = useConfirm();
   const [busy, setBusy] = useState(false),
-    [error, setError] = useState(""),
-    [message, setMessage] = useState(""),
-    [selected, setSelected] = useState<string[]>([]),
+    [error, setError] = useState("");
+  const feedback = useFeedback();
+  const notifySuccess = feedback.success;
+  const [selected, setSelected] = useState<string[]>([]),
     [target, setTarget] = useState(""),
     [selectedGroups, setSelectedGroups] = useState<string[]>([]),
     [editing, setEditing] = useState<FavoriteInput | null>(null),
@@ -142,12 +144,13 @@ export function LibraryPage({ mode }: { mode: Mode }) {
     action.current = true;
     setBusy(true);
     setError("");
-    setMessage("");
     try {
       await work();
       return true;
     } catch (e) {
-      setError((e as Error).message);
+      if (editing || (e instanceof ApiError && e.code === "ASSET_REFERENCED"))
+        setError((e as Error).message);
+      else feedback.error((e as Error).message);
       return false;
     } finally {
       action.current = false;
@@ -156,7 +159,6 @@ export function LibraryPage({ mode }: { mode: Mode }) {
   }
   function startFavorite(input: Partial<FavoriteInput>) {
     setError("");
-    setMessage("");
     pendingFavorite.current = null;
     setEditing({
       id: input.id ?? crypto.randomUUID(),
@@ -183,7 +185,13 @@ export function LibraryPage({ mode }: { mode: Mode }) {
       pendingFavorite.current = null;
       setEditing(null);
       await refresh();
-      setMessage("收藏已保存。");
+      notifySuccess(
+        favorites.data?.pages.some((page) =>
+          page.favorites.some((f) => f.id === input.id),
+        )
+          ? "已保存"
+          : "已收藏",
+      );
     });
   }
   async function removeFavorite(id: string) {
@@ -191,6 +199,7 @@ export function LibraryPage({ mode }: { mode: Mode }) {
     await run(async () => {
       await api(`/library/favorites/${id}/delete`, {});
       await refresh();
+      notifySuccess("已移除");
     });
   }
   async function removeAsset(id: string) {
@@ -215,7 +224,7 @@ export function LibraryPage({ mode }: { mode: Mode }) {
       }
       setSelected((old) => old.filter((v) => v !== id));
       await refresh();
-      setMessage("原图已删除。");
+      notifySuccess("原图已删除");
     });
   }
   async function openProjectDraft(
@@ -345,7 +354,7 @@ export function LibraryPage({ mode }: { mode: Mode }) {
       anchor.download = "tuyile-images.zip";
       anchor.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      setMessage("导出文件已准备。");
+      notifySuccess("已准备下载");
     });
   }
   const queryError =
@@ -415,7 +424,6 @@ export function LibraryPage({ mode }: { mode: Mode }) {
       {((!editing && error) || queryError) && (
         <Notice error>{error || queryError?.message}</Notice>
       )}
-      {message && <Notice>{message}</Notice>}
       {references.length > 0 && (
         <div className="library-references">
           <strong>仍在这些位置使用：</strong>

@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useState, useId, type FormEvent } from "react";
 import type { ImagePolicy, ModelCatalogSnapshot } from "@tuyile/contracts";
 import {
+  useFeedback,
   Button,
   Field,
   ChoiceField,
@@ -42,8 +43,8 @@ export function UserPolicyEditor({
   const [modelScope, setModelScope] = useState<"all" | "custom" | null>(null);
   const [draft, setDraft] = useState<ImagePolicy | null>(null);
   const [busy, setBusy] = useState(false),
-    [error, setError] = useState(""),
-    [message, setMessage] = useState("");
+    [error, setError] = useState("");
+  const notifySuccess = useFeedback().success;
   const policy = useQuery({
     queryKey: state.key("image-policy", userId),
     queryFn: ({ signal }) =>
@@ -63,7 +64,6 @@ export function UserPolicyEditor({
       const next = { ...current, ...v };
       setDraft(next);
       onDirtyChange(JSON.stringify(next) !== JSON.stringify(policy.data));
-      setMessage("");
     }
   }
   async function save(e: FormEvent) {
@@ -86,7 +86,7 @@ export function UserPolicyEditor({
       await state.queries.invalidateQueries({ queryKey: state.key("usage") });
       setDraft(null);
       onDirtyChange(false);
-      setMessage("已保存。");
+      notifySuccess("已保存");
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -112,7 +112,6 @@ export function UserPolicyEditor({
           {error || policy.error?.message || catalog.error?.message}
         </Notice>
       )}
-      {message && <Notice>{message}</Notice>}
       {policy.isPending && <p role="status">正在加载配置…</p>}
       {current && (
         <form aria-label="保存用户配置" onSubmit={(e) => void save(e)}>

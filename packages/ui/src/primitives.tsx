@@ -1,5 +1,6 @@
 import {
   useId,
+  useMemo,
   useState,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
@@ -72,10 +73,11 @@ export function UiProvider({ children }: { children: ReactNode }) {
             horizontalItemPaddingSM: "6px 0",
           },
           Drawer: { footerPaddingBlock: 8, footerPaddingInline: 16 },
+          Message: { contentBg: "#fff", contentPadding: "8px 14px" },
         },
       }}
     >
-      <App>{children}</App>
+      <App message={{ top: 60, maxCount: 1 }}>{children}</App>
     </ConfigProvider>
   );
 }
@@ -128,7 +130,7 @@ export function Notice({
         role={error ? "alert" : "status"}
         type={error ? "error" : "info"}
         showIcon
-        description={children}
+        title={children}
       />
     </div>
   );
@@ -250,4 +252,28 @@ export {
 
 export function useNotification() {
   return App.useApp().notification;
+}
+
+/** Transient operation feedback. Persistent state and validation stay with their controls. */
+export function useFeedback() {
+  const { message } = App.useApp();
+  return useMemo(() => {
+    const show = (type: "success" | "error", content: string) => {
+      if (!content.trim()) return;
+      void message.open({
+        key: "operation-feedback",
+        type,
+        content: (
+          <span role={type === "error" ? "alert" : "status"}>{content}</span>
+        ),
+        duration: type === "success" ? 2 : 5,
+        className: "operation-feedback",
+      });
+    };
+    return {
+      success: (content: string) => show("success", content),
+      error: (content: string) => show("error", content),
+      dismiss: () => message.destroy("operation-feedback"),
+    };
+  }, [message]);
 }

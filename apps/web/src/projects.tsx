@@ -5,7 +5,7 @@ import type {
   Project,
   ProjectsPage as ProjectPageResponse,
 } from "@tuyile/contracts";
-import { Button, Field, Notice, useConfirm } from "@tuyile/ui";
+import { useFeedback, Button, Field, Notice, useConfirm } from "@tuyile/ui";
 import { useSessionState } from "./session-state";
 import { client } from "./api";
 import { lazy, Suspense } from "react";
@@ -13,6 +13,7 @@ const CreationPage = lazy(() =>
   import("./creation").then((m) => ({ default: m.CreationPage })),
 );
 export function ProjectsPage({ csrfToken }: { csrfToken: string }) {
+  const feedback = useFeedback();
   const state = useSessionState();
   const confirm = useConfirm();
   const [name, setName] = useState(""),
@@ -47,6 +48,7 @@ export function ProjectsPage({ csrfToken }: { csrfToken: string }) {
       await state.queries.invalidateQueries({
         queryKey: state.key("projects"),
       });
+      feedback.success("项目已创建");
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -69,8 +71,9 @@ export function ProjectsPage({ csrfToken }: { csrfToken: string }) {
       state.editors.delete(project.id);
       state.creationDrafts.delete(project.id);
       await state.queries.invalidateQueries({ queryKey: state.key() });
+      feedback.success("项目已删除");
     } catch (e) {
-      setError((e as Error).message);
+      feedback.error((e as Error).message);
     } finally {
       setBusy(false);
     }

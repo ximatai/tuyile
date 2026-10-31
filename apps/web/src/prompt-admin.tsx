@@ -8,6 +8,7 @@ import {
   type ManagedPromptTemplatesPage,
 } from "@tuyile/contracts";
 import {
+  useFeedback,
   Button,
   Checkbox,
   Drawer,
@@ -23,6 +24,7 @@ import { ApiError, client } from "./api";
 import { useSessionState } from "./session-state";
 
 export function PromptAdminPage() {
+  const feedback = useFeedback();
   const state = useSessionState(),
     api = client(state.session.csrfToken),
     confirm = useConfirm();
@@ -116,6 +118,7 @@ export function PromptAdminPage() {
           queryKey: state.key("prompt-templates"),
         }),
       ]);
+      feedback.success("已保存");
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "保存失败，请重试。");
     } finally {
