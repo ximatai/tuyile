@@ -71,10 +71,17 @@ export function PromptComposer({
       ref={assistTrigger}
       className={`prompt-composer ${compact ? "prompt-composer-compact" : ""}`}
     >
-      <label className="field" htmlFor={id}>
-        <span className={compact ? "sr-only" : "prompt-composer-heading"}>
-          {label}
-        </span>
+      <div className="field">
+        {compact ? (
+          <label className="sr-only" htmlFor={id}>
+            {label}
+          </label>
+        ) : (
+          <div className="field-heading prompt-composer-heading-row">
+            <label htmlFor={id}>{label}</label>
+            <PromptFavorite prompt={value} />
+          </div>
+        )}
         <Input.TextArea
           ref={textarea}
           id={id}
@@ -88,12 +95,7 @@ export function PromptComposer({
           maxLength={12000}
           placeholder="描述主体、场景、光线、构图和关键细节"
         />
-      </label>
-      {!compact && (
-        <div className="prompt-save-current">
-          <PromptFavorite prompt={value} />
-        </div>
-      )}
+      </div>
       {compact ? (
         <Popover
           trigger="click"

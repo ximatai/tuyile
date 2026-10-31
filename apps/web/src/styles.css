@@ -2379,6 +2379,19 @@ h3 {
 .prompt-composer .field {
   margin-bottom: 0;
 }
+.prompt-composer .prompt-composer-heading-row {
+  align-items: center;
+}
+.prompt-composer-heading-row .prompt-bookmark {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  padding: 5px;
+  flex-shrink: 0;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+}
 .prompt-shortcuts {
   display: flex;
   flex-wrap: wrap;
@@ -2440,9 +2453,6 @@ h3 {
 .agent-compose .prompt-shortcuts .button {
   height: 28px;
   min-height: 28px;
-}
-.agent-compose .prompt-composer > .field > span {
-  font-size: 12px;
 }
 
 .back,
@@ -3592,9 +3602,6 @@ h3 {
 .prompt-picker-filters.single-filter { grid-template-columns: 1fr; }
 
 .library-prompt-search { max-width: 360px; margin-bottom: 16px; }
-.prompt-composer { position: relative; }
-.prompt-save-current { position: absolute; right: 0; top: -4px; }
-.prompt-save-current .button { width: 28px; height: 28px; padding: 5px; }
 .prompt-picker-item { position: relative; padding-right: 38px; }
 .prompt-picker-item > span { position: absolute; right: 4px; top: 7px; }
 .prompt-picker-item > span { opacity: 0; }
