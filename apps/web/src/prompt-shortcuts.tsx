@@ -80,6 +80,7 @@ export function PromptShortcuts({
     ).values(),
   ];
   const groups = query.data?.pages[0]?.groups ?? [];
+  const showGroups = groups.length > 1 || group !== undefined;
   useEffect(() => {
     const timer = setTimeout(() => setTerm(search.trim()), 250);
     return () => clearTimeout(timer);
@@ -133,7 +134,6 @@ export function PromptShortcuts({
         placement="leftTop"
         open={open}
         onOpenChange={toggle}
-        title="选用提示词"
         classNames={{ root: "prompt-picker-popover" }}
         content={
           <div
@@ -156,36 +156,40 @@ export function PromptShortcuts({
               }}
               items={[
                 { key: "favorites", label: "我的收藏" },
-                { key: "recommended", label: "推荐提示词" },
+                { key: "recommended", label: "公共提示词" },
               ]}
             />
-            <div className="prompt-picker-filters">
+            <div
+              className={`prompt-picker-filters${showGroups ? "" : " single-filter"}`}
+            >
               <Input
                 aria-label="搜索提示词"
-                placeholder="搜索标题或内容"
+                placeholder="搜索提示词"
                 prefix={<Search size={14} />}
                 maxLength={100}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
-              <ChoiceField
-                hideLabel
-                label={source === "favorites" ? "收藏分组" : "推荐分类"}
-                value={group === undefined ? "all" : `group:${group}`}
-                onValueChange={(value) =>
-                  setGroup(value === "all" ? undefined : value.slice(6))
-                }
-                options={[
-                  {
-                    value: "all",
-                    label: source === "favorites" ? "全部分组" : "全部分类",
-                  },
-                  ...groups.map((g) => ({
-                    value: `group:${g}`,
-                    label: g || "未分组",
-                  })),
-                ]}
-              />
+              {showGroups && (
+                <ChoiceField
+                  hideLabel
+                  label={source === "favorites" ? "收藏分组" : "公共分类"}
+                  value={group === undefined ? "all" : `group:${group}`}
+                  onValueChange={(value) =>
+                    setGroup(value === "all" ? undefined : value.slice(6))
+                  }
+                  options={[
+                    {
+                      value: "all",
+                      label: source === "favorites" ? "全部分组" : "全部分类",
+                    },
+                    ...groups.map((g) => ({
+                      value: `group:${g}`,
+                      label: g || "未分组",
+                    })),
+                  ]}
+                />
+              )}
             </div>
             <div
               className="prompt-picker-results"
@@ -200,24 +204,27 @@ export function PromptShortcuts({
                     ? "没有匹配的提示词"
                     : source === "favorites"
                       ? "还没有收藏提示词"
-                      : "暂无推荐提示词"}
+                      : "暂无公共提示词"}
                 </p>
               )}
               {items.map((item) => (
                 <article key={item.id} className="prompt-picker-item">
-                  <div className="prompt-picker-item-heading">
-                    <strong>{item.title}</strong>
-                    {item.groupName && (
-                      <span className="hint">{item.groupName}</span>
-                    )}
-                    <Button
-                      type="button"
-                      disabled={choosing}
-                      onClick={() => void choose(item.prompt)}
-                    >
-                      使用
-                    </Button>
-                  </div>
+                  <Button
+                    type="button"
+                    className="prompt-picker-choice"
+                    aria-label={`选用 ${item.title}`}
+                    disabled={choosing}
+                    onClick={() => void choose(item.prompt)}
+                  >
+                    <span className="prompt-picker-item-heading">
+                      <strong>{item.title}</strong>
+                      {item.groupName &&
+                        groups.length > 1 &&
+                        group === undefined && (
+                          <span className="hint">{item.groupName}</span>
+                        )}
+                    </span>
+                  </Button>
                   <Excerpt rows={2}>{item.prompt}</Excerpt>
                 </article>
               ))}

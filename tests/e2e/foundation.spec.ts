@@ -3492,7 +3492,7 @@ test("prompt shortcuts prefer text favorites and browse in place without changin
   await more.click();
   const picker = page.locator(".prompt-picker:visible");
   await expect(
-    picker.getByRole("tab", { name: "推荐提示词", exact: true }),
+    picker.getByRole("tab", { name: "公共提示词", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
   await expect(picker.locator(".prompt-picker-item")).toHaveCount(36);
   await expect(picker.locator(".prompt-picker-item").first()).toContainText(
@@ -3593,14 +3593,18 @@ test("prompt shortcuts prefer text favorites and browse in place without changin
     .locator(".ant-select-dropdown:visible")
     .getByText("A组", { exact: true })
     .click();
-  await picker.getByRole("button", { name: "使用", exact: true }).click();
+  await picker
+    .getByRole("button", { name: "选用 收藏提示1", exact: true })
+    .click();
   const confirm = page.getByRole("dialog", { name: "请确认", exact: true });
   await confirm.getByRole("button", { name: "取消", exact: true }).click();
   await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
     "已有的独立需求",
   );
   await expect(picker).toBeVisible();
-  await picker.getByRole("button", { name: "使用", exact: true }).click();
+  await picker
+    .getByRole("button", { name: "选用 收藏提示1", exact: true })
+    .click();
   await confirm.getByRole("button", { name: "确认", exact: true }).click();
   await expect(picker).toBeHidden();
   await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
