@@ -124,6 +124,37 @@ it("does not retry unknown planning results and does not recharge interrupted wo
     ).rows[0].state,
   ).toBe("unknown");
 });
+it("persists bounded failure diagnostics without changing unknown-result charging or retry", async () => {
+  const { PlanningExecutor, PlanningCallError } = await import("@tuyile/core");
+  const job = await agent.request(f.principal, request());
+  let calls = 0;
+  await new PlanningExecutor(agent, {
+    complete: async () => {
+      calls++;
+      throw new PlanningCallError(
+        "unknown",
+        "PLANNING_RESULT_UNKNOWN",
+        undefined,
+        "PLANNING_DNS_FAILURE",
+      );
+    },
+  }).execute((await agent.claim([]))!, new AbortController().signal);
+  expect(calls).toBe(1);
+  expect(await agent.usage(f.principal)).toMatchObject({ used: 1, held: 0 });
+  expect(
+    (await agent.jobs(f.principal, f.project.id)).find((j) => j.id === job.id),
+  ).toMatchObject({ state: "failed", errorCode: "PLANNING_RESULT_UNKNOWN" });
+  expect(
+    (
+      await f.pool.query(
+        "SELECT state,error_code FROM planning_attempts WHERE job_id=$1",
+        [job.id],
+      )
+    ).rows,
+  ).toEqual([{ state: "unknown", error_code: "PLANNING_DNS_FAILURE" }]);
+  expect(await agent.claim([])).toBeNull();
+  expect(await f.creation.tasks(f.principal, f.project.id)).toEqual([]);
+});
 it("permits one explicit safe 429 retry within the same reservation", async () => {
   const { PlanningExecutor, PlanningCallError } = await import("@tuyile/core");
   await agent.request(f.principal, request());

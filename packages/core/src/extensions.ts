@@ -164,11 +164,23 @@ export class ExtensionService {
     });
   }
 }
+/** Bounded internal diagnostics; never retain upstream messages, URLs or bodies. */
+export type PlanningFailureDiagnostic =
+  | "PLANNING_DNS_FAILURE"
+  | "PLANNING_CONNECT_TIMEOUT"
+  | "PLANNING_CONNECT_REFUSED"
+  | "PLANNING_TLS_FAILURE"
+  | "PLANNING_CONNECTION_LOST"
+  | "PLANNING_RESPONSE_TIMEOUT"
+  | "PLANNING_RESPONSE_READ_FAILED"
+  | "PLANNING_RESPONSE_JSON_INVALID"
+  | "PLANNING_TRANSPORT_FAILED";
 export class PlanningCallError extends Error {
   constructor(
     readonly kind: "rejected" | "unknown",
     readonly code: string,
     readonly status?: number,
+    readonly diagnosticCode?: PlanningFailureDiagnostic,
   ) {
     super(code);
   }

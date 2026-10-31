@@ -42,7 +42,7 @@ export class PlanningExecutor {
             dispatch.attemptId,
             call.kind,
             undefined,
-            call.code,
+            call.diagnosticCode ?? call.code,
           );
           if (
             call.kind === "rejected" &&
