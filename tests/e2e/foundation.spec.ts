@@ -961,6 +961,9 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   await expect(reopened.getByRole("tooltip")).toBeHidden();
   await expect(quotaTrigger).toBeFocused();
   await quotaTrigger.click();
+  await reopened.getByRole("button", { name: "关闭额度详情", exact: true }).click();
+  await expect(quotaTrigger).toBeFocused();
+  await expect(quotaTrigger).toHaveAttribute("aria-expanded", "false");
   await reopened.getByRole("tab", { name: "Agent", exact: true }).click();
   await expect(reopened.getByRole("tooltip")).toBeHidden();
   await reopened.getByRole("tab", { name: "直接创作", exact: true }).click();

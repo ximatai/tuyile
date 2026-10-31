@@ -3697,3 +3697,18 @@ h3 {
 .prompt-picker-item > span { opacity: 0; }
 .prompt-picker-item:hover > span, .prompt-picker-item:focus-within > span { opacity: 1; }
 .library-heading-actions .library-prompt-search { width: 260px; margin-bottom: 0; }
+
+.header-usage-popover .header-usage-close.ant-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  color: var(--muted);
+}
+.header-usage-popover .usage-summary h2 {
+  padding-right: 28px;
+}

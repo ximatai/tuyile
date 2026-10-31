@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ComponentRef } from "react";
+import { X } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import type { ImageUsage } from "@tuyile/contracts";
@@ -18,11 +19,14 @@ export function HeaderUsage({ csrfToken }: { csrfToken: string }) {
     refetchInterval: 1500,
   });
   useEffect(() => setOpen(false), [pathname]);
+  function close() {
+    setOpen(false);
+    trigger.current?.focus();
+  }
   function escape(event: React.KeyboardEvent) {
     if (event.key === "Escape") {
       event.stopPropagation();
-      setOpen(false);
-      trigger.current?.focus();
+      close();
     }
   }
   return (
@@ -34,6 +38,14 @@ export function HeaderUsage({ csrfToken }: { csrfToken: string }) {
       classNames={{ root: "header-usage-popover" }}
       content={
         <div onKeyDown={escape}>
+          <Button
+            type="button"
+            className="header-usage-close"
+            aria-label="关闭额度详情"
+            onClick={close}
+          >
+            <X size={16} />
+          </Button>
           {query.error && <p role="alert">额度暂时无法更新</p>}
           {query.data && <UsageSummary usage={query.data} />}
           <Link to="/usage" onClick={() => setOpen(false)}>
