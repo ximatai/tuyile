@@ -634,7 +634,6 @@ form {
 }
 .usage-summary {
   margin: 22px 0;
-  border-top: 1px solid var(--line);
   padding-top: 20px;
 }
 .usage-numbers {
@@ -3778,4 +3777,72 @@ h3 {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface);
+}
+
+.quota-visual {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin: 20px 0;
+}
+.quota-unlimited {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  background: var(--focus-soft);
+  color: var(--brand-blue);
+  display: grid;
+  place-items: center;
+}
+.quota-ring-value {
+  display: block;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.quota-ring-value small {
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.quota-image-counts {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.quota-image-counts strong { color: var(--ink); }
+.quota-unlimited-label { font-size: 18px; }
+.quota-accessible-available {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+.quota-meter { margin-top: 12px; }
+.quota-meter > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.quota-reset {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 12px 0 8px;
+}
+.quota-billing-help.ant-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  color: var(--muted);
 }
