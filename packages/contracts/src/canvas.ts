@@ -1,4 +1,7 @@
 import { z } from "zod";
+// Fits 1000 nodes with 4000-character text, including six-byte JSON escapes,
+// metadata and placements. Keep the reverse proxy limit at least this large.
+export const CANVAS_REQUEST_MAX_BYTES = 25 * 1024 * 1024;
 const coordinate = z.number().finite().min(-100000).max(100000);
 export const canvasNode = z
   .object({

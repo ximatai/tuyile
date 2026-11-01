@@ -27,6 +27,7 @@ import {
   createProjectInput,
   id,
   publishDemoInput,
+  CANVAS_REQUEST_MAX_BYTES,
   type SessionView,
 } from "@tuyile/contracts";
 import { AppError, type Workbench, type Store } from "@tuyile/core";
@@ -84,10 +85,11 @@ export function createApp(
   });
   app.use("/api/*", async (c, next) =>
     bodyLimit({
-      maxSize:
-        c.req.path.startsWith("/api/model-admin/") ||
-        c.req.path.startsWith("/api/agent/") ||
-        /^\/api\/projects\/[^/]+\/(canvas|draft)/.test(c.req.path)
+      maxSize: /^\/api\/projects\/[^/]+\/canvas(?:\/copy)?$/.test(c.req.path)
+        ? CANVAS_REQUEST_MAX_BYTES
+        : c.req.path.startsWith("/api/model-admin/") ||
+            c.req.path.startsWith("/api/agent/") ||
+            /^\/api\/projects\/[^/]+\/(canvas|draft)/.test(c.req.path)
           ? 1024 * 1024
           : c.req.path === "/api/images/uploads"
             ? 20 * 1024 * 1024

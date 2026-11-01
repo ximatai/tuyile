@@ -13,6 +13,7 @@ server {
     ssl_protocols TLSv1.2 TLSv1.3;
     server_tokens off;
     access_log off;
+    # Must cover CANVAS_REQUEST_MAX_BYTES (25 MiB) as well as image uploads.
     client_max_body_size 25m;
 
     location / {
