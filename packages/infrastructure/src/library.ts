@@ -219,7 +219,7 @@ class PgLibraryRepository
     await this.auth(this.c, p, false, false);
     return (
       await this.c.query(
-        "SELECT id,mime,width,height,bytes,created_at,task_id FROM image_assets WHERE workspace_id=$1 AND state='ready' ORDER BY created_at DESC,id LIMIT 51 OFFSET $2",
+        "SELECT id,mime,width,height,bytes,created_at,task_id,demo_template_id FROM image_assets WHERE workspace_id=$1 AND state='ready' ORDER BY created_at DESC,id LIMIT 51 OFFSET $2",
         [p.workspaceId, offset],
       )
     ).rows.map((r) => ({
@@ -229,7 +229,7 @@ class PgLibraryRepository
       height: r.height,
       bytes: Number(r.bytes),
       createdAt: r.created_at.toISOString(),
-      origin: r.task_id ? "generated" : "upload",
+      origin: r.demo_template_id ? "demo" : r.task_id ? "generated" : "upload",
     }));
   }
   async favorites(
@@ -353,6 +353,8 @@ class PgLibraryRepository
    UNION ALL SELECT 'agent',j.id,'Agent 对话与计划',j.project_id FROM agent_references r JOIN planning_jobs j ON j.id=r.job_id WHERE r.workspace_id=$1 AND r.asset_id=$2
    UNION ALL SELECT 'favorite',f.id,f.title,NULL::uuid FROM library_favorites f WHERE f.workspace_id=$1 AND f.asset_id=$2
    UNION ALL SELECT 'task',d.id,'依赖此图片的步骤',d.project_id FROM image_outputs o JOIN image_tasks d ON d.depends_on=o.task_id WHERE o.workspace_id=$1 AND o.asset_id=$2 AND o.ordinal=0 AND (d.state IN ('queued','running') OR d.pending_review)
+   UNION ALL SELECT 'demo',d.project_id,'示例创作记录',d.project_id FROM demo_projects d WHERE d.workspace_id=$1 AND d.images @> jsonb_build_array(jsonb_build_object('assetId',$2::uuid))
+   UNION ALL SELECT 'demo',t.template_id,'新用户示例模板',NULL::uuid FROM demo_template_assets t WHERE t.workspace_id=$1 AND t.asset_id=$2
    LIMIT 50`,
         [p.workspaceId, id],
       )

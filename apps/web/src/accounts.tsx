@@ -1,3 +1,4 @@
+import { DemoRetry, DemoTemplateManager } from "./demo";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useSessionState } from "./session-state";
 import { useState, useEffect, useRef, type FormEvent } from "react";
@@ -157,6 +158,9 @@ export function AdminPage({
         仅展示本次，请复制交给 {passwordResult.user.username}。24
         小时内有效，登录后必须修改。
       </p>
+      {passwordResult.demo?.state === "failed" && (
+        <Notice error>账号已创建，示例初始化未完成；用户登录后可重试。</Notice>
+      )}
       <div className="actions">
         <Button
           onClick={() => {
@@ -199,6 +203,7 @@ export function AdminPage({
           <Plus size={16} />
           新增用户
         </Button>
+        <DemoTemplateManager />
       </div>
       <Modal
         title="新增用户"
@@ -384,6 +389,7 @@ export function AdminPage({
           <>
             {error && <Notice error>{error}</Notice>}
             {passwordResult?.user.id === selectedId && temporaryResult}
+            <DemoRetry key={selectedUser.id} userId={selectedUser.id} />
             <UserPolicyEditor
               key={selectedUser.id}
               userId={selectedUser.id}

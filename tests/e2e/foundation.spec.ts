@@ -6348,3 +6348,13 @@ test("historical review does not obscure a later successful generation", async (
     ).tasks,
   ).toHaveLength(1);
 });
+
+test("new users receive a private demo, activate normally and remain restricted across menus and APIs", async ({
+  page,
+}) => {
+  test.setTimeout(150000);
+  await login(page);
+  await (
+    await import("../demo-browser-flow")
+  ).verifyDemoOnboarding(page, "http://127.0.0.1:5180", "e2e");
+});

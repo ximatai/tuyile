@@ -637,13 +637,18 @@ export function LibraryPage({ mode }: { mode: Mode }) {
                 >
                   <img
                     src={`/api/images/assets/${asset.id}/preview`}
-                    alt={`${asset.origin === "upload" ? "上传" : "生成"}图片 ${asset.width} × ${asset.height}`}
+                    alt={`${asset.origin === "demo" ? "示例" : asset.origin === "upload" ? "上传" : "生成"}图片 ${asset.width} × ${asset.height}`}
                     loading="lazy"
                   />
                 </a>
                 <div className="gallery-card-title">
                   <strong>
-                    {asset.origin === "upload" ? "上传素材" : "生成图片"} ·{" "}
+                    {asset.origin === "demo"
+                      ? "示例素材"
+                      : asset.origin === "upload"
+                        ? "上传素材"
+                        : "生成图片"}{" "}
+                    ·{" "}
                     {new Date(asset.createdAt).toLocaleDateString("zh-CN", {
                       month: "2-digit",
                       day: "2-digit",

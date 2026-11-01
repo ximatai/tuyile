@@ -1,3 +1,4 @@
+import { DemoImageDetails } from "../demo";
 import {
   useEffect,
   useRef,
@@ -33,6 +34,7 @@ import type {
   Project,
 } from "@tuyile/contracts";
 import {
+  FileText,
   Upload as UploadIcon,
   MoreHorizontal,
   Expand,
@@ -87,6 +89,7 @@ type ImageNode = Node<
     assetId?: string;
     reference?: (id: string) => void;
     reuse?: () => void;
+    info?: () => void;
   },
   "image"
 >;
@@ -202,7 +205,8 @@ function ImageCard({
   const canvasWidth = useStore((state) => state.width);
   const canvasHeight = useStore((state) => state.height);
   const compact = width * viewport.zoom < 160 || height * viewport.zoom < 48;
-  const actionCount = 2 + Number(!!data.reference) + Number(!!data.reuse);
+  const actionCount =
+    2 + Number(!!data.reference) + Number(!!data.reuse) + Number(!!data.info);
   const toolbarWidth = compact ? 28 : actionCount * 28 + (actionCount - 1) * 4;
   const right = (positionAbsoluteX + width) * viewport.zoom + viewport.x;
   const left = right - 8 - toolbarWidth;
@@ -275,6 +279,15 @@ function ImageCard({
             onOpenChange={setMenuOpen}
             menu={{
               items: [
+                ...(data.info
+                  ? [
+                      {
+                        key: "info",
+                        icon: <FileText size={16} />,
+                        label: "查看示例提示词",
+                      },
+                    ]
+                  : []),
                 { key: "preview", icon: <Expand size={16} />, label: "预览" },
                 {
                   key: "download",
@@ -306,6 +319,7 @@ function ImageCard({
               ],
               onClick: ({ key }) => {
                 setMenuOpen(false);
+                if (key === "info") data.info?.();
                 if (key === "preview") setPreview(true);
                 if (key === "reference") data.reference?.(data.assetId!);
                 if (key === "reuse") data.reuse?.();
@@ -322,6 +336,17 @@ function ImageCard({
           </Dropdown>
         ) : (
           <>
+            {data.info && (
+              <Tooltip title="示例提示词" trigger={["hover", "focus"]}>
+                <Button
+                  type="button"
+                  aria-label="查看示例提示词"
+                  onClick={data.info}
+                >
+                  <FileText size={16} />
+                </Button>
+              </Tooltip>
+            )}
             <Tooltip title="预览" trigger={["hover", "focus"]}>
               <Button
                 type="button"
@@ -466,6 +491,18 @@ function CanvasView({
     confirm = useConfirm(),
     navigate = useNavigate();
   const api = client(state.session.csrfToken);
+  const demo = useQuery({
+    queryKey: state.key("project-demo", projectId),
+    queryFn: ({ signal }) =>
+      api<import("@tuyile/contracts").ProjectDemo | null>(
+        `/projects/${projectId}/demo`,
+        undefined,
+        signal,
+      ),
+  });
+  const [example, setExample] = useState<
+    import("@tuyile/contracts").DemoImage | null
+  >(null);
   const outputs = useQuery({
     queryKey: state.key("canvas-outputs", projectId),
     queryFn: ({ signal }) =>
@@ -560,6 +597,12 @@ function CanvasView({
             data: {
               label: n.label,
               rename: (label: string) => store.renameNode(n.id, label),
+              info: demo.data?.images.some((i) => i.assetId === n.assetId)
+                ? () =>
+                    setExample(
+                      demo.data!.images.find((i) => i.assetId === n.assetId)!,
+                    )
+                : undefined,
               assetId: n.assetId,
               reference: onReference,
               reuse:
@@ -583,7 +626,15 @@ function CanvasView({
             },
           };
         }),
-    [snap.document, snap.selected, onReference, onReuse, tasks, store],
+    [
+      snap.document,
+      snap.selected,
+      onReference,
+      onReuse,
+      tasks,
+      store,
+      demo.data,
+    ],
   );
   const [nodes, setNodes] = useState<Node[]>(display);
   useEffect(
@@ -920,6 +971,7 @@ function CanvasView({
         }
       }}
     >
+      <DemoImageDetails image={example} onClose={() => setExample(null)} />
       {fileDrag && (
         <div className="canvas-file-drop-hint" role="status">
           松开以将图片上传到画布（每批最多20张）

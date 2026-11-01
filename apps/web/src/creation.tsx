@@ -1,3 +1,4 @@
+import { DemoRecords } from "./demo";
 import { useCreationPanel } from "./use-creation-panel";
 import { LoadingState } from "./loading-state";
 import {
@@ -365,6 +366,15 @@ function CreationEditor({
         signal,
       ),
     refetchInterval: 1500,
+  });
+  const demoQuery = useQuery({
+    queryKey: sessionState.key("project-demo", projectId),
+    queryFn: ({ signal }) =>
+      client(csrfToken)<import("@tuyile/contracts").ProjectDemo | null>(
+        `/projects/${projectId}/demo`,
+        undefined,
+        signal,
+      ),
   });
   const usage = usageQuery.data,
     tasks = taskQuery.data?.tasks ?? [];
@@ -749,24 +759,27 @@ function CreationEditor({
             items={[
               {
                 key: "history",
-                label: `任务与结果 · ${tasks.length}`,
+                label: `任务与结果 · ${tasks.length}${demoQuery.data ? " · 示例 3" : ""}`,
                 children: (
-                  <TaskResults
-                    compact
-                    tasks={tasks}
-                    csrfToken={csrfToken}
-                    refresh={() => void refresh()}
-                    onReuse={(task) => void reuse(task)}
-                    onReference={(id) => {
-                      chooseReference(id);
-                      setMode("direct");
-                      requestAnimationFrame(() =>
-                        formRef.current
-                          ?.querySelector<HTMLTextAreaElement>("textarea")
-                          ?.focus(),
-                      );
-                    }}
-                  />
+                  <>
+                    <DemoRecords demo={demoQuery.data} />
+                    <TaskResults
+                      compact
+                      tasks={tasks}
+                      csrfToken={csrfToken}
+                      refresh={() => void refresh()}
+                      onReuse={(task) => void reuse(task)}
+                      onReference={(id) => {
+                        chooseReference(id);
+                        setMode("direct");
+                        requestAnimationFrame(() =>
+                          formRef.current
+                            ?.querySelector<HTMLTextAreaElement>("textarea")
+                            ?.focus(),
+                        );
+                      }}
+                    />
+                  </>
                 ),
               },
             ]}

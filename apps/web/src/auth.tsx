@@ -33,12 +33,26 @@ export function AuthPage() {
         notifySessionChange();
         setDone(true);
       } else {
-        await client()("/auth/login", {
+        const loggedIn = await client()<
+          import("@tuyile/contracts").SessionView
+        >("/auth/login", {
           username: f.get("username"),
           password: f.get("password"),
         });
         notifySessionChange();
-        location.assign("/projects");
+        let destination = "/projects";
+        if (!loggedIn.user.mustChangePassword) {
+          try {
+            const demo = await client(loggedIn.csrfToken)<
+              import("@tuyile/contracts").DemoStatus
+            >("/onboarding/demo", {});
+            if (demo.state === "ready" && demo.shouldOpen && demo.projectId)
+              destination = `/projects/${demo.projectId}`;
+          } catch {
+            /* Login remains successful even if onboarding cannot finish. */
+          }
+        }
+        location.assign(destination);
       }
     } catch (e) {
       setError((e as Error).message);

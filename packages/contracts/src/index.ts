@@ -31,6 +31,7 @@ export interface UserView {
   mustChangePassword?: boolean;
 }
 export interface TemporaryPasswordResult {
+  demo?: import("./demo.js").DemoStatus;
   user: UserView;
   temporaryPassword: string;
   expiresAt: string;
@@ -86,3 +87,4 @@ export * from "./model-catalog.js";
 
 export * from "./image-model-knowledge.js";
 export * from "./project-draft.js";
+export * from "./demo.js";

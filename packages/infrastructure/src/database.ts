@@ -81,6 +81,11 @@ class PgRepository implements Repository {
       "INSERT INTO workspace_members(workspace_id,user_id) VALUES($1,$2)",
       [ws.id, u.id],
     );
+    if (role === "member")
+      await this.c.query(
+        "INSERT INTO demo_provisioning(user_id,template_id) SELECT $1,id FROM demo_templates WHERE active",
+        [u.id],
+      );
     return u;
   }
   async setPassword(id: string, hash: string | null, temporaryUntil?: Date) {
@@ -227,7 +232,7 @@ export async function assertSchema(pool: pg.Pool) {
     "SELECT version FROM schema_migrations ORDER BY version",
   );
   if (
-    result.rows.length !== 23 ||
+    result.rows.length !== 25 ||
     result.rows[0].version !== 1 ||
     result.rows[1].version !== 2 ||
     result.rows[2].version !== 3 ||
@@ -250,7 +255,9 @@ export async function assertSchema(pool: pg.Pool) {
     result.rows[19].version !== 20 ||
     result.rows[20].version !== 21 ||
     result.rows[21].version !== 22 ||
-    result.rows[22].version !== 23
+    result.rows[22].version !== 23 ||
+    result.rows[23].version !== 24 ||
+    result.rows[24].version !== 25
   )
     throw new Error("SCHEMA_VERSION_MISMATCH_RUN_MIGRATIONS");
   const r = await pool.query(

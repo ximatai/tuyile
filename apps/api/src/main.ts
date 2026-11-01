@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import {
   ModelCatalogService,
+  DemoService,
   AdministrationService,
   LibraryService,
   AgentService,
@@ -10,6 +11,7 @@ import {
 } from "@tuyile/core";
 import {
   CompatibleModelDirectory,
+  PgDemoStore,
   creationConfig,
   PrivateImageFiles,
   PgCreationStore,
@@ -64,6 +66,7 @@ const app = createApp(
     creationStore,
     new CompatibleModelDirectory(imageConfig.fakeAllowed),
   ),
+  new DemoService(new PgDemoStore(pool), files),
 );
 // Public app shell contains no private data. API routes always run first.
 app.get("/assets/*", serveStatic({ root: "./apps/web/dist" }));

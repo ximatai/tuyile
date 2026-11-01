@@ -1,3 +1,5 @@
+import { verifyDemoOnboarding } from "../tests/demo-browser-flow";
+import { createDatabase } from "@tuyile/infrastructure";
 import { randomUUID } from "node:crypto";
 import { chromium, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
@@ -611,6 +613,35 @@ try {
     path: ".codex-temp/docker-administration.png",
     animations: "disabled",
   });
+  let templateId: string | undefined;
+  try {
+    await verifyDemoOnboarding(
+      page,
+      "http://127.0.0.1:8792",
+      "docker",
+      (id) => {
+        templateId = id;
+      },
+    );
+  } finally {
+    if (templateId) {
+      const url = new URL(process.env.DATABASE_URL!);
+      if (
+        url.hostname !== "127.0.0.1" ||
+        url.port !== "55441" ||
+        url.pathname !== "/tuyile_docker"
+      )
+        throw new Error("REFUSE_NON_DOCKER_ACCEPTANCE_DATABASE");
+      const { pool } = createDatabase(url.toString());
+      try {
+        await pool.query("UPDATE demo_templates SET active=false WHERE id=$1", [
+          templateId,
+        ]);
+      } finally {
+        await pool.end();
+      }
+    }
+  }
   assert.deepEqual(errors, []);
   console.log(
     "Built Docker Chromium: compact creation header and anchored temporary/pinned panel, canvas batch upload/layout/drop/screenshot paste/reference and keyboard copy/paste/undo, nonce styles, themed button, singleton model lock, confirmation dialog and medium/large desktop layout passed",

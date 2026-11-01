@@ -11,4 +11,5 @@ export * from "./canvas.js";
 export * from "./planning-lane.js";
 export * from "./library.js";
 export * from "./administration.js";
-export * from './model-directory.js';
+export * from "./model-directory.js";
+export * from "./demo.js";

@@ -26,6 +26,7 @@ import {
   changePasswordInput,
   createProjectInput,
   id,
+  publishDemoInput,
   type SessionView,
 } from "@tuyile/contracts";
 import { AppError, type Workbench, type Store } from "@tuyile/core";
@@ -52,6 +53,7 @@ export function createApp(
   library?: LibraryService,
   administration?: AdministrationService,
   catalog?: import("@tuyile/core").ModelCatalogService,
+  demo?: import("@tuyile/core").DemoService,
 ) {
   const app = new Hono<ApiEnv>();
   app.use("*", async (c, next) => {
@@ -92,7 +94,8 @@ export function createApp(
             : c.req.path.startsWith("/api/images/") ||
                 c.req.path.startsWith("/api/image-admin/") ||
                 c.req.path.startsWith("/api/library/") ||
-                c.req.path === "/api/admin/prompts"
+                c.req.path === "/api/admin/prompts" ||
+                c.req.path === "/api/admin/demo-template"
               ? 65536
               : 16384,
       onError: (c) =>
@@ -237,10 +240,16 @@ export function createApp(
   });
   app.post("/api/admin/users", async (c) => {
     const input = createUserInput.parse(await c.req.json());
-    return c.json(
-      await service.createUser(c.get("session").user, input.username),
-      201,
-    );
+    const actor = c.get("session").user;
+    const issued = await service.createUser(actor, input.username);
+    if (demo) {
+      try {
+        issued.demo = await demo.initialize(actor, issued.user.id);
+      } catch {
+        issued.demo = { state: "failed" };
+      }
+    }
+    return c.json(issued, 201);
   });
   app.post("/api/admin/users/:id/reset", async (c) =>
     c.json(
@@ -256,6 +265,51 @@ export function createApp(
     );
     return c.json({ ok: true });
   });
+  if (demo) {
+    app.get("/api/admin/demo-template", async (c) =>
+      c.json(await demo.template(c.get("session").user)),
+    );
+    app.post("/api/admin/demo-template", async (c) =>
+      c.json(
+        await demo.publish(
+          c.get("session").user,
+          publishDemoInput.parse(await c.req.json()),
+        ),
+      ),
+    );
+    app.get("/api/admin/users/:id/demo", async (c) =>
+      c.json(
+        await demo.status(c.get("session").user, id.parse(c.req.param("id"))),
+      ),
+    );
+    app.post("/api/admin/users/:id/demo", async (c) => {
+      z.object({})
+        .strict()
+        .parse(await c.req.json());
+      return c.json(
+        await demo.initialize(
+          c.get("session").user,
+          id.parse(c.req.param("id")),
+        ),
+      );
+    });
+    app.get("/api/onboarding/demo", async (c) =>
+      c.json(await demo.status(c.get("session").user)),
+    );
+    app.post("/api/onboarding/demo", async (c) => {
+      z.object({})
+        .strict()
+        .parse(await c.req.json());
+      return c.json(
+        await demo.initialize(c.get("session").user, undefined, true),
+      );
+    });
+    app.get("/api/projects/:id/demo", async (c) =>
+      c.json(
+        await demo.project(c.get("session").user, id.parse(c.req.param("id"))),
+      ),
+    );
+  }
   if (creation) creationRoutes(app, creation);
   if (administration) administrationRoutes(app, administration);
   if (library && creation) libraryRoutes(app, library, creation);

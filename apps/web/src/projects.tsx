@@ -1,3 +1,4 @@
+import { DemoRetry } from "./demo";
 import { LoadingState } from "./loading-state";
 import { useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -84,6 +85,7 @@ export function ProjectsPage({ csrfToken }: { csrfToken: string }) {
           <h1>我的项目</h1>
         </div>
       </div>
+      <DemoRetry />
       <form className="create-project" onSubmit={create} aria-label="创建项目">
         <Field
           label="项目名称"

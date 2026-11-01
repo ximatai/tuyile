@@ -47,6 +47,10 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
       ).rowCount
     )
       throw new AppError("PROJECT_BUSY", 409);
+    await this.c.query(
+      "DELETE FROM demo_projects WHERE workspace_id=$1 AND project_id=$2",
+      [p.workspaceId, id],
+    );
     await this.c.query("DELETE FROM draft_references WHERE project_id=$1", [
       id,
     ]);
@@ -302,6 +306,10 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
       )
     ).rows[0];
     await this.save(p, r.id, { ...input, revision: 0, placements: [] });
+    await this.c.query(
+      "INSERT INTO demo_projects(workspace_id,project_id,template_id,images) SELECT workspace_id,$3,template_id,images FROM demo_projects WHERE workspace_id=$1 AND project_id=$2",
+      [p.workspaceId, project, r.id],
+    );
     return {
       workspaceId: p.workspaceId,
       id: r.id,
@@ -333,7 +341,7 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
   }
   async sources(p: Principal, project: string): Promise<CanvasSources[]> {
     await this.project(p, project);
-    return (
+    const generated = (
       await this.c.query(
         `SELECT o.asset_id, array_agg(s.asset_id) AS sources FROM canvas_references c
       JOIN image_outputs o ON o.asset_id=c.asset_id JOIN image_output_sources s ON s.output_id=o.id
@@ -341,6 +349,21 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
         [p.workspaceId, project],
       )
     ).rows.map((r) => ({ assetId: r.asset_id, sourceIds: r.sources }));
+    const demo = (
+      await this.c.query(
+        "SELECT images FROM demo_projects WHERE workspace_id=$1 AND project_id=$2",
+        [p.workspaceId, project],
+      )
+    ).rows[0];
+    return [
+      ...generated,
+      ...(demo?.images ?? []).map(
+        (i: { assetId: string; sourceIds: string[] }) => ({
+          assetId: i.assetId,
+          sourceIds: i.sourceIds,
+        }),
+      ),
+    ];
   }
 }
 export class PgCanvasStore implements CanvasStore {

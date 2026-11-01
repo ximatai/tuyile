@@ -29,10 +29,10 @@ export interface GalleryAsset {
   height: number;
   bytes: number;
   createdAt: string;
-  origin: "upload" | "generated";
+  origin: "upload" | "generated" | "demo";
 }
 export interface AssetReference {
-  kind: "canvas" | "draft" | "task" | "agent" | "favorite";
+  kind: "canvas" | "draft" | "task" | "agent" | "favorite" | "demo";
   id: string;
   label: string;
   projectId: string | null;
