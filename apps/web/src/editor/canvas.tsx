@@ -10,6 +10,7 @@ import {
   useState,
   useSyncExternalStore,
   type ComponentRef,
+  type WheelEvent as ReactWheelEvent,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -98,6 +99,17 @@ type ImageNode = Node<
   },
   "image"
 >;
+// Pinch reaches React Flow; editable/overflowing text keeps ordinary wheel scrolling.
+function retainTextScrolling(event: ReactWheelEvent<HTMLElement>) {
+  const target = event.currentTarget;
+  if (
+    !event.ctrlKey &&
+    (target.tagName === "TEXTAREA" ||
+      target.scrollHeight > target.clientHeight ||
+      target.querySelector("input,textarea"))
+  )
+    event.stopPropagation();
+}
 function NodeTitle({
   label,
   kind,
@@ -138,7 +150,8 @@ function NodeTitle({
   return (
     <span
       data-canvas-title
-      className={`canvas-node-title ${className} nodrag nopan nowheel${editing ? " is-editing" : ""}`}
+      className={`canvas-node-title ${className} nodrag nopan${kind === "文案" ? "" : " nowheel"}${editing ? " is-editing" : ""}`}
+      onWheelCapture={kind === "文案" ? retainTextScrolling : undefined}
       onPointerDown={(event) => event.stopPropagation()}
       onDoubleClick={(event) => event.stopPropagation()}
     >
@@ -507,7 +520,8 @@ function TextCard({
         <Input.TextArea
           autoFocus
           aria-label="文案正文"
-          className="nodrag nopan nowheel"
+          className="nodrag nopan"
+          onWheelCapture={retainTextScrolling}
           maxLength={4000}
           value={data.text}
           onChange={(e) => update(e.target.value)}
@@ -537,7 +551,8 @@ function TextCard({
         />
       ) : (
         <div
-          className="canvas-text-body nodrag nopan nowheel"
+          className="canvas-text-body nodrag nopan"
+          onWheelCapture={retainTextScrolling}
           tabIndex={0}
           onDoubleClick={start}
           onKeyDown={(e) => {

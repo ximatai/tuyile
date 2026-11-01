@@ -1,3 +1,4 @@
+import { verifyCanvasGestures } from "../tests/canvas-gesture-flow";
 import { verifyTextCanvas } from "../tests/text-browser-flow";
 import { verifyDemoOnboarding } from "../tests/demo-browser-flow";
 import { createDatabase } from "@tuyile/infrastructure";
@@ -616,6 +617,7 @@ try {
     animations: "disabled",
   });
   await verifyTextCanvas(page);
+  await verifyCanvasGestures(page);
   // The combined acceptance now submits more than six tasks. Respect the real
   // per-minute admission limit before the three-image demo flow; never weaken it.
   await expect

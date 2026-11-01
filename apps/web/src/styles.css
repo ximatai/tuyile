@@ -3947,6 +3947,10 @@ h3 {
   line-height: 1.6;
   user-select: text;
 }
+.canvas-text-card .canvas-text-body,
+.canvas-text-card textarea.ant-input {
+  overscroll-behavior: contain;
+}
 .canvas-text-card textarea.ant-input {
   resize: none;
   background: transparent;
