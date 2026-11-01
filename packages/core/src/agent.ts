@@ -297,6 +297,7 @@ export class AgentService {
         p,
         parsed.projectId,
         parsed.textNodeIds ?? [],
+        parsed.textCanvasRevision,
       );
       if (composeCreativePrompt({ ...parsed, textSources }).length > 12000)
         throw new AppError("PROMPT_TOO_LONG", 400);

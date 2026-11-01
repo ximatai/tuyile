@@ -61,6 +61,7 @@ export function useTextReferences() {
   async function flush() {
     if (!store) throw new Error("画布尚未加载，请稍后再提交。");
     await store.flush();
+    return store.get().revision;
   }
   return { store, register, nodes, ids, sources, issue, setIds, link, flush };
 }

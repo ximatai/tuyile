@@ -53,6 +53,7 @@ export const imageInput = z.object({
   count: z.number().int().min(1).max(16),
   referenceIds: z.array(z.uuid()).max(4).default([]),
   textNodeIds: textNodeIds.optional(),
+  textCanvasRevision: z.number().int().min(0).max(2147483647).optional(),
 });
 export type ImageInput = z.infer<typeof imageInput>;
 export const policyInput = z.object({

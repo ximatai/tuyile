@@ -36,6 +36,7 @@ export class ImageOperations {
         p,
         input.projectId,
         input.textNodeIds ?? [],
+        input.textCanvasRevision,
       );
       if (composeCreativePrompt({ ...input, textSources }).length > 12000)
         throw new AppError("PROMPT_TOO_LONG", 400);

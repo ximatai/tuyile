@@ -16,6 +16,35 @@ export async function verifyTextCanvas(page: Page) {
   const canvas = page.getByRole("region", { name: "项目画布", exact: true });
   await page.getByRole("button", { name: "添加文本", exact: true }).click();
   const editor = canvas.getByRole("textbox", { name: "文案正文", exact: true });
+  async function editFromOtherTab(text: string) {
+    await expect(page.locator(".canvas-status")).toContainText("画布已保存");
+    const other = await page.context().newPage();
+    try {
+      await other.goto(page.url());
+      const surface = other.getByRole("region", {
+        name: "项目画布",
+        exact: true,
+      });
+      await surface.locator(".react-flow__controls-fitview").click();
+      await surface.locator(".canvas-text-body").first().dblclick();
+      await surface.getByLabel("文案正文", { exact: true }).fill(text);
+      await surface
+        .getByLabel("文案正文", { exact: true })
+        .press("ControlOrMeta+Enter");
+      await expect(other.locator(".canvas-status")).toContainText("画布已保存");
+    } finally {
+      await other.close();
+    }
+  }
+  async function reloadPreview() {
+    await canvas.getByRole("button", { name: "重新加载", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "请确认", exact: true });
+    await dialog.getByRole("button", { name: "确认", exact: true }).click();
+    await expect(
+      canvas.getByRole("button", { name: "重新加载", exact: true }),
+    ).toHaveCount(0);
+  }
+
   await editor.fill("山间开业，慢慢相遇。\n<b>按纯文本保留</b>");
   await editor.press("Enter");
   await editor.press("ControlOrMeta+Enter");
@@ -155,6 +184,36 @@ export async function verifyTextCanvas(page: Page) {
   await page
     .getByRole("textbox", { name: "创作需求", exact: true })
     .fill("做一张咖啡海报，采用引用文案。");
+
+  const directLatest = "另一个页面更新后的标题";
+  await editFromOtherTab(directLatest);
+  await expect(canvas.locator(".canvas-text-body").first()).toContainText(
+    "更新后的标题",
+  );
+  const rejectedDirect = page.waitForResponse(
+    (r) =>
+      r.url().endsWith("/api/images/tasks") && r.request().method() === "POST",
+  );
+  await page.getByRole("button", { name: "提交图片任务", exact: true }).click();
+  const staleDirect = await rejectedDirect;
+  expect(staleDirect.status()).toBe(409);
+  expect((await staleDirect.json()).error.code).toBe("TEXT_REFERENCE_CONFLICT");
+  expect(
+    (
+      await (
+        await page.request.get(
+          apiUrl(`/api/images/tasks?projectId=${projectId}`),
+        )
+      ).json()
+    ).tasks,
+  ).toHaveLength(0);
+  await reloadPreview();
+  await expect(canvas.locator(".canvas-text-body").first()).toContainText(
+    directLatest,
+  );
+  await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
+    "做一张咖啡海报，采用引用文案。",
+  );
   const sent = page.waitForResponse(
     (r) =>
       r.url().endsWith("/api/images/tasks") && r.request().method() === "POST",
@@ -165,7 +224,7 @@ export async function verifyTextCanvas(page: Page) {
   const task = await response.json();
   expect(task.textSources.map((s: { text: string }) => s.text)).toEqual([
     "一杯拿铁，一段山间时光。",
-    "更新后的标题",
+    directLatest,
   ]);
   await expect
     .poll(
@@ -262,6 +321,32 @@ export async function verifyTextCanvas(page: Page) {
   ).toBeEnabled();
   expect(unintended).toEqual([]);
   page.off("request", track);
+
+  const agentLatest = "Agent 发送前的最新标题";
+  await editFromOtherTab(agentLatest);
+  const rejectedAgent = page.waitForResponse(
+    (r) =>
+      r.url().endsWith("/api/agent/planning") &&
+      r.request().method() === "POST",
+  );
+  await page.getByRole("button", { name: "生成计划", exact: true }).click();
+  const staleAgent = await rejectedAgent;
+  expect(staleAgent.status()).toBe(409);
+  expect((await staleAgent.json()).error.code).toBe("TEXT_REFERENCE_CONFLICT");
+  expect(
+    (
+      await (
+        await page.request.get(apiUrl(`/api/agent/jobs?projectId=${projectId}`))
+      ).json()
+    ).jobs,
+  ).toHaveLength(0);
+  await reloadPreview();
+  await expect(canvas.locator(".canvas-text-body").first()).toContainText(
+    agentLatest,
+  );
+  await expect(
+    page.getByLabel("告诉 Agent 你的想法", { exact: true }),
+  ).toHaveValue("用引用文案设计咖啡海报，直接给出一个方案。");
   const planning = page.waitForResponse(
     (r) =>
       r.url().endsWith("/api/agent/planning") &&
@@ -271,7 +356,13 @@ export async function verifyTextCanvas(page: Page) {
   const planned = await planning;
   expect(planned.ok()).toBe(true);
   const job = await planned.json();
-  expect(job.textSources).toEqual(task.textSources);
+  const latestSources = task.textSources.map(
+    (source: { nodeId: string; text: string }) =>
+      source.nodeId === saved.document.nodes[0].id
+        ? { ...source, text: agentLatest }
+        : source,
+  );
+  expect(job.textSources).toEqual(latestSources);
   await page.getByRole("button", { name: "确认执行", exact: true }).waitFor();
   await canvas.locator(".canvas-text-body").first().dblclick();
   await editor.fill("下一次才使用的新文案");
@@ -285,7 +376,7 @@ export async function verifyTextCanvas(page: Page) {
   const confirmed = await confirming;
   expect(confirmed.ok()).toBe(true);
   const { tasks: confirmedTasks } = await confirmed.json();
-  expect(confirmedTasks[0].textSources).toEqual(task.textSources);
+  expect(confirmedTasks[0].textSources).toEqual(latestSources);
   await expect
     .poll(
       async () =>

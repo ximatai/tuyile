@@ -53,6 +53,7 @@ it("resolves ordered same-project text once, freezes actual provider input, and 
   const input = imageInput.parse({
     ...f.input(),
     textNodeIds: [b, a],
+    textCanvasRevision: revision,
     textSources: [{ nodeId: a, title: "forged", text: "forged" }],
   });
   const task = await f.creation.submit(f.principal, input);
@@ -65,6 +66,7 @@ it("resolves ordered same-project text once, freezes actual provider input, and 
   expect((await f.creation.submit(f.principal, input)).id).toBe(task.id);
   const next = await f.creation.submit(f.principal, {
     ...input,
+    textCanvasRevision: revision,
     requestKey: randomUUID(),
   });
   expect(next.textSources?.[1].text).toBe("已修改");
@@ -74,7 +76,11 @@ it("resolves ordered same-project text once, freezes actual provider input, and 
   );
   const before = await f.creation.usage(f.principal);
   await expect(
-    f.creation.submit(f.principal, { ...input, requestKey: randomUUID() }),
+    f.creation.submit(f.principal, {
+      ...input,
+      textCanvasRevision: revision,
+      requestKey: randomUUID(),
+    }),
   ).rejects.toMatchObject({ code: "TEXT_REFERENCE_UNAVAILABLE" });
   expect((await f.creation.usage(f.principal)).held).toBe(before.held);
   const actual: string[] = [];
@@ -109,7 +115,13 @@ it("rejects other-project/empty text and overlong combinations without reserving
     { textNodeIds: [b], prompt: "p".repeat(10000) },
   ]) {
     await expect(
-      f.creation.submit(f.principal, f.input(extra)),
+      f.creation.submit(
+        f.principal,
+        f.input({
+          ...extra,
+          textCanvasRevision: "projectId" in extra ? 0 : revision,
+        }),
+      ),
     ).rejects.toMatchObject({
       code:
         "prompt" in extra ? "PROMPT_TOO_LONG" : "TEXT_REFERENCE_UNAVAILABLE",
@@ -128,11 +140,15 @@ it("uses immutable planning text through plan revision/confirmation after source
       model: "test-planner",
     }),
   );
-  const { count, ...spec } = f.input({ textNodeIds: [a, b] });
+  const { count, ...spec } = f.input({
+    textNodeIds: [a, b],
+    textCanvasRevision: revision,
+  });
   const job = await agent.request(f.principal, spec);
   const work = (await agent.claim([]))!;
   expect(JSON.stringify(work.messages)).toContain("山间开业");
-  const { projectId, requestKey, textNodeIds, ...step } = f.input();
+  const { projectId, requestKey, textNodeIds, textCanvasRevision, ...step } =
+    f.input();
   await new PlanningExecutor(agent, {
     complete: async () => ({
       inputTokens: 1,
@@ -164,4 +180,58 @@ it("uses immutable planning text through plan revision/confirmation after source
     "慢慢相遇",
   ]);
   expect(tasks[0].finalPrompt).toContain("山间开业");
+});
+
+it("rejects stale and missing preview revisions before image/planning reservations, but recovers accepted requests", async () => {
+  await save();
+  const agent = new AgentService(f.creationStore, f.files);
+  await new ExtensionService(f.creationStore).savePlanning(
+    f.principal,
+    planningProviderInput.parse({
+      mode: "fake",
+      baseUrl: "",
+      model: "test-planner",
+    }),
+  );
+  const input = f.input({ textNodeIds: [a], textCanvasRevision: revision });
+  const { count, ...planning } = input;
+  const accepted = await f.creation.submit(f.principal, input);
+  const acceptedJob = await agent.request(f.principal, planning);
+  await save(["新文案", "新副标题"]);
+  const imageHeld = (await f.creation.usage(f.principal)).held;
+  const planningHeld = (await agent.usage(f.principal)).held;
+  for (const textCanvasRevision of [undefined, revision - 1, revision + 1]) {
+    await expect(
+      f.creation.submit(f.principal, {
+        ...input,
+        requestKey: randomUUID(),
+        textCanvasRevision,
+      }),
+    ).rejects.toMatchObject({ code: "TEXT_REFERENCE_CONFLICT" });
+    await expect(
+      agent.request(f.principal, {
+        ...planning,
+        requestKey: randomUUID(),
+        textCanvasRevision,
+      }),
+    ).rejects.toMatchObject({ code: "TEXT_REFERENCE_CONFLICT" });
+  }
+  expect((await f.creation.usage(f.principal)).held).toBe(imageHeld);
+  expect((await agent.usage(f.principal)).held).toBe(planningHeld);
+  expect(await f.creation.tasks(f.principal, f.project.id)).toHaveLength(1);
+  expect(await agent.jobs(f.principal, f.project.id)).toHaveLength(1);
+  expect((await f.creation.submit(f.principal, input)).id).toBe(accepted.id);
+  expect((await agent.request(f.principal, planning)).id).toBe(acceptedJob.id);
+  const updated = await f.creation.submit(f.principal, {
+    ...input,
+    requestKey: randomUUID(),
+    textCanvasRevision: revision,
+  });
+  expect(updated.textSources?.[0].text).toBe("新文案");
+  const updatedJob = await agent.request(f.principal, {
+    ...planning,
+    requestKey: randomUUID(),
+    textCanvasRevision: revision,
+  });
+  expect(updatedJob.textSources?.[0].text).toBe("新文案");
 });

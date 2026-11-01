@@ -192,7 +192,7 @@ export function AgentPanel({
     submitting.current = true;
     setBusy(true);
     setError("");
-    const input = pending ?? {
+    let input = pending ?? {
       projectId,
       requestKey: crypto.randomUUID(),
       prompt,
@@ -213,7 +213,7 @@ export function AgentPanel({
     try {
       if (!pending && input.textNodeIds?.length) {
         if (textRefs.issue) throw new Error(textRefs.issue);
-        await textRefs.flush();
+        input = { ...input, textCanvasRevision: await textRefs.flush() };
       }
       setPending(input);
       submitted = true;
@@ -223,6 +223,8 @@ export function AgentPanel({
       setPending(null);
       await refresh();
     } catch (e) {
+      if (e instanceof ApiError && e.code === "TEXT_REFERENCE_CONFLICT")
+        textRefs.store?.markReferenceConflict(e.message);
       if (!submitted || (e instanceof ApiError && e.code !== "INTERNAL_ERROR"))
         setPending(null);
       setError((e as Error).message);

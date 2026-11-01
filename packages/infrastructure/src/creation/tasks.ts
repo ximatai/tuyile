@@ -8,15 +8,22 @@ import { AppError, ASSET_RESERVE } from "@tuyile/core";
 import type { Principal, ImageInput } from "@tuyile/contracts";
 import { PgCreationContext } from "./context.js";
 export class PgTasksRepository extends PgCreationContext {
-  async resolveTextSources(p: Principal, projectId: string, ids: string[]) {
+  async resolveTextSources(
+    p: Principal,
+    projectId: string,
+    ids: string[],
+    revision?: number,
+  ) {
     await this.auth(this.c, p);
     const row = (
       await this.c.query(
-        "SELECT d.document FROM projects p LEFT JOIN project_documents d ON d.project_id=p.id AND d.workspace_id=p.workspace_id WHERE p.workspace_id=$1 AND p.id=$2 AND p.deleted_at IS NULL FOR UPDATE OF p",
+        "SELECT d.document,coalesce(d.revision,0) AS revision FROM projects p LEFT JOIN project_documents d ON d.project_id=p.id AND d.workspace_id=p.workspace_id WHERE p.workspace_id=$1 AND p.id=$2 AND p.deleted_at IS NULL FOR UPDATE OF p",
         [p.workspaceId, projectId],
       )
     ).rows[0];
     if (!row) throw new AppError("NOT_FOUND", 404);
+    if (ids.length && (revision === undefined || revision !== row.revision))
+      throw new AppError("TEXT_REFERENCE_CONFLICT", 409);
     const nodes = (row.document?.nodes ??
       []) as import("@tuyile/contracts").CanvasNode[];
     return ids.map((id) => {

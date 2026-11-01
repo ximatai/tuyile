@@ -4,7 +4,13 @@ import { toolBinding } from "./extensions.js";
 
 // A plan contains declarative image operations. Only server confirmation admits work.
 export const agentStep = imageInput
-  .omit({ projectId: true, requestKey: true, style: true, textNodeIds: true })
+  .omit({
+    projectId: true,
+    requestKey: true,
+    style: true,
+    textNodeIds: true,
+    textCanvasRevision: true,
+  })
   .extend({
     title: z.string().trim().min(1).max(100),
     tool: toolBinding,

@@ -19,9 +19,10 @@ const auth = JSON.parse(
 const browser = await chromium.launch({ channel: "chromium" });
 const errors: string[] = [];
 try {
-  const page = await browser.newPage({
+  const context = await browser.newContext({
     viewport: { width: 1440, height: 900 },
   });
+  const page = await context.newPage();
   page.on("console", (m) => {
     if (
       m.type() === "error" &&

@@ -41,6 +41,7 @@ export interface TasksRepository {
     p: Principal,
     projectId: string,
     ids: string[],
+    revision?: number,
   ): Promise<import("@tuyile/contracts").TextSource[]>;
   existingAdmission(
     p: Principal,

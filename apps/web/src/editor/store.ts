@@ -162,6 +162,10 @@ export class EditorStore {
       this.past.pop();
     this.update({ canUndo: !!this.past.length, canRedo: !!this.future.length });
   }
+  markReferenceConflict(message: string) {
+    clearTimeout(this.timer);
+    this.update({ conflict: true, error: message });
+  }
   canAddImage(count = 1) {
     if (this.state.conflict)
       throw new Error("请先处理画布保存冲突，再上传图片。");

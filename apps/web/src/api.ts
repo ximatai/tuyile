@@ -4,6 +4,8 @@ const messages: Record<string, string> = {
   DRAFT_CONFLICT: "草稿已在其他页面更新，当前输入已保留。",
   STYLE_CONFLICT: "风格已被修改，请重新打开后编辑。当前输入已保留。",
   STYLE_LIMIT: "最多保存 200 个风格，请先清理不再使用的风格。",
+  TEXT_REFERENCE_CONFLICT:
+    "画布已在其他操作中更新。请在画布中选择‘重新加载’，核对文案预览后再提交；当前创作需求已保留。",
   TEXT_REFERENCE_UNAVAILABLE:
     "引用文案已删除或内容为空，请补充内容或移除引用。",
   PROMPT_TOO_LONG:

@@ -149,3 +149,24 @@ it("does not merge text history across an asynchronous image arrival and prunes 
   expect(store.get().canUndo).toBe(false);
   store.dispose();
 });
+
+it("keeps local edits on a reference version conflict and blocks flush until an explicit reload", async () => {
+  let writes = 0;
+  const store = new EditorStore(
+    { document: emptyCanvas(), revision: 0 },
+    async (input) => {
+      writes++;
+      return { document: input.document, revision: input.revision + 1 };
+    },
+  );
+  const id = store.addText();
+  store.updateText(id, { text: "本地未保存内容" });
+  store.markReferenceConflict("preview changed");
+  await expect(store.flush()).rejects.toThrow("preview changed");
+  expect(writes).toBe(0);
+  expect(store.get().document.nodes[0].text).toBe("本地未保存内容");
+  store.reset({ document: emptyCanvas(), revision: 2 });
+  await store.flush();
+  expect(store.get().conflict).toBe(false);
+  store.dispose();
+});

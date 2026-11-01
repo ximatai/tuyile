@@ -631,7 +631,7 @@ function CreationEditor({
     try {
       if (!pending && input.textNodeIds?.length) {
         if (textRefs.issue) throw new Error(textRefs.issue);
-        await textRefs.flush();
+        input = { ...input, textCanvasRevision: await textRefs.flush() };
       }
       setPending(input);
       submitted = true;
@@ -641,6 +641,8 @@ function CreationEditor({
       setMobile("results");
       void refresh();
     } catch (e) {
+      if (e instanceof ApiError && e.code === "TEXT_REFERENCE_CONFLICT")
+        textRefs.store?.markReferenceConflict(e.message);
       const rejected =
         !submitted || (e instanceof ApiError && e.code !== "INTERNAL_ERROR");
       if (rejected) {
