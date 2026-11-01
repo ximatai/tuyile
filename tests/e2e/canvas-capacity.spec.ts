@@ -1,18 +1,14 @@
 import { test, expect } from "@playwright/test";
-import { readFile } from "node:fs/promises";
+import { loginAdmin } from "./admin-session";
+import { request } from "node:http";
 import { randomUUID } from "node:crypto";
 import { CANVAS_REQUEST_MAX_BYTES, emptyCanvas } from "@tuyile/contracts";
 
 test("large legal text canvases save, edit and copy while request limits stay bounded", async ({
   page,
 }) => {
-  const auth = JSON.parse(await readFile(".codex-temp/e2e-auth.json", "utf8"));
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto("/login");
-  await page.getByLabel("账号", { exact: true }).fill(auth.username);
-  await page.getByLabel("密码", { exact: true }).fill(auth.password);
-  await page.getByRole("button", { name: "登录", exact: true }).click();
-  await page.getByRole("heading", { name: "我的项目", exact: true }).waitFor();
+  await loginAdmin(page);
   const session = await (await page.request.get("/api/auth/me")).json();
   const headers = {
     Origin: "http://127.0.0.1:5180",
@@ -71,21 +67,52 @@ test("large legal text canvases save, edit and copy while request limits stay bo
   expect(copied.document).toEqual(persisted.document);
   await page.reload();
   await expect(first).toHaveText(edited);
-  // The larger allowance is exclusive to save/copy; drafts retain 1 MiB.
-  const draftRejected = await page.request.post(
-    `/api/projects/${project.id}/draft`,
-    { headers, data: input },
-  );
-  expect(draftRejected.status()).toBe(413);
-  const oversized = " ".repeat(CANVAS_REQUEST_MAX_BYTES + 1);
-  for (const path of [url, url + "/copy"]) {
-    // Test the API boundary directly: Vite may surface an early upstream rejection
-    // as EPIPE while it is still forwarding a large body.
-    const rejected = await page.request.post("http://127.0.0.1:8793" + path, {
-      headers,
-      data: oversized,
+  // Exercise the real API's early Content-Length rejection without racing a
+  // large body upload against the server closing the socket (EPIPE/ECONNRESET).
+  async function rejectedSize(path: string, bytes: number) {
+    return new Promise<{
+      status: number | undefined;
+      body: { error: { code: string } };
+    }>((resolve, reject) => {
+      const req = request(
+        "http://127.0.0.1:8793" + path,
+        {
+          method: "POST",
+          agent: false,
+          headers: {
+            "Content-Length": bytes,
+            "Content-Type": "application/json",
+            Expect: "100-continue",
+            Connection: "close",
+          },
+        },
+        async (response) => {
+          try {
+            const chunks = [];
+            for await (const chunk of response) chunks.push(chunk);
+            resolve({
+              status: response.statusCode,
+              body: JSON.parse(Buffer.concat(chunks).toString()),
+            });
+          } catch (error) {
+            reject(error);
+          }
+        },
+      );
+      req.on("error", reject);
+      req.setTimeout(10000, () =>
+        req.destroy(new Error("API did not reject oversized headers")),
+      );
+      req.end();
     });
-    expect(rejected.status()).toBe(413);
-    expect((await rejected.json()).error.code).toBe("BODY_TOO_LARGE");
+  }
+  for (const [path, bytes] of [
+    [`/api/projects/${project.id}/draft`, 1024 * 1024 + 1],
+    [url, CANVAS_REQUEST_MAX_BYTES + 1],
+    [url + "/copy", CANVAS_REQUEST_MAX_BYTES + 1],
+  ] as const) {
+    const rejected = await rejectedSize(path, bytes);
+    expect(rejected.status).toBe(413);
+    expect(rejected.body.error.code).toBe("BODY_TOO_LARGE");
   }
 });

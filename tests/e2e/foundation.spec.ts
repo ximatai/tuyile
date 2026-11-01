@@ -1,5 +1,8 @@
 import { test, expect, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
+import { loginAdmin } from "./admin-session";
+import type { Favorite, PromptTemplatesPage } from "@tuyile/contracts";
+import { ensureTestPlanner } from "../planner-fixture";
 import { randomBytes, randomUUID } from "node:crypto";
 const auth = JSON.parse(
   await readFile(".codex-temp/e2e-auth.json", "utf8"),
@@ -9,11 +12,24 @@ async function login(
   name = auth.username,
   password = auth.password,
 ) {
+  if (name === auth.username && password === auth.password) {
+    await loginAdmin(page);
+    return;
+  }
   await page.goto("/login");
   await page.getByLabel("账号", { exact: true }).fill(name);
   await page.getByLabel("密码", { exact: true }).fill(password);
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await expect(page.getByRole("heading", { name: "我的项目" })).toBeVisible();
+}
+async function testImageSelection(page: Page) {
+  const usage = await (await page.request.get("/api/images/usage")).json();
+  if (!usage.modelOptions) return undefined;
+  const model = usage.modelOptions.find(
+    (choice: any) => choice.modelId === "test-image" && choice.isDefault,
+  );
+  expect(model, "default synthetic image model").toBeTruthy();
+  return model.id as string;
 }
 async function selectCreationPanel(page: Page, mode: "direct" | "agent") {
   const button = page.getByRole("button", {
@@ -532,15 +548,17 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   await expect(
     page.getByRole("combobox", { name: "质量", exact: true }),
   ).toBeEnabled();
-  await page
-    .getByRole("button", { name: "后台执行与计费", exact: true })
-    .click();
-  await expect(
-    page.getByText(
-      "提交后可关闭页面，任务在后台继续。取消可能仍计费；后台中断后不自动续跑，已保存结果会保留。",
-      { exact: true },
-    ),
-  ).toBeVisible();
+  await page.getByRole("button", { name: "生成说明", exact: true }).click();
+  const generationHelp = page.locator(".help-popover:visible");
+  for (const explanation of [
+    "后台执行",
+    "关闭页面不影响任务执行和费用核算",
+    "取消可能计费",
+    "后台中断不自动续跑",
+    "已保存图片保留",
+  ]) {
+    await expect(generationHelp).toContainText(explanation);
+  }
   await page.keyboard.press("Escape");
   await page.getByLabel("创作需求").fill("合成测试：关闭页面后继续执行");
   await expect(
@@ -964,9 +982,13 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   await quotaTrigger.focus();
   await reopened.keyboard.press("Enter");
   await expect(quotaTrigger).toHaveAttribute("aria-expanded", "true");
-  await expect(reopened.getByRole("tooltip")).toBeVisible();
+  await expect(
+    reopened.locator(".header-usage-popover").getByRole("tooltip"),
+  ).toBeVisible();
   await reopened.keyboard.press("Escape");
-  await expect(reopened.getByRole("tooltip")).toBeHidden();
+  await expect(
+    reopened.locator(".header-usage-popover").getByRole("tooltip"),
+  ).toBeHidden();
   await expect(quotaTrigger).toBeFocused();
   await quotaTrigger.click();
   await reopened
@@ -975,10 +997,15 @@ test("background creation survives refresh, page closure and ordinary logout, wi
   await expect(quotaTrigger).toBeFocused();
   await expect(quotaTrigger).toHaveAttribute("aria-expanded", "false");
   await selectCreationPanel(reopened, "agent");
-  await expect(reopened.getByRole("tooltip")).toBeHidden();
+  await expect(
+    reopened.locator(".header-usage-popover").getByRole("tooltip"),
+  ).toBeHidden();
   await selectCreationPanel(reopened, "direct");
   await reopened.setViewportSize({ width: 1920, height: 1080 });
-  await expect(reopened.locator(".react-flow__node-image")).toHaveCount(5);
+  await expect(reopened.locator(".react-flow__node-image")).toHaveCount(6);
+  await expect(
+    reopened.locator(".canvas-image > img[alt='synthetic.png']"),
+  ).toHaveCount(1);
   await expect(
     reopened
       .locator(".canvas-task-history")
@@ -1025,14 +1052,24 @@ test("desktop administration publishes service model pools and preserves version
   await expect(
     page.getByRole("region", { name: "可用模型", exact: true }),
   ).toHaveCount(0);
-  const conversationPoolBox = (await page
-    .getByRole("region", { name: "对话模型池", exact: true })
-    .boundingBox())!;
-  const imagePoolBox = (await page
-    .getByRole("region", { name: "图像生成模型池", exact: true })
-    .boundingBox())!;
-  expect(conversationPoolBox.y).toBeCloseTo(imagePoolBox.y, 0);
-  expect(imagePoolBox.x).toBeGreaterThan(conversationPoolBox.x);
+  await expect(
+    page.getByRole("button", { name: "接入现有配置", exact: true }),
+  ).toHaveCount(0);
+  await expect
+    .poll(() =>
+      page.locator(".model-catalog-grid").evaluate((grid) => {
+        const conversation = grid
+          .querySelector('[aria-label="对话模型池"]')!
+          .getBoundingClientRect();
+        const image = grid
+          .querySelector('[aria-label="图像生成模型池"]')!
+          .getBoundingClientRect();
+        return (
+          Math.abs(conversation.y - image.y) < 0.5 && image.x > conversation.x
+        );
+      }),
+    )
+    .toBe(true);
   await page.getByRole("button", { name: "添加对话模型", exact: true }).click();
   await page.getByRole("button", { name: "获取模型", exact: true }).click();
   await page
@@ -1295,6 +1332,15 @@ test("desktop canvas saves geometry, handles conflicts and never replaces remove
   await imageActions
     .getByRole("button", { name: "复用图片设置", exact: true })
     .click();
+  const reuseConfirmation = page.getByRole("dialog", {
+    name: "请确认",
+    exact: true,
+  });
+  await expect(reuseConfirmation).toContainText("替换当前草稿");
+  await reuseConfirmation
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await expect(reuseConfirmation).toBeHidden();
   await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
     "合成画布图片",
   );
@@ -1484,9 +1530,9 @@ test("desktop canvas saves geometry, handles conflicts and never replaces remove
   expect(response.ok()).toBe(true);
   await page.locator(".react-flow__controls-zoomin").click();
   await expect(page.getByText(/画布已在其他页面修改/)).toBeVisible();
-  await page.getByRole("link", { name: "查看额度", exact: true }).click();
+  await page.getByRole("link", { name: "额度", exact: true }).click();
   await expect(page).toHaveURL(projectUrl);
-  await expect(page.getByText(/未能保存画布/)).toBeVisible();
+  await expect(page.getByText(/未能保存当前修改/)).toBeVisible();
   let passwordCalls = 0;
   await page.route("**/api/auth/password", async (route) => {
     passwordCalls++;
@@ -1582,7 +1628,7 @@ test("desktop canvas saves geometry, handles conflicts and never replaces remove
   expect(finalCopy.document.viewport.zoom).not.toBe(
     earlierCopy.document.viewport.zoom,
   );
-  await expect(page.getByText(/未能保存画布/)).toHaveCount(0);
+  await expect(page.getByText(/未能保存当前修改/)).toHaveCount(0);
   async function checkWorkspaceBounds() {
     await expect
       .poll(() =>
@@ -1897,7 +1943,7 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
   await expect(
     page.getByText("计划正在后台执行", { exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".react-flow__node-image")).toHaveCount(3, {
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(4, {
     timeout: 30000,
   });
   await expect
@@ -1936,7 +1982,7 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
     page.getByRole("button", { name: "步骤 1 图片设置", exact: true }),
   ).toBeEnabled();
   await page.reload();
-  await expect(page.locator(".react-flow__node-image")).toHaveCount(3);
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(4);
   await selectCreationPanel(page, "agent");
   await expect(page.getByText("计划已确认", { exact: true })).toBeVisible();
   await page.setViewportSize({ width: 1920, height: 1080 });
@@ -1949,6 +1995,24 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
       await page.request.get(`/api/images/tasks?projectId=${projectId}`)
     ).json()
   ).tasks;
+  const generatedAssets = completedTasks.flatMap((task: any) =>
+    task.outputs.map((output: any) => output.id),
+  );
+  expect(generatedAssets).toHaveLength(3);
+  await expect
+    .poll(async () => {
+      const saved = await (
+        await page.request.get(`/api/projects/${projectId}/canvas`)
+      ).json();
+      return saved.document.nodes
+        .map((node: any) => node.assetId)
+        .filter((id: string) => generatedAssets.includes(id))
+        .sort();
+    })
+    .toEqual([...generatedAssets].sort());
+  await expect(
+    page.locator(".canvas-image > img[alt='agent-product.png']"),
+  ).toHaveCount(1);
   const dependentTask = completedTasks.find((task: any) => task.count === 1);
   expect(dependentTask.settings.referenceIds).toHaveLength(2);
   await page
@@ -2037,11 +2101,27 @@ test("Gallery reuse, ZIP export, favorites, prompt application and project clean
   await page.getByRole("menuitem", { name: "收藏图片", exact: true }).click();
   await page.getByLabel("收藏标题", { exact: true }).fill("素材测试收藏");
   await page.getByLabel("收藏分组名称", { exact: true }).fill("验收分组");
+  const savingFavorite = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/library/favorites") &&
+      response.request().method() === "POST",
+  );
   await page.getByRole("button", { name: "保存收藏", exact: true }).click();
+  const savedResponse = await savingFavorite;
+  expect(savedResponse.status()).toBe(201);
+  const savedFavorite: Favorite = await savedResponse.json();
+  expect(savedFavorite).toMatchObject({
+    title: "素材测试收藏",
+    groupName: "验收分组",
+    assetId: savedResponse.request().postDataJSON().assetId,
+  });
+  // Business success is persisted state; transient feedback has its own test.
+  const savedFavorites = await page.request.get(
+    "/api/library/favorites?search=素材测试收藏",
+  );
+  expect(savedFavorites.ok()).toBe(true);
+  expect((await savedFavorites.json()).favorites).toEqual([savedFavorite]);
   await expect(page.locator(".ant-drawer:visible")).toHaveCount(0);
-  await expect(
-    page.getByRole("status").filter({ hasText: /^已收藏$/ }),
-  ).toBeVisible();
   await card.getByRole("button", { name: "图片更多操作", exact: true }).click();
   await page.getByRole("menuitem", { name: "删除原图", exact: true }).click();
   await page
@@ -2049,7 +2129,9 @@ test("Gallery reuse, ZIP export, favorites, prompt application and project clean
     .getByRole("button", { name: "确认", exact: true })
     .click();
   await expect(
-    page.getByText(/图片仍被画布、任务、对话或收藏引用/),
+    page.getByText("图片仍被草稿、画布、任务、对话或收藏引用，请先解除引用。", {
+      exact: true,
+    }),
   ).toBeVisible();
   await expect(
     page.getByRole("link", { name: "收藏：素材测试收藏", exact: true }),
@@ -2112,9 +2194,6 @@ test("Gallery reuse, ZIP export, favorites, prompt application and project clean
     template.getByRole("button", { name: "已收藏提示词", exact: true }),
   ).toBeDisabled();
   await expect(page.locator(".ant-drawer:visible")).toHaveCount(0);
-  await expect(
-    page.getByRole("status").filter({ hasText: /^已收藏$/ }),
-  ).toBeVisible();
   const prompt = (await (await page.request.get("/api/library/prompts")).json())
     .prompts[0].prompt;
   await template
@@ -2231,7 +2310,7 @@ test("administration saves bounded execution policies and clearing ended Agent h
   await expect(page.getByText("计划已确认", { exact: true })).toBeVisible();
   const before = await (await page.request.get("/api/agent/usage")).json(),
     imagesBefore = await (await page.request.get("/api/images/usage")).json();
-  await expect(page.locator(".react-flow__node-image")).toHaveCount(3);
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(4);
   await page.getByRole("button", { name: "清空规划对话", exact: true }).click();
   await page
     .getByRole("dialog")
@@ -2245,25 +2324,14 @@ test("administration saves bounded execution policies and clearing ended Agent h
   expect(
     (await (await page.request.get("/api/images/usage")).json()).used,
   ).toBe(imagesBefore.used);
-  await expect(page.locator(".react-flow__node-image")).toHaveCount(3);
-  await page
-    .context()
-    .storageState({ path: ".codex-temp/model-pools-admin-session.json" });
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(4);
 });
 
 test("administrators add a service and users select same-named models from the correct service", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
-  const savedSession = await readFile(
-    ".codex-temp/model-pools-admin-session.json",
-    "utf8",
-  )
-    .then(JSON.parse)
-    .catch(() => null);
-  if (savedSession) await page.context().addCookies(savedSession.cookies);
-  if (!(await page.request.get("/api/auth/me")).ok()) await login(page);
-  else await page.goto("/projects");
+  await login(page);
   await page.goto("/admin/images");
   await page.getByRole("button", { name: "管理服务", exact: true }).click();
   await page.getByRole("button", { name: "新增服务", exact: true }).click();
@@ -2338,9 +2406,24 @@ test("administrators add a service and users select same-named models from the c
     );
     await route.fulfill({ response, json: body });
   });
-  await page.waitForResponse((r) => r.url().endsWith("/api/images/usage"));
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(
+              `/api/projects/${page.url().split("/").at(-1)}/draft`,
+            )
+          ).json()
+        ).document.direct.prompt,
+    )
+    .toBe("Synthetic preserved draft");
+  const refreshedUsage = page.waitForResponse((r) =>
+    r.url().endsWith("/api/images/usage"),
+  );
+  await page.reload();
+  await refreshedUsage;
   await page.getByLabel("图片模型", { exact: true }).click();
-  await page.getByLabel("图片模型", { exact: true }).fill("备用测试服务");
   await page
     .locator(".ant-select-dropdown:visible")
     .getByText("test-image · 备用测试服务", { exact: true })
@@ -2362,16 +2445,37 @@ test("administrators add a service and users select same-named models from the c
       has: page.getByRole("combobox", { name: "尺寸", exact: true }),
     }),
   ).toContainText("768 × 1024");
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(
+              `/api/projects/${page.url().split("/").at(-1)}/draft`,
+            )
+          ).json()
+        ).document.direct.settings?.modelKey,
+    )
+    .toBe(entry.id);
   await page.unroute(usageRoute);
-  await page.waitForResponse((response) =>
+  const restoredUsage = page.waitForResponse((response) =>
     response.url().endsWith("/api/images/usage"),
   );
+  await page.reload();
+  await restoredUsage;
   for (const [name, option] of [
     ["比例", "1:1"],
     ["质量", "标准"],
     ["格式", "PNG"],
   ]) {
-    await page.getByRole("combobox", { name, exact: true }).click();
+    const control = page.getByRole("combobox", { name, exact: true });
+    if (await control.isDisabled()) {
+      await expect(
+        page.locator(".direct-creation .field").filter({ has: control }),
+      ).toContainText(option);
+      continue;
+    }
+    await control.click();
     await page
       .locator(".ant-select-dropdown:visible")
       .locator(".ant-select-item-option-content")
@@ -2672,7 +2776,16 @@ test("usage dashboard summarizes quotas and refreshes task details without a dup
   });
   const storage = page.getByRole("region", { name: "存储空间", exact: true });
   await expect(imageQuota.getByText("不限额", { exact: true })).toBeVisible();
-  await expect(page.getByText("暂无使用记录", { exact: true })).toBeVisible();
+  const before = await (await page.request.get("/api/images/usage")).json();
+  const previousTasks = await (
+    await page.request.get("/api/images/tasks")
+  ).json();
+  if (!previousTasks.tasks.length)
+    await expect(page.getByText("暂无使用记录", { exact: true })).toBeVisible();
+  else
+    await expect(
+      page.locator(".usage-records .ant-table-row").first(),
+    ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "上传的参考图", exact: true }),
   ).toHaveCount(0);
@@ -2695,14 +2808,12 @@ test("usage dashboard summarizes quotas and refreshes task details without a dup
     })
     .png()
     .toBuffer();
-  expect(
-    (
-      await page.request.post("/api/images/uploads", {
-        headers: { ...headers, "Content-Type": "image/png" },
-        data: png,
-      })
-    ).status(),
-  ).toBe(201);
+  const upload = await page.request.post("/api/images/uploads", {
+    headers: { ...headers, "Content-Type": "image/png" },
+    data: png,
+  });
+  expect(upload.status()).toBe(201);
+  const uploadedAsset = await upload.json();
   const submitted = await page.request.post("/api/images/tasks", {
     headers,
     data: {
@@ -2710,9 +2821,10 @@ test("usage dashboard summarizes quotas and refreshes task details without a dup
       requestKey: randomUUID(),
       prompt: "Usage dashboard synthetic image",
       model: "test-image",
+      modelSelectionId: await testImageSelection(page),
       count: 1,
-      width: 256,
-      height: 256,
+      width: 1024,
+      height: 1024,
       quality: "medium",
       format: "png",
       referenceIds: [],
@@ -2720,11 +2832,13 @@ test("usage dashboard summarizes quotas and refreshes task details without a dup
   });
   expect(submitted.status()).toBe(202);
   const records = page.getByRole("region", { name: "使用记录", exact: true });
+  const submittedTask = await submitted.json();
+  const record = records.locator(`tr[data-row-key="${submittedTask.id}"]`);
   await expect(
-    records.getByRole("button", { name: "查看任务详情", exact: true }),
+    record.getByRole("button", { name: "查看任务详情", exact: true }),
   ).toHaveCount(1);
   await expect(records.getByRole("img")).toHaveCount(0);
-  await records
+  await record
     .getByRole("button", { name: "查看任务详情", exact: true })
     .click();
   const drawer = page.getByRole("dialog", { name: "任务详情", exact: true });
@@ -2733,7 +2847,7 @@ test("usage dashboard summarizes quotas and refreshes task details without a dup
   ).toBeVisible();
   await expect(drawer.getByText("已完成", { exact: true })).toBeVisible();
   await expect(
-    drawer.getByRole("img", { name: "已保存图片，256 × 256", exact: true }),
+    drawer.getByRole("img", { name: "已保存图片，1024 × 1024", exact: true }),
   ).toBeVisible();
   await expect(
     drawer.getByRole("link", { name: "下载原图", exact: true }),
@@ -2744,7 +2858,7 @@ test("usage dashboard summarizes quotas and refreshes task details without a dup
   await drawer.getByRole("button", { name: "关闭", exact: true }).click();
   await expect(drawer).toBeHidden();
   await expect(
-    imageQuota.getByText("已生成 1 张", { exact: true }),
+    imageQuota.getByText(`已生成 ${before.used + 1} 张`, { exact: true }),
   ).toBeVisible();
   const policy = await (
     await page.request.get(`/api/image-admin/policies/${session.user.id}`)
@@ -2753,18 +2867,19 @@ test("usage dashboard summarizes quotas and refreshes task details without a dup
     (
       await page.request.post(`/api/image-admin/policies/${session.user.id}`, {
         headers,
-        data: { ...policy, imageLimit: 100 },
+        data: { ...policy, imageLimit: before.used + 100 },
       })
     ).status(),
   ).toBe(200);
   await page.getByRole("button", { name: "刷新额度", exact: true }).click();
   await expect(imageQuota.getByText("99", { exact: true })).toBeVisible();
-  await expect(
-    imageQuota.getByRole("progressbar", {
-      name: "今日图片额度使用比例",
-      exact: true,
-    }),
-  ).toHaveAttribute("aria-valuenow", "1");
+  const percent = await imageQuota
+    .getByRole("progressbar", { name: "今日图片额度使用比例", exact: true })
+    .getAttribute("aria-valuenow");
+  expect(Number(percent)).toBeCloseTo(
+    ((before.used + 1) / (before.used + 100)) * 100,
+    2,
+  );
   await page.getByRole("button", { name: "额度详情", exact: true }).click();
   await expect(page.getByText("今日模型调用", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "额度详情", exact: true }).click();
@@ -2785,8 +2900,16 @@ test("usage dashboard summarizes quotas and refreshes task details without a dup
     page.getByRole("heading", { name: "我的图库", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("img", { name: "上传图片 256 × 256", exact: true }),
+    page.locator(`img[src="/api/images/assets/${uploadedAsset.id}/preview"]`),
   ).toBeVisible();
+  expect(
+    (
+      await page.request.post(`/api/image-admin/policies/${session.user.id}`, {
+        headers,
+        data: policy,
+      })
+    ).ok(),
+  ).toBe(true);
 });
 
 test("prompt library keeps project selection compact and reuses full prompts", async ({
@@ -2808,15 +2931,36 @@ test("prompt library keeps project selection compact and reuses full prompts", a
     expect(response.status()).toBe(201);
     projects.push(await response.json());
   }
+  const promptResponse = await page.request.get("/api/library/prompts");
+  expect(promptResponse.ok()).toBe(true);
+  const { prompts }: PromptTemplatesPage = await promptResponse.json();
+  const prompt = prompts[0]!;
+  // Hold the initial browser read to exercise the loading state deterministically.
+  let releasePrompts!: () => void;
+  const promptLoad = new Promise<void>((resolve) => {
+    releasePrompts = resolve;
+  });
+  await page.route("**/api/library/prompts?**", async (route) => {
+    await promptLoad;
+    await route.continue();
+  });
   await page.getByRole("link", { name: "提示池", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "提示池", exact: true }),
+  ).toBeVisible();
   await expect(page.getByLabel("目标项目", { exact: true })).toHaveCount(0);
-  const card = page.locator(".prompt-card").first();
-  const prompt = (await (await page.request.get("/api/library/prompts")).json())
-    .prompts[0];
-  if (
-    await card.getByRole("button", { name: "收藏提示词", exact: true }).count()
-  )
+  await expect(page.locator(".prompt-card")).toHaveCount(0);
+  releasePrompts();
+  const card = page.locator(".prompt-card").filter({
+    has: page.getByRole("heading", { name: prompt.title, exact: true }),
+  });
+  await expect(card).toBeVisible();
+  if (!prompt.favoriteId)
     await card.getByRole("button", { name: "收藏提示词", exact: true }).click();
+  await expect(
+    card.getByRole("button", { name: "已收藏提示词", exact: true }),
+  ).toBeDisabled();
+  await page.reload();
   await expect(
     card.getByRole("button", { name: "已收藏提示词", exact: true }),
   ).toBeDisabled();
@@ -3299,9 +3443,10 @@ test("task recovery shares details and image actions without automatically gener
       requestKey: randomUUID(),
       prompt: "合成任务：保留完整需求",
       model: "test-image",
+      modelSelectionId: await testImageSelection(page),
       count: 1,
-      width: 256,
-      height: 256,
+      width: 1024,
+      height: 1024,
       quality: "medium",
       format: "png",
       referenceIds: [],
@@ -3356,6 +3501,14 @@ test("task recovery shares details and image actions without automatically gener
   await expect(drawer).toContainText("模型服务繁忙");
   await expect(drawer).not.toContainText("UPSTREAM_RATE_LIMIT");
   await drawer.getByRole("button", { name: "复用设置", exact: true }).click();
+  const replaceRecoveredDraft = page.getByRole("dialog", {
+    name: "请确认",
+    exact: true,
+  });
+  await replaceRecoveredDraft
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await expect(replaceRecoveredDraft).toBeHidden();
   await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
     completed.prompt,
   );
@@ -3420,6 +3573,25 @@ test("custom size expansion reveals both fields in the editor scroll area", asyn
 }) => {
   await page.setViewportSize({ width: 1440, height: 720 });
   await login(page);
+  // Exercise range-capable controls independently of earlier fixed-size catalog edits.
+  await page.route("**/api/images/usage", async (route) => {
+    const response = await route.fetch();
+    const usage = await response.json();
+    await route.fulfill({
+      response,
+      json: {
+        ...usage,
+        capabilities: usage.capabilities.map((cap: any) => ({
+          ...cap,
+          sizes: [],
+        })),
+        modelOptions: usage.modelOptions?.map((model: any) => ({
+          ...model,
+          image: model.image ? { ...model.image, sizes: [] } : undefined,
+        })),
+      },
+    });
+  });
   await page.getByLabel("项目名称", { exact: true }).fill("自定义尺寸滚动验收");
   await page.getByRole("button", { name: "创建项目", exact: true }).click();
   await page
@@ -3595,6 +3767,12 @@ test("style library supports public maintenance and private saved copies without
     .locator(".task-tile-details")
     .getByRole("button", { name: "复用设置", exact: true })
     .click();
+  const replaceStyle = page.getByRole("dialog", {
+    name: "请确认",
+    exact: true,
+  });
+  await replaceStyle.getByRole("button", { name: "确认", exact: true }).click();
+  await expect(replaceStyle).toBeHidden();
   await page.getByRole("button", { name: "编辑风格", exact: true }).click();
   await expect(
     editor.getByRole("button", { name: "保存修改", exact: true }),
@@ -3997,9 +4175,10 @@ test("prompt bookmarks connect public browsing, private editing and protected cr
       requestKey: randomUUID(),
       prompt: `历史任务${suffix}`,
       model: "test-image",
+      modelSelectionId: await testImageSelection(page),
       count: 1,
-      width: 256,
-      height: 256,
+      width: 1024,
+      height: 1024,
       quality: "medium",
       format: "png",
       referenceIds: [],
@@ -4285,6 +4464,7 @@ test("task reuse confirms changes to saved generation parameters even when text 
   const project = await (
     await page.request.post("/api/projects", { headers, data: { name } })
   ).json();
+  const modelSelectionId = await testImageSelection(page);
   const response = await page.request.post("/api/images/tasks", {
     headers,
     data: {
@@ -4292,6 +4472,7 @@ test("task reuse confirms changes to saved generation parameters even when text 
       requestKey: randomUUID(),
       prompt: text,
       model: "test-image",
+      modelSelectionId,
       width: 1024,
       height: 1024,
       count: 1,
@@ -4321,7 +4502,7 @@ test("task reuse confirms changes to saved generation parameters even when text 
     .toMatchObject({
       prompt: text,
       settings: {
-        modelKey: "test-image",
+        modelKey: modelSelectionId ?? "test-image",
         width: 1024,
         height: 1024,
         quality: "medium",
@@ -5589,14 +5770,7 @@ test("collapsed creation panel retains unsaved Agent edits and closes its settin
     Origin: new URL(page.url()).origin,
     "X-CSRF-Token": session.csrfToken,
   };
-  expect(
-    (
-      await page.request.post("/api/image-admin/planning-providers", {
-        headers,
-        data: { mode: "fake", baseUrl: "", model: "collapse-planner" },
-      })
-    ).ok(),
-  ).toBe(true);
+  const conversationModelId = await ensureTestPlanner(page, "collapse-planner");
   const job = await (
     await page.request.post("/api/agent/planning", {
       headers,
@@ -5605,8 +5779,10 @@ test("collapsed creation panel retains unsaved Agent edits and closes its settin
         requestKey: randomUUID(),
         prompt: "合成商品方案",
         model: "test-image",
-        width: 256,
-        height: 256,
+        modelSelectionId: await testImageSelection(page),
+        conversationModelId,
+        width: 1024,
+        height: 1024,
         quality: "medium",
         format: "png",
         referenceIds: [],

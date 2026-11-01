@@ -1017,7 +1017,7 @@ function CreationEditor({
                     title="生成说明"
                     visible={!panelCollapsed && mode === "direct"}
                   >
-                    生图任务是后台执行，关闭页面不影响任务执行和费用核算。
+                    生图任务是后台执行，关闭页面不影响任务执行和费用核算。取消可能计费；后台中断不自动续跑，已保存图片保留。
                   </HelpPopover>
                 </div>
                 {pending && (

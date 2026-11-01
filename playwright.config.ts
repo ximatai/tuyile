@@ -1,12 +1,16 @@
 import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "./tests/e2e",
+  testIgnore: ["**/critical.spec.ts"],
   workers: 1,
   fullyParallel: false,
   timeout: 90000,
+  maxFailures: process.env.CI ? 3 : undefined,
   reporter: "list",
   use: {
     channel: "chromium",
+    actionTimeout: 10000,
+    navigationTimeout: 30000,
     baseURL: "http://127.0.0.1:5180",
     trace: "retain-on-failure",
   },

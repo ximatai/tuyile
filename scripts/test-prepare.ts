@@ -1,7 +1,9 @@
 import { ImageOperations } from "@tuyile/core";
 import { PgCreationStore } from "@tuyile/infrastructure";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, writeFile, rm } from "node:fs/promises";
 import { resetDatabase, testPassword } from "../tests/test-database.js";
+// Never restore cookies from the previous database/session generation.
+await rm(".codex-temp/e2e-admin-session.json", { force: true });
 const db = await resetDatabase();
 const s = await db.service.login("admin", testPassword);
 const p = (await db.service.authenticate(s.token)).user;
