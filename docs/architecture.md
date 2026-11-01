@@ -1,6 +1,6 @@
 # Tuyile 架构设计
 
-更新日期：2026-10-30。本文描述当前实现，业务规则以[产品基线](product-baseline.md)为准，操作与验证命令见[本地开发](development.md)。版本能力与后续方向见[当前能力](delivery-roadmap.md)。
+更新日期：2026-11-01。本文描述当前实现，业务规则以[产品基线](product-baseline.md)为准，操作与验证命令见[本地开发](development.md)。版本能力与后续方向见[当前能力](delivery-roadmap.md)。
 
 ## 1. 目标与首版边界
 

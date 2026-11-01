@@ -4,7 +4,7 @@
 
 ## 独立运行
 
-依赖和隔离地址见 [本地开发](development.md)。当前程序要求 schema 1—13；迁移由 migrator 显式执行，API/Worker 只检查兼容性，运行身份不能修改 schema。普通停止用 `docker compose ... stop api worker`，保留数据库与图片卷；不要用删除卷解决启动问题。
+依赖和隔离地址见 [本地开发](development.md)。当前程序要求 schema 1—25（以[迁移目录](../migrations)及启动校验为准）；迁移由 migrator 显式执行，API/Worker 只检查兼容性，运行身份不能修改 schema。普通停止用 `docker compose ... stop api worker`，保留数据库与图片卷；不要用删除卷解决启动问题。
 
 本地 Docker 使用 `.env.docker`、项目 `tuyile-docker`、数据库 `tuyile_docker`/55441 和应用8792。专用自动测试只使用 `tuyile_test`/55440。其他实例的数据、凭据与后台服务不参与本实例运行或构建。
 
@@ -31,7 +31,7 @@ PUBLIC_APP_ORIGIN=https://tuyile.example docker compose --env-file .env.docker -
 操作顺序：
 
 1. 停止 API 和 Worker，确认本实例没有其他写入者；等待正常关闭，记录需要核验的未知任务。
-2. 用对应 PostgreSQL 版本的 `pg_dump -Fc` 备份完整应用数据库；同时打包私有图片卷，保留所有原件和预览。记录当前 Git/镜像版本、schema版本、文件/归档哈希及备份时间。
+2. 用对应 PostgreSQL 版本的 `pg_dump -Fc` 备份完整应用数据库；同时打包私有图片卷，保留所有原件和预览。示例模板、初始化状态和副本元数据随完整数据库备份，源图及副本原件/预览也必须包含在图片卷中。记录当前 Git/镜像版本、schema版本、文件/归档哈希及备份时间。
 3. 备份目录权限0700、文件0600，放在Git外。主密钥 `APP_MASTER_KEY` 与数据库/运行凭据另行安全保管；不要把它们写入报告或与备份一起公开。恢复配置中的主密钥必须与备份匹配。
 4. 校验备份后再启动原实例。保留上一次已验证备份；轮换前先确认新备份可恢复。
 
