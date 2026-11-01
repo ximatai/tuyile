@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import { loginAdmin } from "./admin-session";
+import type { Favorite, PromptTemplatesPage } from "@tuyile/contracts";
 import { ensureTestPlanner } from "../planner-fixture";
 import { randomBytes, randomUUID } from "node:crypto";
 const auth = JSON.parse(
@@ -2100,11 +2101,27 @@ test("Gallery reuse, ZIP export, favorites, prompt application and project clean
   await page.getByRole("menuitem", { name: "收藏图片", exact: true }).click();
   await page.getByLabel("收藏标题", { exact: true }).fill("素材测试收藏");
   await page.getByLabel("收藏分组名称", { exact: true }).fill("验收分组");
+  const savingFavorite = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/library/favorites") &&
+      response.request().method() === "POST",
+  );
   await page.getByRole("button", { name: "保存收藏", exact: true }).click();
+  const savedResponse = await savingFavorite;
+  expect(savedResponse.status()).toBe(201);
+  const savedFavorite: Favorite = await savedResponse.json();
+  expect(savedFavorite).toMatchObject({
+    title: "素材测试收藏",
+    groupName: "验收分组",
+    assetId: savedResponse.request().postDataJSON().assetId,
+  });
+  // Business success is persisted state; transient feedback has its own test.
+  const savedFavorites = await page.request.get(
+    "/api/library/favorites?search=素材测试收藏",
+  );
+  expect(savedFavorites.ok()).toBe(true);
+  expect((await savedFavorites.json()).favorites).toEqual([savedFavorite]);
   await expect(page.locator(".ant-drawer:visible")).toHaveCount(0);
-  await expect(
-    page.getByRole("status").filter({ hasText: /^已收藏$/ }),
-  ).toBeVisible();
   await card.getByRole("button", { name: "图片更多操作", exact: true }).click();
   await page.getByRole("menuitem", { name: "删除原图", exact: true }).click();
   await page
@@ -2177,9 +2194,6 @@ test("Gallery reuse, ZIP export, favorites, prompt application and project clean
     template.getByRole("button", { name: "已收藏提示词", exact: true }),
   ).toBeDisabled();
   await expect(page.locator(".ant-drawer:visible")).toHaveCount(0);
-  await expect(
-    page.getByRole("status").filter({ hasText: /^已收藏$/ }),
-  ).toBeVisible();
   const prompt = (await (await page.request.get("/api/library/prompts")).json())
     .prompts[0].prompt;
   await template
@@ -2917,15 +2931,36 @@ test("prompt library keeps project selection compact and reuses full prompts", a
     expect(response.status()).toBe(201);
     projects.push(await response.json());
   }
+  const promptResponse = await page.request.get("/api/library/prompts");
+  expect(promptResponse.ok()).toBe(true);
+  const { prompts }: PromptTemplatesPage = await promptResponse.json();
+  const prompt = prompts[0]!;
+  // Hold the initial browser read to exercise the loading state deterministically.
+  let releasePrompts!: () => void;
+  const promptLoad = new Promise<void>((resolve) => {
+    releasePrompts = resolve;
+  });
+  await page.route("**/api/library/prompts?**", async (route) => {
+    await promptLoad;
+    await route.continue();
+  });
   await page.getByRole("link", { name: "提示池", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "提示池", exact: true }),
+  ).toBeVisible();
   await expect(page.getByLabel("目标项目", { exact: true })).toHaveCount(0);
-  const card = page.locator(".prompt-card").first();
-  const prompt = (await (await page.request.get("/api/library/prompts")).json())
-    .prompts[0];
-  if (
-    await card.getByRole("button", { name: "收藏提示词", exact: true }).count()
-  )
+  await expect(page.locator(".prompt-card")).toHaveCount(0);
+  releasePrompts();
+  const card = page.locator(".prompt-card").filter({
+    has: page.getByRole("heading", { name: prompt.title, exact: true }),
+  });
+  await expect(card).toBeVisible();
+  if (!prompt.favoriteId)
     await card.getByRole("button", { name: "收藏提示词", exact: true }).click();
+  await expect(
+    card.getByRole("button", { name: "已收藏提示词", exact: true }),
+  ).toBeDisabled();
+  await page.reload();
   await expect(
     card.getByRole("button", { name: "已收藏提示词", exact: true }),
   ).toBeDisabled();
