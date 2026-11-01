@@ -10,7 +10,7 @@ import { ResultImage } from "./result-image";
 import { TaskDetails, TaskProblem } from "./task-details";
 import { canReuseTask, taskStates as states } from "./task-presentation";
 import { useAdaptivePromptHeight } from "./use-adaptive-prompt-height";
-import { Info, WandSparkles, Bot, Pin } from "lucide-react";
+import { Info, WandSparkles, Bot, Pin, PinOff } from "lucide-react";
 import { composeCreativePrompt } from "@tuyile/contracts";
 import { HelpPopover } from "./interface-help";
 import { PromptComposer } from "./prompt-composer";
@@ -825,7 +825,7 @@ function CreationEditor({
                     aria-pressed={panel.pinned}
                     onClick={panel.togglePin}
                   >
-                    <Pin size={14} />
+                    {panel.pinned ? <Pin size={14} /> : <PinOff size={14} />}
                   </Button>
                 </Tooltip>
               )}

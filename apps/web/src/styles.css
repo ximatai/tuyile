@@ -3849,7 +3849,6 @@ h3 {
 .workspace-shell .creation-layout { position: relative; }
 .workspace-shell .creation-layout.creation-panel-unpinned { grid-template-columns: minmax(0, 1fr) 40px; }
 .creation-panel-unpinned:not(.creation-panel-collapsed) > .creation-panel {
-  position: absolute; inset: 0 0 0 auto; width: clamp(360px, 28.5vw, 440px);
   z-index: 15; box-shadow: -8px 0 24px rgb(30 55 80 / 12%);
 }
 .creation-panel-pin { flex-shrink: 0; width: 28px; height: 28px; padding: 0; }
@@ -3861,8 +3860,8 @@ h3 {
 .creation-tool-rail .button { width: 28px; height: 28px; padding: 0; flex-shrink: 0; }
 .creation-tool-rail .button[aria-pressed="true"] { color: #0062b0; background: #e6f4ff; border-color: #91caff; }
 .workspace-shell .creation-layout:not(.creation-panel-collapsed):not(.creation-panel-unpinned) { grid-template-columns: minmax(0, 1fr) calc(clamp(360px, 28.5vw, 440px) + 40px); }
-.creation-layout:not(.creation-panel-collapsed) > .creation-panel { padding-right: 56px; }
-.creation-panel-unpinned:not(.creation-panel-collapsed) > .creation-panel { width: calc(clamp(360px, 28.5vw, 440px) + 40px); }
+/* Both modes anchor the same fixed-width panel. Only canvas space animates. */
+.creation-layout:not(.creation-panel-collapsed) > .creation-panel { position: absolute; inset: 0 0 0 auto; width: calc(clamp(360px, 28.5vw, 440px) + 40px); padding-right: 56px; }
 .creation-panel-collapsed .creation-panel > * { display: none; }
 
 .workspace-shell .creation-layout:not(.creation-panel-collapsed) > .creation-panel { padding-top: 8px; }

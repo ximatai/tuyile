@@ -5462,6 +5462,13 @@ test("creation panel collapses into a rail without changing viewport or drafts a
     await expect
       .poll(async () => (await panel.boundingBox())!.width)
       .toBeCloseTo(Math.min(440, Math.max(360, width * 0.285)) + 40, 0);
+    await expect
+      .poll(
+        async () =>
+          (await page.locator(".creation-layout").boundingBox())!.width -
+          (await canvas.boundingBox())!.width,
+      )
+      .toBeCloseTo(Math.min(440, Math.max(360, width * 0.285)) + 40, 0);
     const expandedCanvas = (await canvas.boundingBox())!.width;
     const current = (await snapshot()).document.viewport;
     await page
@@ -6006,6 +6013,38 @@ test("creation header is a compact single row and mode switching stays on the to
         expect(box.y).toBeGreaterThanOrEqual(headBox.y - 1);
         expect(box.y + box.height).toBeLessThanOrEqual(
           headBox.y + headBox.height + 1,
+        );
+      }
+      await expect(pin.locator("svg")).toHaveClass(/lucide-pin(?:\s|$)/);
+      // Sample every rendered frame, including the grid's 200ms transition.
+      for (const pinned of [false, true]) {
+        const samples = await header
+          .getByRole("button")
+          .evaluate(async (button) => {
+            const panel = button.closest(".creation-panel")!;
+            const frames: { x: number; width: number; height: number }[] = [];
+            const capture = () => {
+              const { x, width, height } = panel.getBoundingClientRect();
+              frames.push({ x, width, height });
+            };
+            capture();
+            (button as HTMLButtonElement).click();
+            const start = performance.now();
+            do {
+              await new Promise(requestAnimationFrame);
+              capture();
+            } while (performance.now() - start < 300);
+            return frames;
+          });
+        for (const sample of samples) {
+          expect(sample.x).toBeCloseTo(panelBox.x, 0);
+          expect(sample.width).toBeCloseTo(panelBox.width, 0);
+          expect(sample.height).toBeCloseTo(panelBox.height, 0);
+        }
+        const control = header.getByRole("button");
+        await expect(control).toHaveAttribute("aria-pressed", String(pinned));
+        await expect(control.locator("svg")).toHaveClass(
+          pinned ? /lucide-pin(?:\s|$)/ : /lucide-pin-off/,
         );
       }
       await page.screenshot({
