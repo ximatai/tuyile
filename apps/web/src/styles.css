@@ -1066,12 +1066,6 @@ form {
   align-items: center;
   flex-shrink: 0;
 }
-.creation-panel > .ant-tabs {
-  flex-shrink: 0;
-}
-.creation-panel > .ant-tabs .ant-tabs-nav {
-  margin-bottom: 10px;
-}
 .agent-panel {
   display: flex;
   flex: 1;
@@ -1778,12 +1772,6 @@ form {
   .workspace-shell .creation-panel {
     position: relative;
     top: 0;
-  }
-  .agent-panel .agent-clear-history {
-    position: absolute;
-    top: 22px;
-    right: 20px;
-    z-index: 2;
   }
 }
 
@@ -3832,3 +3820,60 @@ h3 {
   overflow-wrap: anywhere;
 }
 .plan-step-content .field { margin: 0; }
+
+.canvas-surface.is-file-drag {
+  outline: 2px solid #0062b0;
+  outline-offset: -2px;
+}
+.canvas-file-drop-hint {
+  position: absolute;
+  inset: 0;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 98 176 / 8%);
+  color: #0062b0;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+/* Collapsing changes only the desktop grid; editors remain mounted. */
+.creation-panel-heading { display: flex; align-items: center; gap: 8px; flex-shrink: 0; height: 28px; margin-bottom: 8px; }
+.workspace-shell .creation-layout { transition: grid-template-columns 200ms ease; }
+.workspace-shell .creation-layout.creation-panel-collapsed { grid-template-columns: minmax(0, 1fr) 40px; }
+.creation-panel-collapsed .creation-panel { padding: 10px 5px; overflow: hidden; }
+.creation-panel-collapsed .creation-panel-heading { justify-content: center; }
+@media (prefers-reduced-motion: reduce) { .workspace-shell .creation-layout { transition: none; } }
+
+.workspace-shell .creation-layout { position: relative; }
+.workspace-shell .creation-layout.creation-panel-unpinned { grid-template-columns: minmax(0, 1fr) 40px; }
+.creation-panel-unpinned:not(.creation-panel-collapsed) > .creation-panel {
+  z-index: 15; box-shadow: -8px 0 24px rgb(30 55 80 / 12%);
+}
+.creation-panel-pin { flex-shrink: 0; width: 28px; height: 28px; padding: 0; }
+
+.creation-panel-control-tip, .creation-panel-control-tip * { pointer-events: none; }
+
+/* IDEA-style tool-window buttons remain reachable in every viewing mode. */
+.creation-tool-rail { position: absolute; inset: 0 0 0 auto; width: 40px; padding: 10px 5px; display: flex; flex-direction: column; gap: 8px; background: #fff; border-left: 1px solid #e4eaf1; z-index: 20; }
+.creation-tool-rail .button { width: 28px; height: 28px; padding: 0; flex-shrink: 0; }
+.creation-tool-rail .button[aria-pressed="true"] { color: #0062b0; background: #e6f4ff; border-color: #91caff; }
+.workspace-shell .creation-layout:not(.creation-panel-collapsed):not(.creation-panel-unpinned) { grid-template-columns: minmax(0, 1fr) calc(clamp(360px, 28.5vw, 440px) + 40px); }
+/* Both modes anchor the same fixed-width panel. Only canvas space animates. */
+.creation-layout:not(.creation-panel-collapsed) > .creation-panel { position: absolute; inset: 0 0 0 auto; width: calc(clamp(360px, 28.5vw, 440px) + 40px); padding-right: 56px; }
+.creation-panel-collapsed .creation-panel > * { display: none; }
+
+.workspace-shell .creation-layout:not(.creation-panel-collapsed) > .creation-panel { padding-top: 8px; }
+.creation-panel-title { flex: 0 1 auto; min-width: 0; margin: 0; font-size: 13px; line-height: 28px; font-weight: 600; }
+
+.creation-panel-heading .button { min-height: 28px; }
+
+/* Quiet title controls; destructive actions belong to the conversation. */
+.creation-panel-heading { gap: 4px; }
+.creation-panel-heading .creation-panel-pin { min-width: 24px; width: 24px; height: 24px; min-height: 24px; border: 0; box-shadow: none; background: transparent; color: var(--muted); }
+.creation-panel-heading .creation-panel-pin[aria-pressed="true"] { color: #0062b0; }
+.creation-panel-heading .creation-panel-pin:hover { background: #e6f4ff; }
+.agent-conversation-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); }
+.agent-conversation-heading .agent-clear-history { border: 0; box-shadow: none; background: transparent; color: var(--muted); padding: 0 6px; }
+.agent-conversation-heading .agent-clear-history:hover:not(:disabled) { color: #0062b0; background: #e6f4ff; }

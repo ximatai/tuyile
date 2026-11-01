@@ -32,6 +32,7 @@ import type {
   Project,
 } from "@tuyile/contracts";
 import {
+  Upload as UploadIcon,
   MoreHorizontal,
   Expand,
   Download,
@@ -54,12 +55,29 @@ import {
   Notice,
   Tooltip,
   useConfirm,
+  Upload,
 } from "@tuyile/ui";
 import { useNavigate } from "react-router-dom";
 import { EditorStore } from "./store";
 import { GenerationFeedback } from "../generation-feedback";
 import { useSessionState } from "../session-state";
 import { client, ApiError } from "../api";
+const canvasClipboardType = "application/x-tuyile-canvas";
+const canvasClipboardPrefix = "Tuyile canvas:";
+function canvasEventTarget(surface: HTMLElement, target: EventTarget | null) {
+  return (
+    target instanceof Element &&
+    surface.contains(target) &&
+    !target.closest(
+      "input,textarea,select,button,a,[contenteditable],[role=dialog],[role=menu],[role=combobox]",
+    )
+  );
+}
+function nativeModifier(event: { metaKey: boolean; ctrlKey: boolean }) {
+  return /Mac|iPhone|iPad/.test(navigator.platform)
+    ? event.metaKey
+    : event.ctrlKey;
+}
 type ImageNode = Node<
   {
     label: string;
@@ -262,6 +280,8 @@ export function CanvasEditor({
   onReuse,
   tasks,
   statusStale,
+  onUpload,
+  uploadBusy,
 }: {
   tasks: ImageTask[];
   projectId: string;
@@ -269,6 +289,8 @@ export function CanvasEditor({
   onSelectionChange?: (assets: { id: string; name: string }[]) => void;
   onReuse?: (task: ImageTask) => void;
   statusStale?: boolean;
+  onUpload: (files: File[]) => void;
+  uploadBusy: boolean;
 }) {
   const state = useSessionState();
   const api = client(state.session.csrfToken);
@@ -301,6 +323,8 @@ export function CanvasEditor({
       onSelectionChange={onSelectionChange}
       onReuse={onReuse}
       statusStale={statusStale}
+      onUpload={onUpload}
+      uploadBusy={uploadBusy}
     />
   ) : (
     <p role="status">正在打开画布…</p>
@@ -314,6 +338,8 @@ function CanvasView({
   onReuse,
   tasks,
   statusStale,
+  onUpload,
+  uploadBusy,
 }: {
   tasks: ImageTask[];
   store: EditorStore;
@@ -322,6 +348,8 @@ function CanvasView({
   onSelectionChange?: (assets: { id: string; name: string }[]) => void;
   onReuse?: (task: ImageTask) => void;
   statusStale?: boolean;
+  onUpload: (files: File[]) => void;
+  uploadBusy: boolean;
 }) {
   const state = useSessionState(),
     snap = useSyncExternalStore(store.subscribe, store.get),
@@ -372,6 +400,33 @@ function CanvasView({
   const spacePressed = useKeyPress("Space");
   const panning = handMode || spacePressed;
   const [operationError, setOperationError] = useState("");
+  const [fileDrag, setFileDrag] = useState(false);
+  function importFiles(files: File[]) {
+    if (!files.length || files.length > 20) {
+      setOperationError("每次可导入 1–20 张图片。");
+      return;
+    }
+    if (uploadBusy) {
+      setOperationError("正在处理上传或提交，请稍后再导入图片。");
+      return;
+    }
+    try {
+      store.canAddImage(files.length);
+    } catch (error) {
+      setOperationError((error as Error).message);
+      return;
+    }
+    setOperationError("");
+    onUpload(files);
+  }
+  function pasteNodes() {
+    try {
+      store.pasteSelection();
+      setOperationError("");
+    } catch (error) {
+      setOperationError((error as Error).message);
+    }
+  }
   const [copyMessage, setCopyMessage] = useState("");
   const [copyBusy, setCopyBusy] = useState(false);
   const copying = useRef(false);
@@ -511,23 +566,13 @@ function CanvasView({
           selected.has(n.parentId ?? "") ? { ...n, parentId: undefined } : n,
         );
     if (action === "copy") {
-      const ids = new Map(
-        old
-          .filter((n) => selected.has(n.id) || selected.has(n.parentId ?? ""))
-          .map((n) => [n.id, crypto.randomUUID()]),
-      );
-      next = [
-        ...old,
-        ...old
-          .filter((n) => ids.has(n.id))
-          .map((n) => ({
-            ...n,
-            id: ids.get(n.id)!,
-            parentId: n.parentId ? ids.get(n.parentId) : undefined,
-            x: n.x + 30,
-            y: n.y + 30,
-          })),
-      ];
+      try {
+        store.duplicateSelection();
+        setOperationError("");
+      } catch (e) {
+        setOperationError((e as Error).message);
+      }
+      return;
     }
     if (action === "group") {
       const picked = old.filter(
@@ -630,9 +675,140 @@ function CanvasView({
 
   return (
     <section
-      className={`canvas-surface${panning ? " is-panning" : ""}`}
+      className={`canvas-surface${panning ? " is-panning" : ""}${fileDrag ? " is-file-drag" : ""}`}
       aria-label="项目画布"
+      tabIndex={0}
+      onDragEnter={(e) => {
+        if (
+          !e.currentTarget.contains(e.target as globalThis.Node) ||
+          !e.dataTransfer.types.includes("Files")
+        )
+          return;
+        e.preventDefault();
+        setFileDrag(true);
+      }}
+      onDragOver={(e) => {
+        if (
+          !e.currentTarget.contains(e.target as globalThis.Node) ||
+          !e.dataTransfer.types.includes("Files")
+        )
+          return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect =
+          uploadBusy || snap.conflict || snap.document.nodes.length >= 1000
+            ? "none"
+            : "copy";
+      }}
+      onDragLeave={(e) => {
+        if (
+          !(e.relatedTarget instanceof window.Node) ||
+          !e.currentTarget.contains(e.relatedTarget)
+        )
+          setFileDrag(false);
+      }}
+      onDrop={(e) => {
+        if (
+          !e.currentTarget.contains(e.target as globalThis.Node) ||
+          !e.dataTransfer.types.includes("Files")
+        )
+          return;
+        e.preventDefault();
+        e.stopPropagation();
+        setFileDrag(false);
+        if (!canvasEventTarget(e.currentTarget, e.target)) return;
+        e.currentTarget.focus({ preventScroll: true });
+        importFiles(Array.from(e.dataTransfer.files));
+      }}
+      onCopy={(e) => {
+        if (
+          e.defaultPrevented ||
+          !canvasEventTarget(e.currentTarget, e.target) ||
+          !store.copySelection()
+        )
+          return;
+        e.preventDefault();
+        e.stopPropagation();
+        const key = store.copiedSelectionKey();
+        e.clipboardData.setData(canvasClipboardType, key);
+        e.clipboardData.setData("text/plain", `${canvasClipboardPrefix}${key}`);
+      }}
+      onPaste={(e) => {
+        if (e.defaultPrevented || !canvasEventTarget(e.currentTarget, e.target))
+          return;
+        const key =
+          e.clipboardData.getData(canvasClipboardType) ||
+          e.clipboardData.getData("text/plain").replace(/^Tuyile canvas:/, "");
+        const files = Array.from(e.clipboardData.files);
+        if (store.matchesCopiedSelection(key)) {
+          e.preventDefault();
+          e.stopPropagation();
+          pasteNodes();
+        } else if (files.length) {
+          e.preventDefault();
+          e.stopPropagation();
+          importFiles(files);
+        }
+      }}
+      onPointerDownCapture={(e) => {
+        if (!canvasEventTarget(e.currentTarget, e.target)) return;
+        e.currentTarget.focus({ preventScroll: true });
+      }}
+      onKeyDown={(e) => {
+        if (
+          e.defaultPrevented ||
+          e.nativeEvent.isComposing ||
+          !canvasEventTarget(e.currentTarget, e.target)
+        )
+          return;
+        const key = e.key.toLowerCase();
+        const mod = e.ctrlKey || e.metaKey;
+        if (e.altKey) return;
+        // Native copy/paste events expose clipboard data without requesting read permissions.
+        if (
+          mod &&
+          !e.shiftKey &&
+          (key === "c" || key === "v") &&
+          nativeModifier(e)
+        ) {
+          if (e.repeat) e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
+        const action =
+          mod && !e.shiftKey
+            ? {
+                a: () => store.selectAll(),
+                c: () => {
+                  store.copySelection();
+                },
+                v: () => store.pasteSelection(),
+                d: () => store.duplicateSelection(),
+                z: () => store.undo(),
+              }[key]
+            : mod && e.shiftKey && key === "z"
+              ? () => store.redo()
+              : !mod && !e.shiftKey && (key === "delete" || key === "backspace")
+                ? () => command("remove")
+                : !mod && !e.shiftKey && key === "escape"
+                  ? () => store.select([])
+                  : undefined;
+        if (!action) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.repeat) return;
+        try {
+          action();
+          setOperationError("");
+        } catch (error) {
+          setOperationError((error as Error).message);
+        }
+      }}
     >
+      {fileDrag && (
+        <div className="canvas-file-drop-hint" role="status">
+          松开以将图片上传到画布（每批最多20张）
+        </div>
+      )}
       <div className="canvas-status" role="status">
         {snap.saving ? "正在保存…" : snap.dirty ? "有未保存修改" : "画布已保存"}{" "}
         · v{snap.revision}
@@ -686,18 +862,6 @@ function CanvasView({
         panActivationKeyCode="Space"
         panOnDrag={[0, 1, 2]}
         onPaneClick={() => store.select([])}
-        onKeyDown={(e) => {
-          if ((e.target as HTMLElement).closest("input,textarea,button"))
-            return;
-          if (e.key === "Delete" || e.key === "Backspace") {
-            e.preventDefault();
-            command("remove");
-          }
-          if ((e.ctrlKey || e.metaKey) && e.key === "z") {
-            e.preventDefault();
-            e.shiftKey ? store.redo() : store.undo();
-          }
-        }}
       >
         <Background gap={20} size={1} />
         <Controls showInteractive={false} />
@@ -710,6 +874,34 @@ function CanvasView({
         </div>
       )}
       <div className="canvas-toolbar" role="toolbar" aria-label="画布操作">
+        <Upload
+          multiple
+          accept="image/png,image/jpeg,image/webp"
+          showUploadList={false}
+          disabled={
+            uploadBusy || snap.conflict || snap.document.nodes.length >= 1000
+          }
+          beforeUpload={(file, files) => {
+            if (file.uid === files[0]?.uid) importFiles(files);
+            return Upload.LIST_IGNORE;
+          }}
+        >
+          <Tooltip title="上传图片到画布" trigger={["hover", "focus"]}>
+            <Button
+              type="button"
+              aria-label="上传图片到画布"
+              loading={uploadBusy}
+              disabled={
+                uploadBusy ||
+                snap.conflict ||
+                snap.document.nodes.length >= 1000
+              }
+            >
+              <UploadIcon size={16} />
+            </Button>
+          </Tooltip>
+        </Upload>
+
         <Tooltip title="选择" trigger={["hover", "focus"]}>
           <Button
             type="button"
@@ -734,7 +926,7 @@ function CanvasView({
           </Button>
         </Tooltip>
 
-        <Tooltip title="撤销" trigger={["hover", "focus"]}>
+        <Tooltip title="撤销（⌘/Ctrl+Z）" trigger={["hover", "focus"]}>
           <Button
             aria-label="撤销"
             disabled={!snap.canUndo}
@@ -743,7 +935,7 @@ function CanvasView({
             <Undo2 size={16} />
           </Button>
         </Tooltip>
-        <Tooltip title="重做" trigger={["hover", "focus"]}>
+        <Tooltip title="重做（⌘/Ctrl+Shift+Z）" trigger={["hover", "focus"]}>
           <Button
             aria-label="重做"
             disabled={!snap.canRedo}
@@ -752,7 +944,7 @@ function CanvasView({
             <Redo2 size={16} />
           </Button>
         </Tooltip>
-        <Tooltip title="复制" trigger={["hover", "focus"]}>
+        <Tooltip title="创建副本（⌘/Ctrl+D）" trigger={["hover", "focus"]}>
           <Button
             aria-label="复制"
             disabled={!snap.selected.length}

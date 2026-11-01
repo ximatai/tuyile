@@ -1,3 +1,4 @@
+import { useCreationPanel } from "./use-creation-panel";
 import { LoadingState } from "./loading-state";
 import {
   ProjectDraftBoundary,
@@ -9,7 +10,7 @@ import { ResultImage } from "./result-image";
 import { TaskDetails, TaskProblem } from "./task-details";
 import { canReuseTask, taskStates as states } from "./task-presentation";
 import { useAdaptivePromptHeight } from "./use-adaptive-prompt-height";
-import { Info } from "lucide-react";
+import { Info, WandSparkles, Bot, Pin, PinOff } from "lucide-react";
 import { composeCreativePrompt } from "@tuyile/contracts";
 import { HelpPopover } from "./interface-help";
 import { PromptComposer } from "./prompt-composer";
@@ -33,12 +34,12 @@ import {
   useState,
   useEffect,
   useRef,
+  useId,
   type FormEvent,
   type ComponentRef,
 } from "react";
 import type { ImageInput, ImageTask, ImageUsage } from "@tuyile/contracts";
 import {
-  Tabs,
   Collapse,
   Popover,
   Button,
@@ -47,6 +48,7 @@ import {
   useFeedback,
   Input,
   ControlScope,
+  Tooltip,
 } from "@tuyile/ui";
 import { client, ApiError } from "./api";
 function TaskTile({
@@ -67,7 +69,7 @@ function TaskTile({
   const [detailsOpen, setDetailsOpen] = useState(false);
   const detailsTrigger = useRef<ComponentRef<typeof Button>>(null);
   function closeDetails(event: React.KeyboardEvent) {
-    if (event.key === "Escape") {
+    if (event.key === "Escape" && detailsOpen) {
       event.stopPropagation();
       setDetailsOpen(false);
       detailsTrigger.current?.focus();
@@ -299,9 +301,19 @@ function CreationEditor({
     >([]),
     [pending, setPending] = useState<ImageInput | null>(null),
     [mobile, setMobile] = useState("create");
+  const panel = useCreationPanel();
+  const panelCollapsed = panel.collapsed;
+  const panelId = useId();
+  const panelToggle = useRef<ComponentRef<typeof Button>>(null);
+  const composing = useRef(false);
+  function closeTemporaryPanel() {
+    panel.hide();
+    panelToggle.current?.focus({ preventScroll: true });
+  }
   const confirmDraft = useConfirm();
   const chooseReference = useCallback(
     (id: string) => {
+      panel.show();
       if (busy || pending) {
         setError("请先确认当前提交结果，再修改草稿。");
         return;
@@ -313,7 +325,7 @@ function CreationEditor({
       );
       setMobile("create");
     },
-    [busy, pending],
+    [busy, pending, panel.show],
   );
   function useCanvasSelection() {
     if (busy || pending) {
@@ -421,6 +433,7 @@ function CreationEditor({
       ]
     : [];
   async function reuse(task: ImageTask) {
+    panel.show();
     if (["queued", "running"].includes(task.state)) {
       setError("请等待这次任务结束后再复用设置。");
       return;
@@ -459,43 +472,126 @@ function CreationEditor({
   async function refresh() {
     await Promise.all([usageQuery.refetch(), taskQuery.refetch()]);
   }
-  async function upload(file: File | undefined) {
-    if (!file || active.current || busy || pending || references.length >= 4)
+  const [uploadError, setUploadError] = useState("");
+  function reportUploadError(message: string) {
+    setUploadError(message);
+    panel.show();
+  }
+  const uploadController = useRef<AbortController | null>(null);
+  useEffect(() => () => uploadController.current?.abort(), []);
+  const [uploadProgress, setUploadProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
+  function upload(file: File | undefined) {
+    return uploadFiles(file ? [file] : [], "reference");
+  }
+  async function uploadFiles(
+    files: File[],
+    destination: "reference" | "canvas",
+  ) {
+    if (
+      !files.length ||
+      uploadController.current ||
+      active.current ||
+      busy ||
+      pending ||
+      (destination === "reference" && references.length >= 4)
+    )
       return;
-    if (file.size > 20 * 1024 * 1024) {
-      setError("参考图不能超过 20 MiB。");
+    const editor = sessionState.editors.get(projectId);
+    try {
+      if (!editor) throw new Error("画布正在加载，请稍后再上传图片。");
+      if (files.length > 20) throw new Error("每批最多上传 20 张图片。");
+      editor.canAddImage(files.length);
+      for (const file of files) {
+        if (file.size > 20 * 1024 * 1024)
+          throw new Error(`${file.name}：图片不能超过 20 MiB。`);
+        if (!["image/png", "image/jpeg", "image/webp"].includes(file.type))
+          throw new Error(`${file.name}：仅支持 PNG、JPEG 和 WebP 图片。`);
+      }
+    } catch (e) {
+      reportUploadError((e as Error).message);
       return;
     }
+    const controller = new AbortController();
+    uploadController.current = controller;
     setBusy(true);
-    setError("");
+    setUploadError("");
+    setUploadProgress({ done: 0, total: files.length });
+    let done = 0,
+      uploaded = false;
+    const inserted: string[] = [];
     try {
-      const response = await fetch("/api/images/uploads", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": file.type, "X-CSRF-Token": csrfToken },
-        body: file,
-      });
-      if (!response.ok) {
-        const body = await response.json();
-        throw new ApiError(body.error.code);
+      for (const file of files) {
+        if (controller.signal.aborted) return;
+        uploaded = false;
+        const response = await fetch("/api/images/uploads", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": file.type, "X-CSRF-Token": csrfToken },
+          body: file,
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          const body = await response.json();
+          throw new ApiError(body.error.code);
+        }
+        const asset = await response.json();
+        if (controller.signal.aborted) return;
+        uploaded = true;
+        if (destination === "reference")
+          setReferences((v) =>
+            v.length >= 4 || v.some((r) => r.id === asset.id)
+              ? v
+              : [...v, { id: asset.id, name: file.name }],
+          );
+        editor.addUploadedImage(asset, file.name);
+        inserted.push(asset.id);
+        done++;
+        setUploadProgress({ done, total: files.length });
       }
-      const asset = await response.json();
-      setReferences((v) =>
-        v.length >= 4 || v.some((r) => r.id === asset.id)
-          ? v
-          : [...v, { id: asset.id, name: file.name }],
-      );
-      await refresh();
     } catch (e) {
-      setError((e as Error).message);
+      if (!controller.signal.aborted) {
+        const reason = uploaded
+          ? `图片已上传，可在图库找回。${(e as Error).message}`
+          : e instanceof ApiError
+            ? e.message
+            : "上传结果未确认，请先到图库查看，避免重复上传。";
+        reportUploadError(
+          files.length > 1
+            ? `已加入 ${done}/${files.length} 张。${reason} 后续图片未上传。`
+            : reason,
+        );
+      }
     } finally {
-      setBusy(false);
+      if (!controller.signal.aborted) {
+        if (inserted.length)
+          editor.select(
+            editor
+              .get()
+              .document.nodes.filter((n) => inserted.includes(n.assetId ?? ""))
+              .map((n) => n.id),
+          );
+        await refresh().catch(() => {
+          if (!controller.signal.aborted)
+            reportUploadError(
+              "图片已加入画布，额度或任务信息未能刷新，请稍后重试。",
+            );
+        });
+      }
+      if (uploadController.current === controller)
+        uploadController.current = null;
+      if (!controller.signal.aborted) {
+        setBusy(false);
+        setUploadProgress(null);
+      }
     }
   }
   const formRef = useRef<HTMLFormElement>(null);
   const promptHeight = useAdaptivePromptHeight(
     formRef,
-    mode === "direct" && usageQuery.isSuccess,
+    !panelCollapsed && mode === "direct" && usageQuery.isSuccess,
   );
   async function send(input: ImageInput) {
     if (active.current) return;
@@ -592,14 +688,55 @@ function CreationEditor({
           任务与结果
         </Button>
       </div>
-      <div className={`creation-layout show-${mobile}`}>
-        <div className="creation-results" ref={resultsRef}>
+      <div
+        className={`creation-layout show-${mobile}${panelCollapsed ? " creation-panel-collapsed" : ""}${!panel.pinned ? " creation-panel-unpinned" : ""}`}
+        onKeyDownCapture={(event) => {
+          const target = event.target;
+          if (
+            event.key === "Escape" &&
+            !event.defaultPrevented &&
+            !event.nativeEvent.isComposing &&
+            !composing.current &&
+            !panel.pinned &&
+            !panelCollapsed &&
+            target instanceof Element &&
+            event.currentTarget.contains(target) &&
+            !target.closest(
+              '.creation-panel,input,textarea,[contenteditable],[role=menu],[role=dialog],button[aria-expanded="true"],[aria-haspopup][aria-expanded="true"]',
+            )
+          ) {
+            closeTemporaryPanel();
+          }
+        }}
+      >
+        <div
+          className="creation-results"
+          ref={resultsRef}
+          onPointerDownCapture={(event) => {
+            const target = event.target;
+            if (
+              !panel.pinned &&
+              !panelCollapsed &&
+              !composing.current &&
+              target instanceof Element &&
+              event.currentTarget.contains(target) &&
+              target.closest(".react-flow__pane,.react-flow__node") &&
+              !target.closest(
+                "button,a,input,textarea,[contenteditable],.canvas-image-actions",
+              )
+            ) {
+              panel.hide();
+            }
+          }}
+        >
           <Suspense fallback={<LoadingState variant="canvas" />}>
             <CanvasEditor
               tasks={tasks}
               statusStale={!!taskQuery.error}
               projectId={projectId}
               onReference={chooseReference}
+              onUpload={(files) => void uploadFiles(files, "canvas")}
+              uploadBusy={busy || !!pending}
               onSelectionChange={setCanvasSelection}
               onReuse={(task) => void reuse(task)}
             />
@@ -635,164 +772,281 @@ function CreationEditor({
             ]}
           />
         </div>
-        <aside className="creation-panel" aria-label="图片创作">
-          <Tabs
-            activeKey={mode}
-            onChange={(next) => {
-              setMode(next as "direct" | "agent");
+        <ControlScope componentDisabled={panelCollapsed}>
+          <aside
+            className="creation-panel"
+            aria-label="图片创作"
+            id={panelId}
+            onMouseEnter={panel.cancelHover}
+            onMouseLeave={panel.hoverEnd}
+            onPointerDownCapture={() => {
+              if (!panelCollapsed) panel.engage();
             }}
-            items={[
-              { key: "direct", label: "直接创作" },
-              { key: "agent", label: "Agent" },
-            ]}
-          />
-          <div className="direct-creation" hidden={mode !== "direct"}>
-            {(usageQuery.error || taskQuery.error) && (
-              <Notice error>
-                {usageQuery.error?.message || taskQuery.error?.message}
-              </Notice>
-            )}
-            {usage?.providerMode === "fake" && (
-              <Notice>
-                本地测试模型：生成测试色块，不调用真实服务，不产生模型费用。
-              </Notice>
-            )}
-            {usage && !usage.models.length && (
-              <Notice>尚未配置可用的图片服务，请联系管理员。</Notice>
-            )}
-            <form ref={formRef} onSubmit={submit} aria-label="提交图片任务">
-              <ControlScope
-                componentDisabled={busy || !!pending || !usage?.models.length}
-              >
-                <fieldset disabled={busy || !!pending || !usage?.models.length}>
-                  <PromptComposer
-                    visible={mode === "direct"}
-                    height={promptHeight}
-                    value={prompt}
-                    onChange={setPrompt}
-                    style={style}
-                    onStyleChange={setStyle}
-                  />
-                  {mode === "direct" && (
-                    <ReferenceAttachments
-                      references={references}
-                      selected={canvasSelection}
-                      onUseSelected={useCanvasSelection}
-                      onRemove={(id) =>
-                        setReferences((v) => v.filter((r) => r.id !== id))
-                      }
-                      onUpload={(file) => void upload(file)}
-                      disabled={busy || !!pending}
-                      maxReferences={
-                        usage
-                          ? selectedCapability(usage, settings.modelKey)
-                              ?.editing
-                            ? selectedCapability(usage, settings.modelKey)!
-                                .maxReferences
-                            : 0
-                          : 0
-                      }
-                    />
-                  )}
-                  <ImageControls
-                    disabled={busy || !!pending}
-                    compact
-                    usage={usage}
-                    value={settings}
-                    onChange={setSettings}
-                  />
-                </fieldset>
-              </ControlScope>
-              {issues.length > 0 && !pending && (
-                <Notice error>{issues.join(" ")}</Notice>
-              )}
-              {error && <Notice error>{error}</Notice>}
-              <GenerationFeedback
-                tasks={tasks}
-                phase={phase}
-                pending={!!pending}
-                stale={!!taskQuery.error}
-                rejected={submissionRejected}
-                onShow={showTasks}
-                ready={taskQuery.isSuccess}
-              />
-              <div className="generation-submit-row">
-                <Button
-                  className="primary"
-                  aria-busy={
-                    busy ||
-                    (!pending &&
-                      (!prompt.trim() || sameActiveDraft) &&
-                      generating &&
-                      !taskQuery.error)
-                  }
-                  loading={
-                    busy ||
-                    (!pending &&
-                      (!prompt.trim() || sameActiveDraft) &&
-                      generating &&
-                      !taskQuery.error)
-                  }
-                  aria-label={
-                    pending && phase === "idle"
-                      ? "重试同一提交"
-                      : "提交图片任务"
-                  }
-                  disabled={
-                    busy ||
-                    !usage?.models.length ||
-                    (!pending &&
-                      (!prompt.trim() || sameActiveDraft || issues.length > 0))
-                  }
-                >
-                  {busy
-                    ? phase === "submit"
-                      ? "正在提交…"
-                      : phase === "recover"
-                        ? "正在查找…"
-                        : "正在上传参考图…"
-                    : pending
-                      ? "重试同一提交"
-                      : (!prompt.trim() || sameActiveDraft) && generating
-                        ? taskQuery.error
-                          ? "状态暂不可用"
-                          : running
-                            ? "正在生成…"
-                            : "排队中…"
-                        : `生成 ${settings.count} 张`}
-                </Button>
-                <HelpPopover title="生成说明" visible={mode === "direct"}>
-                  生图任务是后台执行，关闭页面不影响任务执行和费用核算。
-                </HelpPopover>
-              </div>
-              {pending && (
-                <Button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void recover()}
-                >
-                  查找这次提交
-                </Button>
-              )}
-            </form>
-          </div>
-          <div className="agent-creation" hidden={mode !== "agent"}>
-            <AgentPanel
-              visible={mode === "agent"}
-              projectId={projectId}
-              usage={usage}
-              tasks={tasks}
-              references={references}
-              selectedCanvas={canvasSelection}
-              onUseSelected={useCanvasSelection}
-              onRemove={(id) =>
-                setReferences((old) => old.filter((r) => r.id !== id))
+            onFocusCapture={() => {
+              if (!panelCollapsed) panel.engage();
+            }}
+            onCompositionStartCapture={() => {
+              composing.current = true;
+            }}
+            onCompositionEndCapture={() => {
+              composing.current = false;
+            }}
+            onKeyDown={(event) => {
+              if (
+                event.key === "Escape" &&
+                !event.defaultPrevented &&
+                !event.nativeEvent.isComposing &&
+                !composing.current &&
+                !panel.pinned &&
+                !panelCollapsed
+              ) {
+                event.preventDefault();
+                event.stopPropagation();
+                closeTemporaryPanel();
               }
-              onUpload={(file) => void upload(file)}
-              uploadBusy={busy || !!pending}
-            />
-          </div>
-        </aside>
+            }}
+          >
+            <div className="creation-panel-heading">
+              <h2 className="creation-panel-title">
+                {mode === "direct" ? "直接创作" : "Agent"}
+              </h2>
+              {!panelCollapsed && (
+                <Tooltip
+                  title={panel.pinned ? "取消固定创作面板" : "固定创作面板"}
+                  placement="bottom"
+                  classNames={{ root: "creation-panel-control-tip" }}
+                >
+                  <Button
+                    type="button"
+                    className="creation-panel-pin"
+                    aria-label={
+                      panel.pinned ? "取消固定创作面板" : "固定创作面板"
+                    }
+                    aria-pressed={panel.pinned}
+                    onClick={panel.togglePin}
+                  >
+                    {panel.pinned ? <Pin size={14} /> : <PinOff size={14} />}
+                  </Button>
+                </Tooltip>
+              )}
+            </div>
+            {uploadProgress && (
+              <p role="status">
+                正在上传 {uploadProgress.done}/{uploadProgress.total} 张…
+              </p>
+            )}
+            {uploadError && <Notice error>{uploadError}</Notice>}
+            <div
+              className="direct-creation"
+              hidden={mode !== "direct"}
+              inert={panelCollapsed}
+            >
+              {(usageQuery.error || taskQuery.error) && (
+                <Notice error>
+                  {usageQuery.error?.message || taskQuery.error?.message}
+                </Notice>
+              )}
+              {usage?.providerMode === "fake" && (
+                <Notice>
+                  本地测试模型：生成测试色块，不调用真实服务，不产生模型费用。
+                </Notice>
+              )}
+              {usage && !usage.models.length && (
+                <Notice>尚未配置可用的图片服务，请联系管理员。</Notice>
+              )}
+              <form ref={formRef} onSubmit={submit} aria-label="提交图片任务">
+                <ControlScope
+                  componentDisabled={
+                    panelCollapsed || busy || !!pending || !usage?.models.length
+                  }
+                >
+                  <fieldset
+                    disabled={busy || !!pending || !usage?.models.length}
+                  >
+                    <PromptComposer
+                      visible={!panelCollapsed && mode === "direct"}
+                      height={promptHeight}
+                      value={prompt}
+                      onChange={setPrompt}
+                      style={style}
+                      onStyleChange={setStyle}
+                    />
+                    {mode === "direct" && (
+                      <ReferenceAttachments
+                        references={references}
+                        selected={canvasSelection}
+                        onUseSelected={useCanvasSelection}
+                        onRemove={(id) =>
+                          setReferences((v) => v.filter((r) => r.id !== id))
+                        }
+                        onUpload={(file) => void upload(file)}
+                        disabled={busy || !!pending}
+                        maxReferences={
+                          usage
+                            ? selectedCapability(usage, settings.modelKey)
+                                ?.editing
+                              ? selectedCapability(usage, settings.modelKey)!
+                                  .maxReferences
+                              : 0
+                            : 0
+                        }
+                      />
+                    )}
+                    <ImageControls
+                      disabled={busy || !!pending}
+                      compact
+                      usage={usage}
+                      value={settings}
+                      onChange={setSettings}
+                    />
+                  </fieldset>
+                </ControlScope>
+                {issues.length > 0 && !pending && (
+                  <Notice error>{issues.join(" ")}</Notice>
+                )}
+                {error && <Notice error>{error}</Notice>}
+                <GenerationFeedback
+                  tasks={tasks}
+                  phase={phase}
+                  pending={!!pending}
+                  stale={!!taskQuery.error}
+                  rejected={submissionRejected}
+                  onShow={showTasks}
+                  ready={taskQuery.isSuccess}
+                />
+                <div className="generation-submit-row">
+                  <Button
+                    className="primary"
+                    aria-busy={
+                      busy ||
+                      (!pending &&
+                        (!prompt.trim() || sameActiveDraft) &&
+                        generating &&
+                        !taskQuery.error)
+                    }
+                    loading={
+                      busy ||
+                      (!pending &&
+                        (!prompt.trim() || sameActiveDraft) &&
+                        generating &&
+                        !taskQuery.error)
+                    }
+                    aria-label={
+                      pending && phase === "idle"
+                        ? "重试同一提交"
+                        : "提交图片任务"
+                    }
+                    disabled={
+                      busy ||
+                      !usage?.models.length ||
+                      (!pending &&
+                        (!prompt.trim() ||
+                          sameActiveDraft ||
+                          issues.length > 0))
+                    }
+                  >
+                    {busy
+                      ? phase === "submit"
+                        ? "正在提交…"
+                        : phase === "recover"
+                          ? "正在查找…"
+                          : "正在上传参考图…"
+                      : pending
+                        ? "重试同一提交"
+                        : (!prompt.trim() || sameActiveDraft) && generating
+                          ? taskQuery.error
+                            ? "状态暂不可用"
+                            : running
+                              ? "正在生成…"
+                              : "排队中…"
+                          : `生成 ${settings.count} 张`}
+                  </Button>
+                  <HelpPopover
+                    title="生成说明"
+                    visible={!panelCollapsed && mode === "direct"}
+                  >
+                    生图任务是后台执行，关闭页面不影响任务执行和费用核算。
+                  </HelpPopover>
+                </div>
+                {pending && (
+                  <Button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void recover()}
+                  >
+                    查找这次提交
+                  </Button>
+                )}
+              </form>
+            </div>
+            <div
+              className="agent-creation"
+              hidden={mode !== "agent"}
+              inert={panelCollapsed}
+            >
+              <AgentPanel
+                visible={!panelCollapsed && mode === "agent"}
+                autoFocusComposer={panel.pinned || panel.engaged}
+                projectId={projectId}
+                usage={usage}
+                tasks={tasks}
+                references={references}
+                selectedCanvas={canvasSelection}
+                onUseSelected={useCanvasSelection}
+                onRemove={(id) =>
+                  setReferences((old) => old.filter((r) => r.id !== id))
+                }
+                onUpload={(file) => void upload(file)}
+                uploadBusy={busy || !!pending}
+              />
+            </div>
+          </aside>
+        </ControlScope>
+        <div
+          className="creation-tool-rail"
+          role="toolbar"
+          aria-label="创作面板导航"
+          onMouseEnter={panel.cancelHover}
+          onMouseLeave={panel.hoverEnd}
+        >
+          {(["direct", "agent"] as const).map((key) => (
+            <Tooltip
+              key={key}
+              title={key === "direct" ? "直接创作" : "Agent"}
+              placement="left"
+              classNames={{ root: "creation-panel-control-tip" }}
+            >
+              <Button
+                type="button"
+                ref={mode === key ? panelToggle : undefined}
+                aria-label={key === "direct" ? "直接创作面板" : "Agent 面板"}
+                aria-pressed={!panelCollapsed && mode === key}
+                aria-controls={panelId}
+                onMouseEnter={() => panel.hoverStart(() => setMode(key))}
+                onMouseLeave={panel.cancelHover}
+                onClick={() => {
+                  composing.current = false;
+                  if (
+                    mode === key &&
+                    !panelCollapsed &&
+                    (panel.pinned || panel.engaged)
+                  )
+                    panel.hide();
+                  else {
+                    setMode(key);
+                    panel.show();
+                  }
+                }}
+              >
+                {key === "direct" ? (
+                  <WandSparkles size={17} />
+                ) : (
+                  <Bot size={17} />
+                )}
+              </Button>
+            </Tooltip>
+          ))}
+        </div>
       </div>
     </section>
   );

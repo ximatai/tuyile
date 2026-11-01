@@ -84,7 +84,7 @@ app.get("*", async (c) => {
 });
 const server = serve(
   { fetch: app.fetch, port: config.port, hostname: config.host },
-  () => console.log(`API_READY port=${config.port}`),
+  () => console.log(`API_READY port=${config.port} origin=${config.origin}`),
 );
 let stopping = false;
 function stop() {

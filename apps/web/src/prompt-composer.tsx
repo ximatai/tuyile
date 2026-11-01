@@ -117,7 +117,7 @@ export function PromptComposer({
             <div
               className="prompt-assist-content"
               onKeyDown={(event) => {
-                if (event.key === "Escape") {
+                if (event.key === "Escape" && assistOpen) {
                   setAssistOpen(false);
                   event.stopPropagation();
                   assistTrigger.current
@@ -137,7 +137,7 @@ export function PromptComposer({
             aria-label="灵感与风格"
             aria-expanded={assistOpen}
             onKeyDown={(event) => {
-              if (event.key === "Escape") {
+              if (event.key === "Escape" && assistOpen) {
                 setAssistOpen(false);
                 event.stopPropagation();
               }

@@ -50,6 +50,7 @@ const states: Record<string, string> = {
 };
 export function AgentPanel({
   visible,
+  autoFocusComposer = true,
   projectId,
   usage,
   references,
@@ -61,6 +62,7 @@ export function AgentPanel({
   tasks,
 }: {
   visible: boolean;
+  autoFocusComposer?: boolean;
   projectId: string;
   usage?: ImageUsage;
   references: { id: string; name: string }[];
@@ -256,6 +258,8 @@ export function AgentPanel({
   }
   const hasProposal = !!plan?.document.steps.length;
   const composeForm = useRef<HTMLFormElement>(null);
+  const composerFocusAllowed = useRef(autoFocusComposer);
+  composerFocusAllowed.current = autoFocusComposer;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
   useEffect(() => {
@@ -263,7 +267,7 @@ export function AgentPanel({
     setPlanDirty(false);
   }, [plan?.id, hasProposal]);
   useEffect(() => {
-    if (composeOpen && visible && plan)
+    if (composeOpen && visible && composerFocusAllowed.current && plan)
       composeForm.current?.querySelector("textarea")?.focus();
   }, [composeOpen, visible, plan?.id]);
   const settingsTrigger = useRef<React.ComponentRef<typeof Button>>(null);
@@ -286,16 +290,20 @@ export function AgentPanel({
     <div
       className={`agent-panel ${!history.length ? "agent-panel-empty" : ""}`}
     >
-      {history.length > 0 && (
-        <Button
-          className="agent-clear-history"
-          disabled={busy || !!pending}
-          onClick={() => void clearHistory()}
-        >
-          清空规划对话
-        </Button>
-      )}
       <div className="agent-conversation" aria-label="Agent 对话">
+        {history.length > 0 && (
+          <div className="agent-conversation-heading">
+            <span>规划对话</span>
+            <Button
+              className="agent-clear-history"
+              aria-label="清空规划对话"
+              disabled={busy || !!pending}
+              onClick={() => void clearHistory()}
+            >
+              清空
+            </Button>
+          </div>
+        )}
         {!history.length && !jobs.isPending && (
           <div className="agent-intro">
             <div className="agent-intro-icon" aria-hidden="true">
@@ -416,7 +424,9 @@ export function AgentPanel({
         onSubmit={request}
         aria-label="请求 Agent 规划"
       >
-        <ControlScope componentDisabled={busy || !!pending || uploadBusy}>
+        <ControlScope
+          componentDisabled={!visible || busy || !!pending || uploadBusy}
+        >
           <fieldset disabled={busy || !!pending || uploadBusy}>
             <PromptComposer
               value={prompt}
@@ -458,7 +468,7 @@ export function AgentPanel({
                   <div
                     className="agent-settings-content"
                     onKeyDown={(event) => {
-                      if (event.key === "Escape") {
+                      if (event.key === "Escape" && settingsOpen) {
                         event.stopPropagation();
                         setSettingsOpen(false);
                         settingsTrigger.current?.focus();
@@ -531,7 +541,7 @@ export function AgentPanel({
                   ref={settingsTrigger}
                   aria-expanded={settingsOpen}
                   onKeyDown={(event) => {
-                    if (event.key === "Escape") {
+                    if (event.key === "Escape" && settingsOpen) {
                       event.stopPropagation();
                       setSettingsOpen(false);
                     }
@@ -963,7 +973,7 @@ function PlanCard({
           {editing ? "返回方案" : confirmed ? "查看提示词" : "编辑提示词"}
         </Button>
       </div>
-      <ControlScope componentDisabled={locked || confirmed}>
+      <ControlScope componentDisabled={!visible || locked || confirmed}>
         <fieldset>
           <ol className="agent-plan-summary" aria-label="计划步骤摘要">
             {document.steps.map((step, index) => (
@@ -1178,7 +1188,7 @@ function PlanStepParameters({
         <div
           className="agent-settings-content"
           onKeyDown={(event) => {
-            if (event.key === "Escape") {
+            if (event.key === "Escape" && open) {
               event.stopPropagation();
               setOpen(false);
               trigger.current?.focus();
@@ -1196,7 +1206,7 @@ function PlanStepParameters({
         aria-label={`步骤 ${index + 1} 图片设置`}
         aria-expanded={open}
         onKeyDown={(event) => {
-          if (event.key === "Escape") {
+          if (event.key === "Escape" && open) {
             event.stopPropagation();
             setOpen(false);
           }

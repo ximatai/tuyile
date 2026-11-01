@@ -150,7 +150,7 @@ export function PromptShortcuts({
           <div
             className="prompt-picker"
             onKeyDown={(event) => {
-              if (event.key === "Escape") {
+              if (event.key === "Escape" && open) {
                 event.stopPropagation();
                 if (!choosing) {
                   setOpen(false);
@@ -290,7 +290,7 @@ export function PromptShortcuts({
           aria-expanded={open}
           disabled={disabled || choosing || favorites.isPending}
           onKeyDown={(e) => {
-            if (e.key === "Escape") {
+            if (e.key === "Escape" && open) {
               e.stopPropagation();
               setOpen(false);
             }

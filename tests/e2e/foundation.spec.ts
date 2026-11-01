@@ -15,6 +15,14 @@ async function login(
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await expect(page.getByRole("heading", { name: "我的项目" })).toBeVisible();
 }
+async function selectCreationPanel(page: Page, mode: "direct" | "agent") {
+  const button = page.getByRole("button", {
+    name: mode === "direct" ? "直接创作面板" : "Agent 面板",
+    exact: true,
+  });
+  if ((await button.getAttribute("aria-pressed")) !== "true")
+    await button.click();
+}
 async function logoutFromMenu(page: Page) {
   await page.getByRole("button", { name: "账户菜单", exact: true }).click();
   await page.getByRole("menuitem", { name: "退出登录", exact: true }).click();
@@ -966,9 +974,9 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     .click();
   await expect(quotaTrigger).toBeFocused();
   await expect(quotaTrigger).toHaveAttribute("aria-expanded", "false");
-  await reopened.getByRole("tab", { name: "Agent", exact: true }).click();
+  await selectCreationPanel(reopened, "agent");
   await expect(reopened.getByRole("tooltip")).toBeHidden();
-  await reopened.getByRole("tab", { name: "直接创作", exact: true }).click();
+  await selectCreationPanel(reopened, "direct");
   await reopened.setViewportSize({ width: 1920, height: 1080 });
   await expect(reopened.locator(".react-flow__node-image")).toHaveCount(5);
   await expect(
@@ -1697,7 +1705,7 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
     .filter({ hasText: "Agent 顺序创作" })
     .click();
   const projectId = page.url().split("/").at(-1)!;
-  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await selectCreationPanel(page, "agent");
   await page.getByRole("button", { name: "灵感与风格", exact: true }).click();
   await expect(
     page
@@ -1809,7 +1817,7 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
     )
     .toBe(2);
   await page.reload();
-  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await selectCreationPanel(page, "agent");
   await expect(page.getByLabel("计划步骤摘要")).toBeVisible();
   await page.getByRole("button", { name: "编辑提示词", exact: true }).click();
   await page
@@ -1929,7 +1937,7 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
   ).toBeEnabled();
   await page.reload();
   await expect(page.locator(".react-flow__node-image")).toHaveCount(3);
-  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await selectCreationPanel(page, "agent");
   await expect(page.getByText("计划已确认", { exact: true })).toBeVisible();
   await page.setViewportSize({ width: 1920, height: 1080 });
   await page.screenshot({
@@ -2219,7 +2227,7 @@ test("administration saves bounded execution policies and clearing ended Agent h
     .locator(".project-card")
     .filter({ hasText: "Agent 顺序创作" })
     .click();
-  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await selectCreationPanel(page, "agent");
   await expect(page.getByText("计划已确认", { exact: true })).toBeVisible();
   const before = await (await page.request.get("/api/agent/usage")).json(),
     imagesBefore = await (await page.request.get("/api/images/usage")).json();
@@ -2386,7 +2394,7 @@ test("administrators add a service and users select same-named models from the c
   await expect(page.locator(".react-flow__node-image")).toHaveCount(1, {
     timeout: 20000,
   });
-  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await selectCreationPanel(page, "agent");
   await page.getByRole("button", { name: "创作设置", exact: true }).click();
   await page.getByLabel("对话模型", { exact: true }).click();
   await page
@@ -4077,7 +4085,7 @@ test("server drafts persist direct and Agent inputs across refresh and login and
   await expect(
     page.getByTestId("reference-upload").locator(".attachment"),
   ).toHaveCount(1);
-  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await selectCreationPanel(page, "agent");
   const agent = page.getByLabel("告诉 Agent 你的想法", { exact: true });
   await agent.fill("独立保留的 Agent 想法");
   await expect
@@ -4105,9 +4113,9 @@ test("server drafts persist direct and Agent inputs across refresh and login and
   await page.reload();
   await expect(agent).toHaveValue("独立保留的 Agent 想法");
   await expect(
-    page.getByRole("tab", { name: "Agent", exact: true }),
-  ).toHaveAttribute("aria-selected", "true");
-  await page.getByRole("tab", { name: "直接创作", exact: true }).click();
+    page.getByRole("button", { name: "Agent 面板", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await selectCreationPanel(page, "direct");
   await expect(prompt).toHaveValue("刷新后应恢复的创作需求");
   await expect(
     page.getByRole("combobox", { name: "风格", exact: true }).locator(".."),
@@ -4501,7 +4509,7 @@ test("Agent clarification stays conversational and proposals separate creative a
     await route.fulfill({ json: saved });
   });
   await page.goto(`/projects/${project.id}`);
-  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await selectCreationPanel(page, "agent");
   const prompt = page.getByLabel("告诉 Agent 你的想法", { exact: true });
   await prompt.fill("设计咖啡店开业海报");
   await page.getByRole("button", { name: "生成计划", exact: true }).click();
@@ -4628,7 +4636,7 @@ test("Agent clarification stays conversational and proposals separate creative a
   expect(inputs[2].previousPlanId).toBe(jobs[1].plans.at(-1).id);
   jobs[0].plans[0].confirmed = true;
   await page.reload();
-  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await selectCreationPanel(page, "agent");
   await page
     .getByRole("button", { name: "步骤 1 图片设置", exact: true })
     .click();
@@ -4686,7 +4694,7 @@ test("shared creation controls respect parent locks and dismiss helpers across m
     .click();
   await page.getByRole("button", { name: "编辑风格", exact: true }).click();
   await page.getByLabel("风格描述", { exact: true }).fill("尚未应用的临时编辑");
-  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await selectCreationPanel(page, "agent");
   await expect(page.locator(".style-editor:visible")).toHaveCount(0);
   const agentHelp = page.getByRole("button", {
     name: "规划与执行规则",
@@ -4697,7 +4705,7 @@ test("shared creation controls respect parent locks and dismiss helpers across m
   await content.press("Escape");
   await expect(agentHelp).toBeFocused();
   await agentHelp.click();
-  await page.getByRole("tab", { name: "直接创作", exact: true }).click();
+  await selectCreationPanel(page, "direct");
   await expect(page.locator(".help-content:visible")).toHaveCount(0);
   await expect(prompt).toHaveValue("共享控件测试：暖色咖啡店海报");
   const directHelp = page.getByRole("button", {
@@ -4744,4 +4752,1317 @@ test("shared creation controls respect parent locks and dismiss helpers across m
     .locator(".style-editor")
     .getByRole("button", { name: "取消", exact: true })
     .click();
+});
+
+test("canvas keyboard shortcuts stay scoped and persist grouped node copies", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.getByLabel("项目名称").fill("快捷键合成验证");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "快捷键合成验证" })
+    .click();
+  await page.getByLabel("创作需求", { exact: true }).fill("快捷键测试图片");
+  await page.getByRole("button", { name: "提交图片任务", exact: true }).click();
+  const images = page.locator(".react-flow__node-image");
+  await expect(images).toHaveCount(1, { timeout: 20000 });
+  const canvas = page.getByRole("region", { name: "项目画布", exact: true });
+  for (const mod of ["Control", "Meta"]) {
+    await canvas.focus();
+    await page.keyboard.press(`${mod}+a`);
+    await expect(images.first()).toHaveClass(/selected/);
+    await page.keyboard.press(`${mod}+c`);
+    await expect(images).toHaveCount(1);
+    await page.keyboard.press(`${mod}+v`);
+    await expect(images).toHaveCount(2);
+    await expect(images.nth(1)).toHaveClass(/selected/);
+    await page.keyboard.press(`${mod}+z`);
+    await expect(images).toHaveCount(1);
+    await page.keyboard.press(`${mod}+Shift+z`);
+    await expect(images).toHaveCount(2);
+    await page.keyboard.press("Escape");
+    await expect(page.locator(".react-flow__node.selected")).toHaveCount(0);
+    await page.keyboard.press(`${mod}+a`);
+    await page.keyboard.press("Backspace");
+    await expect(images).toHaveCount(0);
+    await page.keyboard.press(`${mod}+z`);
+    await expect(images).toHaveCount(2);
+    await page.keyboard.press(`${mod}+z`);
+    await expect(images).toHaveCount(1);
+  }
+  // Pointer focus works without programmatically focusing the canvas.
+  await images.first().click({ position: { x: 40, y: 50 } });
+  await page.keyboard.down("Control");
+  await page.keyboard.down("d");
+  await page.keyboard.down("d");
+  await page.keyboard.up("d");
+  await page.keyboard.up("Control");
+  await expect(images).toHaveCount(2);
+  await page.keyboard.press("Control+a");
+  await page.getByRole("button", { name: "分组", exact: true }).click();
+  const groups = page.locator(".react-flow__node-group");
+  await expect(groups).toHaveCount(1);
+  await canvas.focus();
+  await page.keyboard.press("Control+a");
+  await page.keyboard.press("Control+c");
+  await page.keyboard.press("Control+v");
+  await expect(groups).toHaveCount(2);
+  await expect(images).toHaveCount(4);
+  await page.keyboard.press("Control+z");
+  await expect(groups).toHaveCount(1);
+  await expect(images).toHaveCount(2);
+  await page.keyboard.press("Control+Shift+z");
+  await expect(images).toHaveCount(4);
+  const prompt = page.getByLabel("创作需求", { exact: true });
+  await prompt.fill("输入框应保留原生行为");
+  const nativeModifier = process.platform === "darwin" ? "Meta" : "Control";
+  await prompt.press(`${nativeModifier}+a`);
+  await prompt.press("Backspace");
+  await expect(prompt).toHaveValue("");
+  await prompt.press(`${nativeModifier}+v`);
+  await expect(images).toHaveCount(4);
+  // A portal preview must not pass canvas shortcuts through its React ancestry.
+  await images.last().dblclick({ position: { x: 30, y: 50 } });
+  await expect(page.locator(".ant-image-preview")).toBeVisible();
+  await page.keyboard.press("Control+a");
+  await page.keyboard.press("Delete");
+  await expect(images).toHaveCount(4);
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".ant-image-preview")).toBeHidden();
+  await expect(page.locator(".canvas-status")).toContainText("画布已保存");
+  const projectId = page.url().split("/").at(-1)!;
+  const saved = await (
+    await page.request.get(`/api/projects/${projectId}/canvas`)
+  ).json();
+  expect(saved.document.nodes).toHaveLength(6);
+  expect(new Set(saved.document.nodes.map((n: any) => n.id)).size).toBe(6);
+  expect(
+    new Set(
+      saved.document.nodes
+        .filter((n: any) => n.kind === "image")
+        .map((n: any) => n.assetId),
+    ).size,
+  ).toBe(1);
+  expect(
+    (
+      await (
+        await page.request.get(`/api/images/tasks?projectId=${projectId}`)
+      ).json()
+    ).tasks,
+  ).toHaveLength(1);
+  await page.reload();
+  await expect(images).toHaveCount(4);
+  await canvas.focus();
+  await page.keyboard.press("Control+v");
+  await expect(images).toHaveCount(4);
+  const wrongOrigin = await page.request.post("/api/auth/login", {
+    headers: { Origin: "http://127.0.0.1:8793" },
+    data: {},
+  });
+  expect((await wrongOrigin.json()).error.code).toBe("INVALID_ORIGIN");
+});
+
+test("canvas uploads and reference uploads share private assets without generation", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.getByLabel("项目名称").fill("上传图片到画布验证");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "上传图片到画布验证" })
+    .click();
+  const canvas = page.getByRole("region", { name: "项目画布", exact: true });
+  await expect(canvas).toBeVisible();
+  const usageBefore = await (
+    await page.request.get("/api/images/usage")
+  ).json();
+  const png = await (
+    await import("sharp")
+  )
+    .default({
+      create: { width: 400, height: 200, channels: 3, background: "#0062b0" },
+    })
+    .png()
+    .toBuffer();
+  const file = (name: string) => ({ name, mimeType: "image/png", buffer: png });
+  const nodes = page.locator(".react-flow__node-image");
+  const directRefs = page.getByTestId("reference-upload");
+  await canvas
+    .locator('input[type="file"]')
+    .setInputFiles(file("画布素材.png"));
+  await expect(nodes).toHaveCount(1);
+  await expect(nodes.first().getByRole("img")).toHaveAttribute(
+    "alt",
+    "画布素材.png",
+  );
+  await expect(directRefs.locator(".attachment")).toHaveCount(0);
+  await directRefs
+    .getByRole("button", { name: "引用选中 1 张", exact: true })
+    .click();
+  await expect(directRefs.locator(".attachment")).toHaveCount(1);
+  await expect(
+    directRefs.getByRole("button", { name: "引用选中 1 张", exact: true }),
+  ).toBeDisabled();
+  await directRefs
+    .locator('input[type="file"]')
+    .setInputFiles(file("参考素材.png"));
+  await expect(nodes).toHaveCount(2);
+  await expect(directRefs.locator(".attachment")).toHaveCount(2);
+  await selectCreationPanel(page, "agent");
+  const agentRefs = page.getByTestId("agent-reference-upload");
+  await agentRefs
+    .locator('input[type="file"]')
+    .setInputFiles(file("Agent参考.png"));
+  await expect(nodes).toHaveCount(3);
+  await expect(agentRefs.locator(".attachment")).toHaveCount(3);
+  await selectCreationPanel(page, "direct");
+  await directRefs
+    .locator('input[type="file"]')
+    .setInputFiles(file("第四张.png"));
+  await expect(nodes).toHaveCount(4);
+  await expect(
+    directRefs.getByRole("button", { name: "上传参考图", exact: true }),
+  ).toBeDisabled();
+  await canvas.locator('input[type="file"]').setInputFiles(file("仅画布.png"));
+  await expect(nodes).toHaveCount(5);
+  await expect(directRefs.locator(".attachment")).toHaveCount(4);
+  await expect(page.locator(".canvas-status")).toContainText("画布已保存");
+  const projectId = page.url().split("/").at(-1)!;
+  const saved = await (
+    await page.request.get(`/api/projects/${projectId}/canvas`)
+  ).json();
+  expect(saved.document.nodes).toHaveLength(5);
+  expect(saved.document.nodes.every((n: any) => n.width / n.height === 2)).toBe(
+    true,
+  );
+  const assets = saved.document.nodes.map((n: any) => n.assetId);
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/projects/${projectId}/draft`)
+          ).json()
+        ).document.referenceIds.length,
+    )
+    .toBe(4);
+  const draft = await (
+    await page.request.get(`/api/projects/${projectId}/draft`)
+  ).json();
+  expect(
+    draft.document.referenceIds.every((id: string) => assets.includes(id)),
+  ).toBe(true);
+  expect(
+    (
+      await (
+        await page.request.get(`/api/images/tasks?projectId=${projectId}`)
+      ).json()
+    ).tasks,
+  ).toHaveLength(0);
+  const usageAfter = await (await page.request.get("/api/images/usage")).json();
+  expect(usageAfter.used).toBe(usageBefore.used);
+  expect(usageAfter.attempts).toBe(usageBefore.attempts);
+  expect(usageAfter.storageUsed).toBeGreaterThan(usageBefore.storageUsed);
+  await page.reload();
+  await expect(nodes).toHaveCount(5);
+  await expect(directRefs.locator(".attachment")).toHaveCount(4);
+  const session = await (await page.request.get("/api/auth/me")).json();
+  const deletion = await page.request.post(
+    `/api/images/assets/${assets[4]}/delete`,
+    {
+      headers: {
+        Origin: new URL(page.url()).origin,
+        "X-CSRF-Token": session.csrfToken,
+      },
+      data: {},
+    },
+  );
+  expect((await deletion.json()).error.code).toBe("ASSET_REFERENCED");
+  await canvas.focus();
+  await page.keyboard.press("Control+a");
+  await page.keyboard.press("Delete");
+  await expect(nodes).toHaveCount(0);
+  await expect(directRefs.locator(".attachment")).toHaveCount(4);
+  await page.keyboard.press("Control+z");
+  await expect(nodes).toHaveCount(5);
+  await expect(page.locator(".canvas-status")).toContainText("画布已保存");
+});
+
+test("late canvas upload responses cannot write into another project and invalid images stay rejected", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  for (const name of ["上传晚响应目标", "上传晚响应来源"]) {
+    await page.getByLabel("项目名称").fill(name);
+    await page.getByRole("button", { name: "创建项目", exact: true }).click();
+    await expect(
+      page.locator(".project-card").filter({ hasText: name }),
+    ).toBeVisible();
+  }
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "上传晚响应来源" })
+    .click();
+  const sourceUrl = page.url();
+  const canvas = page.getByRole("region", { name: "项目画布", exact: true });
+  await expect(canvas).toBeVisible();
+  const png = await (
+    await import("sharp")
+  )
+    .default({
+      create: { width: 64, height: 64, channels: 3, background: "#0062b0" },
+    })
+    .png()
+    .toBuffer();
+  let accepted!: () => void,
+    release!: () => void,
+    count = 0,
+    assetId = "";
+  const uploaded = new Promise<void>((resolve) => {
+    accepted = resolve;
+  });
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/images/uploads", async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    count++;
+    const response = await route.fetch();
+    assetId = (await response.json()).id;
+    accepted();
+    await gate;
+    await route.fulfill({ response }).catch(() => {});
+  });
+  await canvas
+    .locator('input[type="file"]')
+    .setInputFiles({ name: "晚到.png", mimeType: "image/png", buffer: png });
+  await uploaded;
+  await page.getByRole("link", { name: "上传晚响应目标", exact: true }).click();
+  await expect(page).not.toHaveURL(sourceUrl);
+  await expect(canvas).toBeVisible();
+  release();
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(0);
+  await expect(
+    page.getByTestId("reference-upload").locator(".attachment"),
+  ).toHaveCount(0);
+  await page.getByRole("link", { name: "上传晚响应来源", exact: true }).click();
+  await expect(page).toHaveURL(sourceUrl);
+  await expect(canvas).toBeVisible();
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(0);
+  const uploads = await (await page.request.get("/api/images/uploads")).json();
+  expect(uploads.assets.some((asset: any) => asset.id === assetId)).toBe(true);
+  expect(count).toBe(1);
+  await page.unroute("**/api/images/uploads");
+  await selectCreationPanel(page, "agent");
+  await canvas.locator('input[type="file"]').setInputFiles({
+    name: "伪造.png",
+    mimeType: "image/png",
+    buffer: Buffer.from("not an image"),
+  });
+  await expect(
+    page.getByText("图片格式、大小或解码检查未通过。", { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(0);
+  let unknownCalls = 0,
+    unknownAssetId = "";
+  await page.route("**/api/images/uploads", async (route) => {
+    unknownCalls++;
+    const response = await route.fetch();
+    unknownAssetId = (await response.json()).id;
+    await route.abort("failed");
+  });
+  await canvas.locator('input[type="file"]').setInputFiles({
+    name: "响应丢失.png",
+    mimeType: "image/png",
+    buffer: png,
+  });
+  await expect(
+    page.getByText("上传结果未确认，请先到图库查看，避免重复上传。", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(0);
+  expect(unknownCalls).toBe(1);
+  await page.unroute("**/api/images/uploads");
+  const recovered = await (
+    await page.request.get("/api/images/uploads")
+  ).json();
+  expect(
+    recovered.assets.some((asset: any) => asset.id === unknownAssetId),
+  ).toBe(true);
+});
+
+test("canvas accepts local image drops and native screenshot paste without intercepting text editing", async ({
+  page,
+  context,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.getByLabel("项目名称").fill("拖放与截图验证");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "拖放与截图验证" })
+    .click();
+  const canvas = page.getByRole("region", { name: "项目画布", exact: true });
+  await expect(canvas).toBeVisible();
+  const png = await (
+    await import("sharp")
+  )
+    .default({
+      create: { width: 320, height: 160, channels: 3, background: "#0062b0" },
+    })
+    .png()
+    .toBuffer();
+  const b64 = png.toString("base64");
+  const transfer = await page.evaluateHandle((encoded) => {
+    const data = new DataTransfer();
+    data.items.add(
+      new File(
+        [Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0))],
+        "拖入.png",
+        { type: "image/png" },
+      ),
+    );
+    return data;
+  }, b64);
+  await canvas.dispatchEvent("dragenter", { dataTransfer: transfer });
+  await expect(
+    page.getByText("松开以将图片上传到画布（每批最多20张）", { exact: true }),
+  ).toBeVisible();
+  await canvas.dispatchEvent("dragover", { dataTransfer: transfer });
+  await canvas.dispatchEvent("drop", { dataTransfer: transfer });
+  const images = page.locator(".react-flow__node-image");
+  await expect(images).toHaveCount(1);
+  await expect(images.first().getByRole("img")).toHaveAttribute(
+    "alt",
+    "拖入.png",
+  );
+  await expect(
+    canvas.getByRole("button", { name: "上传图片到画布", exact: true }),
+  ).toBeEnabled();
+  await expect(
+    page.getByTestId("reference-upload").locator(".attachment"),
+  ).toHaveCount(0);
+  const multiple = await page.evaluateHandle((encoded) => {
+    const data = new DataTransfer();
+    for (const name of Array.from({ length: 21 }, (_, i) => `${i}.png`))
+      data.items.add(
+        new File(
+          [Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0))],
+          name,
+          { type: "image/png" },
+        ),
+      );
+    return data;
+  }, b64);
+  await canvas.dispatchEvent("drop", { dataTransfer: multiple });
+  await expect(
+    page.getByText("每次可导入 1–20 张图片。", { exact: true }),
+  ).toBeVisible();
+  await expect(images).toHaveCount(1);
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], {
+    origin: new URL(page.url()).origin,
+  });
+  const native = process.platform === "darwin" ? "Meta" : "Control";
+  // Use a real native shortcut and browser clipboard, not a synthetic paste handler.
+  await page.evaluate(async (encoded) => {
+    const blob = new Blob(
+      [Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0))],
+      { type: "image/png" },
+    );
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+  }, b64);
+  await canvas.focus();
+  await page.keyboard.press(`${native}+v`);
+  await expect(images).toHaveCount(2);
+  await expect(
+    canvas.getByRole("button", { name: "上传图片到画布", exact: true }),
+  ).toBeEnabled();
+  await canvas.focus();
+  await page.keyboard.press(`${native}+c`);
+  const marker = await page.evaluate(() => navigator.clipboard.readText());
+  expect(marker).toMatch(/^Tuyile canvas:[0-9a-f-]+$/);
+  await page.keyboard.press(`${native}+v`);
+  await expect(images).toHaveCount(3);
+  // Replacing the system clipboard with a new screenshot wins over old node copies.
+  await page.evaluate(async (encoded) => {
+    const blob = new Blob(
+      [Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0))],
+      { type: "image/png" },
+    );
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+  }, b64);
+  await page.keyboard.press(`${native}+v`);
+  await expect(images).toHaveCount(4);
+  await page.evaluate(() => navigator.clipboard.writeText("原生文本粘贴"));
+  const prompt = page.getByLabel("创作需求", { exact: true });
+  await prompt.fill("");
+  await prompt.press(`${native}+v`);
+  await expect(prompt).toHaveValue("原生文本粘贴");
+  await canvas.focus();
+  await page.keyboard.press(`${native}+v`);
+  await expect(images).toHaveCount(4);
+  await expect(page.locator(".canvas-status")).toContainText("画布已保存");
+  const projectId = page.url().split("/").at(-1)!;
+  const saved = await (
+    await page.request.get(`/api/projects/${projectId}/canvas`)
+  ).json();
+  expect(new Set(saved.document.nodes.map((n: any) => n.assetId)).size).toBe(3);
+  expect(
+    (
+      await (
+        await page.request.get(`/api/images/tasks?projectId=${projectId}`)
+      ).json()
+    ).tasks,
+  ).toHaveLength(0);
+  await page.reload();
+  await expect(images).toHaveCount(4);
+  await transfer.dispose();
+  await multiple.dispose();
+});
+
+test("canvas batches multiple uploads and drops, packs around existing nodes and retains partial success", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.getByLabel("项目名称").fill("批量导入排列验证");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "批量导入排列验证" })
+    .click();
+  const canvas = page.getByRole("region", { name: "项目画布", exact: true });
+  await expect(canvas).toBeVisible();
+  const sharp = (await import("sharp")).default;
+  const buffers = await Promise.all(
+    [
+      [400, 200],
+      [200, 500],
+      [300, 300],
+    ].map(([width, height]) =>
+      sharp({ create: { width, height, channels: 3, background: "#0062b0" } })
+        .png()
+        .toBuffer(),
+    ),
+  );
+  const file = (name: string, i = 0) => ({
+    name,
+    mimeType: "image/png",
+    buffer: buffers[i],
+  });
+  let uploads = 0;
+  page.on("request", (request) => {
+    if (
+      request.method() === "POST" &&
+      request.url().endsWith("/api/images/uploads")
+    )
+      uploads++;
+  });
+  const input = canvas.locator('input[type="file"]');
+  const ready = () =>
+    expect(
+      canvas.getByRole("button", { name: "上传图片到画布", exact: true }),
+    ).toBeEnabled();
+  const nodes = page.locator(".react-flow__node-image");
+  const projectId = page.url().split("/").at(-1)!;
+  const saved = async () =>
+    (await (await page.request.get(`/api/projects/${projectId}/canvas`)).json())
+      .document.nodes;
+  await input.setInputFiles(file("已有.png"));
+  await expect(nodes).toHaveCount(1);
+  await ready();
+  await expect(page.locator(".canvas-status")).toContainText("画布已保存");
+  const original = (await saved())[0];
+  await input.setInputFiles([
+    file("宽图.png"),
+    file("高图.png", 1),
+    file("方图.png", 2),
+  ]);
+  await expect(nodes).toHaveCount(4);
+  await ready();
+  await expect(page.locator(".react-flow__node.selected")).toHaveCount(3);
+  const transfer = await page.evaluateHandle((encoded) => {
+    const data = new DataTransfer();
+    for (const name of ["拖放1.png", "拖放2.png"])
+      data.items.add(
+        new File(
+          [Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0))],
+          name,
+          { type: "image/png" },
+        ),
+      );
+    return data;
+  }, buffers[0].toString("base64"));
+  await canvas.dispatchEvent("drop", { dataTransfer: transfer });
+  await expect(nodes).toHaveCount(6);
+  await ready();
+  expect(uploads).toBe(6);
+  await expect(page.locator(".canvas-status")).toContainText("画布已保存");
+  const placed = await saved();
+  expect(placed[0]).toEqual(original);
+  for (let i = 0; i < placed.length; i++)
+    for (let j = i + 1; j < placed.length; j++) {
+      const a = placed[i],
+        b = placed[j];
+      expect(
+        a.x >= b.x + b.width + 24 ||
+          b.x >= a.x + a.width + 24 ||
+          a.y >= b.y + b.height + 24 ||
+          b.y >= a.y + a.height + 24,
+      ).toBe(true);
+    }
+  await page
+    .getByTestId("reference-upload")
+    .getByRole("button", { name: "引用选中 2 张", exact: true })
+    .click();
+  await expect(
+    page.getByTestId("reference-upload").locator(".attachment"),
+  ).toHaveCount(2);
+  await input.setInputFiles([
+    file("不应上传.png"),
+    { name: "不支持.txt", mimeType: "text/plain", buffer: Buffer.from("no") },
+  ]);
+  await expect(page.getByText(/仅支持 PNG、JPEG 和 WebP/)).toBeVisible();
+  expect(uploads).toBe(6);
+  await input.setInputFiles([
+    file("保留.png"),
+    { name: "损坏.png", mimeType: "image/png", buffer: Buffer.from("broken") },
+    file("停止.png"),
+  ]);
+  await expect(page.getByText(/已加入 1\/3 张/)).toBeVisible();
+  await ready();
+  await expect(nodes).toHaveCount(7);
+  expect(uploads).toBe(8);
+  await expect(page.locator(".canvas-status")).toContainText("画布已保存");
+  await page.reload();
+  await expect(nodes).toHaveCount(7);
+  expect(
+    (
+      await (
+        await page.request.get(`/api/images/tasks?projectId=${projectId}`)
+      ).json()
+    ).tasks,
+  ).toHaveLength(0);
+  await transfer.dispose();
+});
+
+test("creation panel collapses into a rail without changing viewport or drafts and restores for explicit actions", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.getByLabel("项目名称").fill("创作面板折叠验证");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "创作面板折叠验证" })
+    .click();
+  const panel = page.getByRole("complementary", {
+    name: "图片创作",
+    exact: true,
+  });
+  const canvas = page.getByRole("region", { name: "项目画布", exact: true });
+  const prompt = page.getByLabel("创作需求", { exact: true });
+  await prompt.fill("折叠仍保留这个创作草稿");
+  const png = await (
+    await import("sharp")
+  )
+    .default({
+      create: { width: 320, height: 160, channels: 3, background: "#0062b0" },
+    })
+    .png()
+    .toBuffer();
+  await canvas.locator('input[type="file"]').setInputFiles({
+    name: "面板素材.png",
+    mimeType: "image/png",
+    buffer: png,
+  });
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(1);
+  await expect(
+    canvas.getByRole("button", { name: "上传图片到画布", exact: true }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "Zoom Out", exact: true }).click();
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(
+              `/api/projects/${page.url().split("/").at(-1)}/canvas`,
+            )
+          ).json()
+        ).document.viewport.zoom,
+    )
+    .toBeLessThan(1);
+  await expect(page.locator(".canvas-status")).toContainText("画布已保存");
+  const projectId = page.url().split("/").at(-1)!;
+  const snapshot = async () =>
+    await (await page.request.get(`/api/projects/${projectId}/canvas`)).json();
+  const before = await snapshot();
+  await page.getByRole("combobox", { name: "风格", exact: true }).click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("真实摄影", { exact: true })
+    .click();
+  await page.getByRole("button", { name: "编辑风格", exact: true }).click();
+  await expect(page.locator(".style-editor")).toBeVisible();
+  await page.locator('.creation-tool-rail button[aria-pressed="true"]').click();
+  const expand = page.getByRole("button", {
+    name: "直接创作面板",
+    exact: true,
+  });
+  await expect(expand).toBeFocused();
+  await expect(page.locator(".style-editor")).not.toBeVisible();
+  await expect
+    .poll(async () => (await panel.boundingBox())!.width)
+    .toBeCloseTo(40, 0);
+  expect((await snapshot()).document.viewport).toEqual(
+    before.document.viewport,
+  );
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/projects/${projectId}/draft`)
+          ).json()
+        ).document.direct.prompt,
+    )
+    .toBe("折叠仍保留这个创作草稿");
+  await page.reload();
+  await expect(expand).toHaveAttribute("aria-pressed", "true");
+  await expect
+    .poll(async () => (await panel.boundingBox())!.width)
+    .toBeGreaterThan(350);
+  await expect(prompt).toHaveValue("折叠仍保留这个创作草稿");
+  await page.getByRole("combobox", { name: "风格", exact: true }).click();
+  await expect(page.locator(".ant-select-dropdown:visible")).toHaveCount(1);
+  await page.locator('.creation-tool-rail button[aria-pressed="true"]').click();
+  await expect(page.locator(".ant-select-dropdown:visible")).toHaveCount(0);
+  await expand.click();
+  await expect(page.locator(".ant-select-dropdown:visible")).toHaveCount(0);
+  for (const width of [1440, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect
+      .poll(async () => (await panel.boundingBox())!.width)
+      .toBeGreaterThan(350);
+    const pin = page.getByRole("button", { name: "固定创作面板", exact: true });
+    if (await pin.count()) await pin.click();
+    await expect
+      .poll(async () => (await panel.boundingBox())!.width)
+      .toBeCloseTo(Math.min(440, Math.max(360, width * 0.285)) + 40, 0);
+    await expect
+      .poll(
+        async () =>
+          (await page.locator(".creation-layout").boundingBox())!.width -
+          (await canvas.boundingBox())!.width,
+      )
+      .toBeCloseTo(Math.min(440, Math.max(360, width * 0.285)) + 40, 0);
+    const expandedCanvas = (await canvas.boundingBox())!.width;
+    const current = (await snapshot()).document.viewport;
+    await page
+      .locator('.creation-tool-rail button[aria-pressed="true"]')
+      .click();
+    await expect
+      .poll(async () => (await panel.boundingBox())!.width)
+      .toBeCloseTo(40, 0);
+    expect((await canvas.boundingBox())!.width).toBeGreaterThan(
+      expandedCanvas + 300,
+    );
+    expect((await snapshot()).document.viewport).toEqual(current);
+    await page.screenshot({
+      path: `.codex-temp/creation-panel-collapsed-${width}.png`,
+    });
+    await expand.click();
+    await expect
+      .poll(async () => (await panel.boundingBox())!.width)
+      .toBeGreaterThan(350);
+    await expect(prompt).toHaveValue("折叠仍保留这个创作草稿");
+  }
+  await page.locator('.creation-tool-rail button[aria-pressed="true"]').click();
+  await page
+    .locator(".react-flow__node-image")
+    .first()
+    .click({ position: { x: 30, y: 30 } });
+  await expect(expand).toBeVisible();
+  await page
+    .locator(".react-flow__node-toolbar")
+    .getByRole("button", { name: "作为参考图", exact: true })
+    .click();
+  await expect(
+    page.locator('.creation-tool-rail button[aria-pressed="true"]'),
+  ).toBeVisible();
+  await expect(
+    page.getByTestId("reference-upload").locator(".attachment"),
+  ).toHaveCount(1);
+  await page.getByRole("button", { name: "提交图片任务", exact: true }).click();
+  await page.locator('.creation-tool-rail button[aria-pressed="true"]').click();
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/images/tasks?projectId=${projectId}`)
+          ).json()
+        ).tasks[0]?.state,
+    )
+    .toBe("succeeded");
+  await expect(expand).toBeVisible();
+  await expand.click();
+  await page
+    .getByRole("button", { name: "取消固定创作面板", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "任务与结果 · 1", exact: true })
+    .click();
+  const detailsTrigger = page.getByRole("button", {
+    name: "任务详情",
+    exact: true,
+  });
+  await detailsTrigger.click();
+  await expect(detailsTrigger).toHaveAttribute("aria-expanded", "true");
+  await detailsTrigger.press("Escape");
+  await expect(detailsTrigger).toHaveAttribute("aria-expanded", "false");
+  await expect(
+    page.locator('.creation-tool-rail button[aria-pressed="true"]'),
+  ).toBeVisible();
+  await detailsTrigger.press("Escape");
+  await expect(expand).toBeVisible();
+  await expect(expand).toBeFocused();
+  const generated = page
+    .locator(".react-flow__node-image")
+    .filter({ has: page.getByRole("img", { name: "生成图片", exact: true }) });
+  await generated.hover();
+  await page
+    .locator(".react-flow__node-toolbar")
+    .getByRole("button", { name: "复用图片设置", exact: true })
+    .click();
+  await expect(
+    page.locator('.creation-tool-rail button[aria-pressed="true"]'),
+  ).toBeVisible();
+  await page
+    .getByRole("dialog", { name: "请确认", exact: true })
+    .getByRole("button", { name: "取消", exact: true })
+    .click();
+  await expect(prompt).toHaveValue("折叠仍保留这个创作草稿");
+  for (let i = 0; i < 2; i++) {
+    await page
+      .locator('.creation-tool-rail button[aria-pressed="true"]')
+      .click();
+    await canvas.locator('input[type="file"]').setInputFiles({
+      name: "相同错误.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from("unsupported"),
+    });
+    await expect(
+      page.locator('.creation-tool-rail button[aria-pressed="true"]'),
+    ).toBeVisible();
+    await expect(page.getByText(/仅支持 PNG、JPEG 和 WebP/)).toBeVisible();
+  }
+});
+
+test("collapsed creation panel retains unsaved Agent edits and closes its settings popup", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.getByLabel("项目名称").fill("折叠保留Agent方案");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "折叠保留Agent方案" })
+    .click();
+  const projectId = page.url().split("/").at(-1)!;
+  const session = await (await page.request.get("/api/auth/me")).json();
+  const headers = {
+    Origin: new URL(page.url()).origin,
+    "X-CSRF-Token": session.csrfToken,
+  };
+  expect(
+    (
+      await page.request.post("/api/image-admin/planning-providers", {
+        headers,
+        data: { mode: "fake", baseUrl: "", model: "collapse-planner" },
+      })
+    ).ok(),
+  ).toBe(true);
+  const job = await (
+    await page.request.post("/api/agent/planning", {
+      headers,
+      data: {
+        projectId,
+        requestKey: randomUUID(),
+        prompt: "合成商品方案",
+        model: "test-image",
+        width: 256,
+        height: 256,
+        quality: "medium",
+        format: "png",
+        referenceIds: [],
+      },
+    })
+  ).json();
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/agent/jobs?projectId=${projectId}`)
+          ).json()
+        ).jobs.find((j: any) => j.id === job.id)?.state,
+    )
+    .toBe("succeeded");
+  await selectCreationPanel(page, "agent");
+  await page.getByRole("button", { name: "编辑提示词", exact: true }).click();
+  const title = page.getByLabel("步骤 1 名称", { exact: true });
+  await title.fill("未保存但需要保留的方案");
+  await page.getByRole("button", { name: "直接创作面板", exact: true }).click();
+  await expect(page.getByLabel("创作需求", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Agent 面板", exact: true }).click();
+  await expect(title).toHaveValue("未保存但需要保留的方案");
+  await page.locator('.creation-tool-rail button[aria-pressed="true"]').click();
+  await page.getByRole("button", { name: "Agent 面板", exact: true }).click();
+  await expect(title).toHaveValue("未保存但需要保留的方案");
+  await page.getByRole("button", { name: "保存计划修改", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "保存计划修改", exact: true }),
+  ).toBeHidden();
+  await page.getByRole("button", { name: "继续聊想法", exact: true }).click();
+  await page.getByRole("button", { name: "创作设置", exact: true }).click();
+  await expect(page.locator(".agent-settings-popover")).toBeVisible();
+  await page.locator('.creation-tool-rail button[aria-pressed="true"]').click();
+  await expect(page.locator(".agent-settings-popover")).not.toBeVisible();
+  await page.getByRole("button", { name: "Agent 面板", exact: true }).click();
+  await expect(page.locator(".agent-settings-popover")).not.toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Agent 面板", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await page
+    .getByRole("button", { name: "取消固定创作面板", exact: true })
+    .click();
+  await page.locator('.creation-tool-rail button[aria-pressed="true"]').click();
+  await page.mouse.move(300, 500);
+  await page.getByRole("button", { name: "Agent 面板", exact: true }).hover();
+  await expect(
+    page.locator('.creation-tool-rail button[aria-pressed="true"]'),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel("告诉 Agent 你的想法", { exact: true }),
+  ).not.toBeFocused();
+  const settingsTrigger = page.getByRole("button", {
+    name: "创作设置",
+    exact: true,
+  });
+  await settingsTrigger.click();
+  await expect(settingsTrigger).toBeFocused();
+  await settingsTrigger.press("Escape");
+  const clear = page
+    .locator(".agent-conversation-heading")
+    .getByRole("button", { name: "清空规划对话", exact: true });
+  await expect(clear).toHaveText("清空");
+  await expect(
+    page
+      .locator(".creation-panel-heading")
+      .getByRole("button", { name: "清空规划对话", exact: true }),
+  ).toHaveCount(0);
+  await clear.click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "取消", exact: true })
+    .click();
+  await expect(clear).toBeVisible();
+  await clear.click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await expect(clear).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "先聊想法，再确认创作", exact: true }),
+  ).toBeVisible();
+});
+
+test("anchored creation panel previews on hover, pins durably and dismisses without consuming canvas actions", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.getByLabel("项目名称").fill("锚定面板交互验证");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "锚定面板交互验证" })
+    .click();
+  const canvas = page.getByRole("region", { name: "项目画布", exact: true });
+  const panel = page.getByRole("complementary", {
+    name: "图片创作",
+    exact: true,
+  });
+  const expand = page.getByRole("button", {
+    name: "直接创作面板",
+    exact: true,
+  });
+  const collapse = page.locator(
+    '.creation-tool-rail button[aria-pressed="true"]',
+  );
+  const pin = page.getByRole("button", { name: "固定创作面板", exact: true });
+  const unpin = page.getByRole("button", {
+    name: "取消固定创作面板",
+    exact: true,
+  });
+  await expect(unpin).toHaveAttribute("aria-pressed", "true");
+  const png = await (
+    await import("sharp")
+  )
+    .default({
+      create: { width: 300, height: 160, channels: 3, background: "#0062b0" },
+    })
+    .png()
+    .toBuffer();
+  await canvas.locator('input[type="file"]').setInputFiles({
+    name: "点击选择验证.png",
+    mimeType: "image/png",
+    buffer: png,
+  });
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(1);
+  await expect(
+    canvas.getByRole("button", { name: "上传图片到画布", exact: true }),
+  ).toBeEnabled();
+  await expect(page.locator(".canvas-status")).toContainText("画布已保存");
+  await page
+    .locator(".react-flow__pane")
+    .click({ position: { x: 10, y: 100 } });
+  await expect(collapse).toBeVisible();
+  await expect(page.locator(".react-flow__node.selected")).toHaveCount(0);
+  const projectId = page.url().split("/").at(-1)!;
+  const viewport = (
+    await (await page.request.get(`/api/projects/${projectId}/canvas`)).json()
+  ).document.viewport;
+  const pinnedWidth = (await canvas.boundingBox())!.width;
+  await unpin.click();
+  await expect
+    .poll(async () => (await canvas.boundingBox())!.width)
+    .toBeGreaterThan(pinnedWidth + 300);
+  await expect
+    .poll(
+      async () =>
+        (await page.locator(".creation-layout").boundingBox())!.width -
+        (await canvas.boundingBox())!.width,
+    )
+    .toBeCloseTo(40, 0);
+  const floatingWidth = (await canvas.boundingBox())!.width;
+  await page
+    .locator(".react-flow__node-image")
+    .click({ position: { x: 20, y: 30 } });
+  await expect(expand).toBeVisible();
+  await expect(page.locator(".react-flow__node-image")).toHaveClass(/selected/);
+  expect((await canvas.boundingBox())!.width).toBeCloseTo(floatingWidth, 0);
+  await page.clock.install();
+  await expand.hover();
+  await page.clock.fastForward(350);
+  await expect(collapse).toBeVisible();
+  expect((await canvas.boundingBox())!.width).toBeCloseTo(floatingWidth, 0);
+  await page.mouse.move(300, 500);
+  await page.clock.fastForward(250);
+  await expect(expand).toBeVisible();
+  await expand.hover();
+  await page.clock.fastForward(350);
+  await page.keyboard.press("Escape");
+  await expect(expand).toBeVisible();
+  await page.mouse.move(300, 500);
+  await expand.hover();
+  await page.clock.fastForward(350);
+  const prompt = page.getByLabel("创作需求", { exact: true });
+  await prompt.fill("临时编辑也要保留");
+  await page.mouse.move(300, 500);
+  await page.clock.fastForward(500);
+  await expect(collapse).toBeVisible();
+  await page.getByRole("button", { name: "更多提示词", exact: true }).click();
+  await page.keyboard.press("Escape");
+  await expect(collapse).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(expand).toBeVisible();
+  await expect(expand).toBeFocused();
+  await expand.click();
+  await prompt.dispatchEvent("compositionstart");
+  await prompt.press("Escape");
+  await expect(collapse).toBeVisible();
+  await prompt.dispatchEvent("compositionend");
+  await prompt.press("Escape");
+  await expect(expand).toBeVisible();
+  await expand.click();
+  await pin.click();
+  await expect(unpin).toHaveAttribute("aria-pressed", "true");
+  await page
+    .locator(".react-flow__pane")
+    .click({ position: { x: 10, y: 100 } });
+  await expect(collapse).toBeVisible();
+  await page.clock.fastForward(1500);
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/projects/${projectId}/draft`)
+          ).json()
+        ).document.direct.prompt,
+    )
+    .toBe("临时编辑也要保留");
+  await page.reload();
+  await expect(unpin).toBeVisible();
+  await unpin.click();
+  await page.reload();
+  await expect(expand).toBeVisible();
+  expect(
+    (await (await page.request.get(`/api/projects/${projectId}/canvas`)).json())
+      .document.viewport,
+  ).toEqual(viewport);
+  await page.screenshot({ path: ".codex-temp/anchored-panel-rail.png" });
+  await expand.click();
+  await expect(collapse).toBeVisible();
+  await page.screenshot({ path: ".codex-temp/anchored-panel-preview.png" });
+});
+
+test("two tool-window rail icons switch independent drafts and hiding preserves pin mode", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.getByLabel("项目名称").fill("双面板图标验证");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "双面板图标验证" })
+    .click();
+  const direct = page.getByRole("button", {
+    name: "直接创作面板",
+    exact: true,
+  });
+  const agent = page.getByRole("button", { name: "Agent 面板", exact: true });
+  const panel = page.getByRole("complementary", {
+    name: "图片创作",
+    exact: true,
+  });
+  const unpin = page.getByRole("button", {
+    name: "取消固定创作面板",
+    exact: true,
+  });
+  await expect(direct).toHaveAttribute("aria-pressed", "true");
+  await expect(agent).toHaveAttribute("aria-pressed", "false");
+  await page.getByLabel("创作需求", { exact: true }).fill("独立的直接创作草稿");
+  await agent.click();
+  await expect(agent).toHaveAttribute("aria-pressed", "true");
+  await page
+    .getByLabel("告诉 Agent 你的想法", { exact: true })
+    .fill("独立的Agent想法");
+  await direct.click();
+  await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
+    "独立的直接创作草稿",
+  );
+  await agent.click();
+  await expect(
+    page.getByLabel("告诉 Agent 你的想法", { exact: true }),
+  ).toHaveValue("独立的Agent想法");
+  await agent.click();
+  await expect(agent).toHaveAttribute("aria-pressed", "false");
+  await expect
+    .poll(async () => (await panel.boundingBox())!.width)
+    .toBeCloseTo(40, 0);
+  expect(
+    await page.evaluate(() =>
+      localStorage.getItem("tuyile.creation-panel-pinned"),
+    ),
+  ).toBe("true");
+  await direct.click();
+  await expect(unpin).toHaveAttribute("aria-pressed", "true");
+  await page.locator('.creation-tool-rail button[aria-pressed="true"]').click();
+  await agent.click();
+  await expect(unpin).toHaveAttribute("aria-pressed", "true");
+  await unpin.click();
+  await page
+    .locator(".react-flow__pane")
+    .click({ position: { x: 10, y: 100 } });
+  await expect(agent).toHaveAttribute("aria-pressed", "false");
+  await direct.hover();
+  await expect(direct).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
+    "独立的直接创作草稿",
+  );
+  await page.mouse.move(300, 500);
+  await expect(direct).toHaveAttribute("aria-pressed", "false");
+  await agent.hover();
+  await expect(agent).toHaveAttribute("aria-pressed", "true");
+  await agent.click();
+  await page.mouse.move(300, 500);
+  await expect(agent).toHaveAttribute("aria-pressed", "true");
+  await agent.click();
+  await expect(agent).toHaveAttribute("aria-pressed", "false");
+  const projectId = page.url().split("/").at(-1)!;
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/projects/${projectId}/draft`)
+          ).json()
+        ).document.agent.prompt,
+    )
+    .toBe("独立的Agent想法");
+  await page.reload();
+  await expect(direct).toBeVisible();
+  await expect(agent).toBeVisible();
+  await expect(
+    page
+      .getByRole("toolbar", { name: "创作面板导航", exact: true })
+      .getByRole("button"),
+  ).toHaveCount(2);
+  await expect(direct).toHaveAttribute("aria-pressed", "false");
+  await expect(agent).toHaveAttribute("aria-pressed", "false");
+  await page.screenshot({ path: ".codex-temp/two-tool-window-rail.png" });
+  await agent.click();
+  await expect(
+    page.getByLabel("告诉 Agent 你的想法", { exact: true }),
+  ).toHaveValue("独立的Agent想法");
+  expect(
+    (
+      await (
+        await page.request.get(`/api/images/tasks?projectId=${projectId}`)
+      ).json()
+    ).tasks,
+  ).toHaveLength(0);
+});
+
+test("creation header is a compact single row and mode switching stays on the tool rail", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.getByLabel("项目名称").fill("紧凑标题栏验证");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "紧凑标题栏验证" })
+    .click();
+  await expect(
+    page
+      .locator(".main-column > header")
+      .getByRole("link", { name: "返回项目", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page
+      .locator(".main-column > header")
+      .getByRole("heading", { name: "紧凑标题栏验证", exact: true }),
+  ).toBeVisible();
+  const panel = page.getByRole("complementary", {
+    name: "图片创作",
+    exact: true,
+  });
+  const header = panel.locator(".creation-panel-heading");
+  for (const width of [1440, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const mode of ["direct", "agent"] as const) {
+      await selectCreationPanel(page, mode);
+      await expect(
+        header.getByRole("heading", {
+          name: mode === "direct" ? "直接创作" : "Agent",
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(panel.getByRole("tablist")).toHaveCount(0);
+      await expect
+        .poll(async () => (await header.boundingBox())!.height)
+        .toBeCloseTo(28, 0);
+      const panelBox = (await panel.boundingBox())!,
+        headBox = (await header.boundingBox())!;
+      expect(headBox.y - panelBox.y).toBeCloseTo(8, 0);
+      await expect(header.getByRole("button")).toHaveCount(1);
+      await expect(
+        page.getByRole("button", { name: "收起创作面板", exact: true }),
+      ).toHaveCount(0);
+      const titleBox = (await header.getByRole("heading").boundingBox())!;
+      const pin = header.getByRole("button", {
+        name: "取消固定创作面板",
+        exact: true,
+      });
+      const pinBox = (await pin.boundingBox())!;
+      expect(pinBox.x - titleBox.x - titleBox.width).toBeCloseTo(4, 0);
+      expect(pinBox.width).toBe(24);
+      expect(pinBox.height).toBe(24);
+      expect(
+        await pin.evaluate((el) => getComputedStyle(el).borderTopWidth),
+      ).toBe("0px");
+      await expect(
+        panel.getByRole("button", { name: "清空规划对话", exact: true }),
+      ).toHaveCount(0);
+      const controls = [
+        panel.getByRole("button", { name: "取消固定创作面板", exact: true }),
+      ];
+      for (const control of controls) {
+        const box = (await control.boundingBox())!;
+        expect(box.y).toBeGreaterThanOrEqual(headBox.y - 1);
+        expect(box.y + box.height).toBeLessThanOrEqual(
+          headBox.y + headBox.height + 1,
+        );
+      }
+      await expect(pin.locator("svg")).toHaveClass(/lucide-pin(?:\s|$)/);
+      // Sample every rendered frame, including the grid's 200ms transition.
+      for (const pinned of [false, true]) {
+        const samples = await header
+          .getByRole("button")
+          .evaluate(async (button) => {
+            const panel = button.closest(".creation-panel")!;
+            const frames: { x: number; width: number; height: number }[] = [];
+            const capture = () => {
+              const { x, width, height } = panel.getBoundingClientRect();
+              frames.push({ x, width, height });
+            };
+            capture();
+            (button as HTMLButtonElement).click();
+            const start = performance.now();
+            do {
+              await new Promise(requestAnimationFrame);
+              capture();
+            } while (performance.now() - start < 300);
+            return frames;
+          });
+        for (const sample of samples) {
+          expect(sample.x).toBeCloseTo(panelBox.x, 0);
+          expect(sample.width).toBeCloseTo(panelBox.width, 0);
+          expect(sample.height).toBeCloseTo(panelBox.height, 0);
+        }
+        const control = header.getByRole("button");
+        await expect(control).toHaveAttribute("aria-pressed", String(pinned));
+        await expect(control.locator("svg")).toHaveClass(
+          pinned ? /lucide-pin(?:\s|$)/ : /lucide-pin-off/,
+        );
+      }
+      await page.screenshot({
+        path: `.codex-temp/compact-header-${mode}-${width}.png`,
+      });
+    }
+  }
+  await page.getByRole("link", { name: "项目", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "我的项目", exact: true }),
+  ).toBeVisible();
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "紧凑标题栏验证" })
+    .click();
+  await expect(
+    page
+      .locator(".main-column > header")
+      .getByRole("heading", { name: "紧凑标题栏验证", exact: true }),
+  ).toBeVisible();
 });
