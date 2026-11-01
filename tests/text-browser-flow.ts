@@ -1,6 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
-export async function verifyTextCanvas(page: Page) {
+async function createProject(page: Page) {
   const origin = new URL(page.url());
   if (
     origin.hostname !== "127.0.0.1" ||
@@ -10,9 +10,26 @@ export async function verifyTextCanvas(page: Page) {
   const apiUrl = (path: string) => new URL(path, origin).toString();
   await page.goto(new URL("/projects", page.url()).toString());
   const name = `文案验收-${randomUUID().slice(0, 8)}`;
-  await page.getByLabel("项目名称").fill(name);
+  await page.getByRole("textbox", { name: "项目名称", exact: true }).fill(name);
   await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await page.getByRole("link", { name, exact: true }).click();
 
+  return { origin, apiUrl, name };
+}
+async function createNote(page: Page) {
+  const project = await createProject(page);
+  const canvas = page.getByRole("region", { name: "项目画布", exact: true });
+  await page.getByRole("button", { name: "添加文本", exact: true }).click();
+  const editor = canvas.getByRole("textbox", { name: "文案正文", exact: true });
+  await editor.fill("山间开业，慢慢相遇。\n<b>按纯文本保留</b>");
+  await editor.press("Enter");
+  await editor.press("ControlOrMeta+Enter");
+  await expect(editor).toHaveCount(0);
+
+  return { ...project, canvas, editor };
+}
+export async function verifyProjectSidebar(page: Page) {
+  const { origin, apiUrl, name } = await createProject(page);
   const initialSession = await (
     await page.request.get(apiUrl("/api/auth/me"))
   ).json();
@@ -59,44 +76,9 @@ export async function verifyTextCanvas(page: Page) {
       .getAttribute("title"),
   ).toContain(longProjectName);
   await page.setViewportSize(initialViewport);
-
-  const canvas = page.getByRole("region", { name: "项目画布", exact: true });
-  await page.getByRole("button", { name: "添加文本", exact: true }).click();
-  const editor = canvas.getByRole("textbox", { name: "文案正文", exact: true });
-  async function editFromOtherTab(text: string) {
-    await expect(page.locator(".canvas-status")).toContainText("画布已保存");
-    const other = await page.context().newPage();
-    try {
-      await other.goto(page.url());
-      const surface = other.getByRole("region", {
-        name: "项目画布",
-        exact: true,
-      });
-      await surface.locator(".react-flow__controls-fitview").click();
-      await surface.locator(".canvas-text-body").first().dblclick();
-      await surface.getByLabel("文案正文", { exact: true }).fill(text);
-      await surface
-        .getByLabel("文案正文", { exact: true })
-        .press("ControlOrMeta+Enter");
-      await expect(other.locator(".canvas-status")).toContainText("画布已保存");
-    } finally {
-      await other.close();
-    }
-  }
-  async function reloadPreview() {
-    await canvas.getByRole("button", { name: "重新加载", exact: true }).click();
-    const dialog = page.getByRole("dialog", { name: "请确认", exact: true });
-    await dialog.getByRole("button", { name: "确认", exact: true }).click();
-    await expect(
-      canvas.getByRole("button", { name: "重新加载", exact: true }),
-    ).toHaveCount(0);
-  }
-
-  await editor.fill("山间开业，慢慢相遇。\n<b>按纯文本保留</b>");
-  await editor.press("Enter");
-  await editor.press("ControlOrMeta+Enter");
-  await expect(editor).toHaveCount(0);
-
+}
+export async function verifyTextControls(page: Page) {
+  const { canvas } = await createNote(page);
   const palette = canvas.locator(".canvas-tone-picker");
   await expect(palette.getByRole("radio")).toHaveCount(5);
   await palette
@@ -205,6 +187,9 @@ export async function verifyTextCanvas(page: Page) {
       await preview.close();
     }
   }
+}
+async function prepareReferences(page: Page) {
+  const { apiUrl, canvas, editor } = await createNote(page);
   const title = canvas.getByRole("button", {
     name: "重命名文案：文案",
     exact: true,
@@ -323,6 +308,62 @@ export async function verifyTextCanvas(page: Page) {
   await page.reload();
   await expect(canvas.locator(".canvas-text-card")).toHaveCount(2);
   await expect(refs).toContainText("引用文案 · 2");
+  return {
+    apiUrl,
+    canvas,
+    editor,
+    refs,
+    picker,
+    unintended,
+    track,
+    saved,
+    projectId,
+  };
+}
+function referenceConflictHelpers(
+  page: Page,
+  canvas: ReturnType<Page["locator"]>,
+  editor: ReturnType<Page["locator"]>,
+) {
+  async function editFromOtherTab(text: string) {
+    await expect(page.locator(".canvas-status")).toContainText("画布已保存");
+    const other = await page.context().newPage();
+    try {
+      await other.goto(page.url());
+      const surface = other.getByRole("region", {
+        name: "项目画布",
+        exact: true,
+      });
+      await surface.locator(".react-flow__controls-fitview").click();
+      await surface.locator(".canvas-text-body").first().dblclick();
+      await surface.getByLabel("文案正文", { exact: true }).fill(text);
+      await surface
+        .getByLabel("文案正文", { exact: true })
+        .press("ControlOrMeta+Enter");
+      await expect(other.locator(".canvas-status")).toContainText("画布已保存");
+    } finally {
+      await other.close();
+    }
+  }
+  async function reloadPreview() {
+    await canvas.getByRole("button", { name: "重新加载", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "请确认", exact: true });
+    await dialog.getByRole("button", { name: "确认", exact: true }).click();
+    await expect(
+      canvas.getByRole("button", { name: "重新加载", exact: true }),
+    ).toHaveCount(0);
+  }
+
+  return { editFromOtherTab, reloadPreview };
+}
+export async function verifyDirectTextCreation(page: Page) {
+  const { apiUrl, canvas, editor, refs, projectId } =
+    await prepareReferences(page);
+  const { editFromOtherTab, reloadPreview } = referenceConflictHelpers(
+    page,
+    canvas,
+    editor,
+  );
   // Text editing preserves native selection and textarea undo.
   await canvas.locator(".canvas-text-body").first().dblclick();
   await editor.press("ControlOrMeta+A");
@@ -486,6 +527,23 @@ export async function verifyTextCanvas(page: Page) {
   await expect(refs).toContainText("引用文案已删除或内容为空");
   await page.getByRole("button", { name: "撤销", exact: true }).click();
   await expect(canvas.locator(".canvas-text-card")).toHaveCount(2);
+}
+export async function verifyAgentTextCreation(page: Page) {
+  const {
+    apiUrl,
+    canvas,
+    editor,
+    picker,
+    unintended,
+    track,
+    saved,
+    projectId,
+  } = await prepareReferences(page);
+  const { editFromOtherTab, reloadPreview } = referenceConflictHelpers(
+    page,
+    canvas,
+    editor,
+  );
   // The same links guide Agent planning; confirmation uses the frozen planning snapshot.
   const session = await (await page.request.get(apiUrl("/api/auth/me"))).json();
   const headers = {
@@ -552,12 +610,17 @@ export async function verifyTextCanvas(page: Page) {
   const planned = await planning;
   expect(planned.ok()).toBe(true);
   const job = await planned.json();
-  const latestSources = task.textSources.map(
-    (source: { nodeId: string; text: string }) =>
+  const latestSources = [saved.document.nodes[1], saved.document.nodes[0]]
+    .map((n: { id: string; label: string; text: string }) => ({
+      nodeId: n.id,
+      title: n.label,
+      text: n.text,
+    }))
+    .map((source: { nodeId: string; text: string }) =>
       source.nodeId === saved.document.nodes[0].id
         ? { ...source, text: agentLatest }
         : source,
-  );
+    );
   expect(job.textSources).toEqual(latestSources);
   await page.getByRole("button", { name: "确认执行", exact: true }).waitFor();
   await canvas.locator(".canvas-text-body").first().dblclick();
@@ -590,4 +653,16 @@ export async function verifyTextCanvas(page: Page) {
     path: ".codex-temp/text-canvas-acceptance.png",
     animations: "disabled",
   });
+}
+/** Same independent scenarios against the built Docker environment. */
+export async function verifyTextCanvas(page: Page) {
+  for (const [name, verify] of [
+    ["sidebar", verifyProjectSidebar],
+    ["text controls", verifyTextControls],
+    ["direct text creation", verifyDirectTextCreation],
+    ["Agent text creation", verifyAgentTextCreation],
+  ] as const) {
+    await verify(page);
+    console.log(`Docker text scenario passed: ${name}`);
+  }
 }

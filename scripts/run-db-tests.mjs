@@ -55,7 +55,13 @@ try {
         ? await run(
             process.argv[2] === "runtime"
               ? ["scripts/runtime-smoke.mjs"]
-              : ["node_modules/@playwright/test/cli.js", "test"],
+              : [
+                  "node_modules/@playwright/test/cli.js",
+                  "test",
+                  ...(process.argv[3] === "--"
+                    ? process.argv.slice(4)
+                    : process.argv.slice(3)),
+                ],
           )
         : prepared;
   } else throw new Error("UNKNOWN_DATABASE_TEST_SUITE");

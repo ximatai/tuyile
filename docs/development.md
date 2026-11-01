@@ -116,6 +116,10 @@ corepack pnpm test:recovery
 
 数据库测试必须串行，共用`.codex-temp/database-tests.lock`。reset/seed仅允许loopback55440的`tuyile_test`，不得指向开发或Docker验收库。强制中断留下锁时先确认没有存活测试进程，再处理锁；不能靠删锁绕过并发守卫。
 
+专项浏览器测试通过统一入口运行，例如 `corepack pnpm test:e2e -- tests/e2e/text-canvas.spec.ts --grep "text palette"`，同样执行专用数据库准备与串行锁保护。不能绕过该入口直接并发运行会改写测试库的 Playwright。文案测试分为侧栏、配色/操作条边界、直接创作、Agent 四个独立项目场景；触控板模拟单独运行 `corepack pnpm test:e2e -- tests/e2e/canvas-gestures.spec.ts`。
+
+触控板人工验收在本地合成数据环境执行：准备一张图片、短便签和可滚动的长便签，分别在图片、便签标题、正文和编辑框上捏合，确认只缩放画布、浏览器页面比例不变；普通双指滚动在长正文和编辑框内只滚动文字（到边界也不带动页面），短正文与图片上的行为一致。缩放后检查可编辑、保存和刷新恢复。记录浏览器、系统及实际触控板结果；Ctrl+wheel 自动化只能模拟 Chromium 捏合事件，不能标记为真实硬件验收通过。
+
 e2e自行启动/关闭测试服务，凭据随机，截图和trace被忽略。界面验收以1440/1920桌面为主。浏览器几何检查应等真实布局动画结束，不以固定sleep或过渡中的跨帧测量冒充稳定布局。
 
 恢复演练需要Docker Desktop、OpenSSL及Chromium，会暂时停止再恢复原专用测试PG，只清理本次随机新卷，不改开发库。详细失败与中断清理见[运行手册](operations.md)。
