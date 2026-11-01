@@ -9,7 +9,7 @@ export function useCreationPanel() {
       return true;
     }
   });
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(pinned);
   const [engaged, setEngaged] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const clear = useCallback(() => {
@@ -41,19 +41,18 @@ export function useCreationPanel() {
   function togglePin() {
     clear();
     setPinned(!pinned);
-    setOpen(pinned);
-    setEngaged(pinned);
+    setOpen(true);
+    setEngaged(true);
   }
   function toggle() {
-    if (pinned || open) {
-      setPinned(false);
-      hide();
-    } else show();
+    if (open) hide();
+    else show();
   }
-  function hoverStart() {
+  function hoverStart(onOpen?: () => void) {
     clear();
-    if (!pinned && !open)
+    if (!pinned && (!open || !engaged))
       timer.current = setTimeout(() => {
+        onOpen?.();
         setOpen(true);
         setEngaged(false);
       }, 300);
@@ -65,13 +64,14 @@ export function useCreationPanel() {
   return {
     pinned,
     engaged,
-    collapsed: !pinned && !open,
+    collapsed: !open,
     show,
     hide,
     engage,
     togglePin,
     toggle,
     hoverStart,
+    cancelHover: clear,
     hoverEnd,
   };
 }

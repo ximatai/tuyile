@@ -3873,3 +3873,13 @@ h3 {
 .workspace-shell .creation-panel .agent-clear-history { right: 96px; }
 
 .creation-panel-control-tip, .creation-panel-control-tip * { pointer-events: none; }
+
+/* IDEA-style tool-window buttons remain reachable in every viewing mode. */
+.creation-tool-rail { position: absolute; inset: 0 0 0 auto; width: 40px; padding: 10px 5px; display: flex; flex-direction: column; gap: 8px; background: #fff; border-left: 1px solid #e4eaf1; z-index: 20; }
+.creation-tool-rail .button { width: 28px; height: 28px; padding: 0; flex-shrink: 0; }
+.creation-tool-rail .button[aria-pressed="true"] { color: #0062b0; background: #e6f4ff; border-color: #91caff; }
+.workspace-shell .creation-layout:not(.creation-panel-collapsed):not(.creation-panel-unpinned) { grid-template-columns: minmax(0, 1fr) calc(clamp(360px, 28.5vw, 440px) + 40px); }
+.creation-layout:not(.creation-panel-collapsed) > .creation-panel { padding-right: 56px; }
+.creation-panel-unpinned:not(.creation-panel-collapsed) > .creation-panel { width: calc(clamp(360px, 28.5vw, 440px) + 40px); }
+.creation-panel-collapsed .creation-panel > * { display: none; }
+.workspace-shell .creation-panel .agent-clear-history { right: 136px; }

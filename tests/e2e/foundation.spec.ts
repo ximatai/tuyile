@@ -5411,7 +5411,7 @@ test("creation panel collapses into a rail without changing viewport or drafts a
   await expect(page.locator(".style-editor")).toBeVisible();
   await page.getByRole("button", { name: "收起创作面板", exact: true }).click();
   const expand = page.getByRole("button", {
-    name: "展开创作面板",
+    name: "直接创作面板",
     exact: true,
   });
   await expect(expand).toBeFocused();
@@ -5433,11 +5433,10 @@ test("creation panel collapses into a rail without changing viewport or drafts a
     )
     .toBe("折叠仍保留这个创作草稿");
   await page.reload();
-  await expect(expand).toBeVisible();
+  await expect(expand).toHaveAttribute("aria-pressed", "true");
   await expect
     .poll(async () => (await panel.boundingBox())!.width)
-    .toBeCloseTo(40, 0);
-  await expand.click();
+    .toBeGreaterThan(350);
   await expect(prompt).toHaveValue("折叠仍保留这个创作草稿");
   await page.getByRole("combobox", { name: "风格", exact: true }).click();
   await expect(page.locator(".ant-select-dropdown:visible")).toHaveCount(1);
@@ -5454,7 +5453,7 @@ test("creation panel collapses into a rail without changing viewport or drafts a
     if (await pin.count()) await pin.click();
     await expect
       .poll(async () => (await panel.boundingBox())!.width)
-      .toBeCloseTo(Math.min(440, Math.max(360, width * 0.285)), 0);
+      .toBeCloseTo(Math.min(440, Math.max(360, width * 0.285)) + 40, 0);
     const expandedCanvas = (await canvas.boundingBox())!.width;
     const current = (await snapshot()).document.viewport;
     await page
@@ -5506,6 +5505,9 @@ test("creation panel collapses into a rail without changing viewport or drafts a
     .toBe("succeeded");
   await expect(expand).toBeVisible();
   await expand.click();
+  await page
+    .getByRole("button", { name: "取消固定创作面板", exact: true })
+    .click();
   await page
     .getByRole("button", { name: "任务与结果 · 1", exact: true })
     .click();
@@ -5610,8 +5612,12 @@ test("collapsed creation panel retains unsaved Agent edits and closes its settin
   await page.getByRole("button", { name: "编辑提示词", exact: true }).click();
   const title = page.getByLabel("步骤 1 名称", { exact: true });
   await title.fill("未保存但需要保留的方案");
+  await page.getByRole("button", { name: "直接创作面板", exact: true }).click();
+  await expect(page.getByLabel("创作需求", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Agent 面板", exact: true }).click();
+  await expect(title).toHaveValue("未保存但需要保留的方案");
   await page.getByRole("button", { name: "收起创作面板", exact: true }).click();
-  await page.getByRole("button", { name: "展开创作面板", exact: true }).click();
+  await page.getByRole("button", { name: "Agent 面板", exact: true }).click();
   await expect(title).toHaveValue("未保存但需要保留的方案");
   await page.getByRole("button", { name: "保存计划修改", exact: true }).click();
   await expect(
@@ -5622,14 +5628,17 @@ test("collapsed creation panel retains unsaved Agent edits and closes its settin
   await expect(page.locator(".agent-settings-popover")).toBeVisible();
   await page.getByRole("button", { name: "收起创作面板", exact: true }).click();
   await expect(page.locator(".agent-settings-popover")).not.toBeVisible();
-  await page.getByRole("button", { name: "展开创作面板", exact: true }).click();
+  await page.getByRole("button", { name: "Agent 面板", exact: true }).click();
   await expect(page.locator(".agent-settings-popover")).not.toBeVisible();
   await expect(
     page.getByRole("tab", { name: "Agent", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
+  await page
+    .getByRole("button", { name: "取消固定创作面板", exact: true })
+    .click();
   await page.getByRole("button", { name: "收起创作面板", exact: true }).click();
   await page.mouse.move(300, 500);
-  await page.getByRole("button", { name: "展开创作面板", exact: true }).hover();
+  await page.getByRole("button", { name: "Agent 面板", exact: true }).hover();
   await expect(
     page.getByRole("button", { name: "收起创作面板", exact: true }),
   ).toBeVisible();
@@ -5661,7 +5670,7 @@ test("anchored creation panel previews on hover, pins durably and dismisses with
     exact: true,
   });
   const expand = page.getByRole("button", {
-    name: "展开创作面板",
+    name: "直接创作面板",
     exact: true,
   });
   const collapse = page.getByRole("button", {
@@ -5784,4 +5793,113 @@ test("anchored creation panel previews on hover, pins durably and dismisses with
   await expand.click();
   await expect(collapse).toBeVisible();
   await page.screenshot({ path: ".codex-temp/anchored-panel-preview.png" });
+});
+
+test("two tool-window rail icons switch independent drafts and hiding preserves pin mode", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.getByLabel("项目名称").fill("双面板图标验证");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "双面板图标验证" })
+    .click();
+  const direct = page.getByRole("button", {
+    name: "直接创作面板",
+    exact: true,
+  });
+  const agent = page.getByRole("button", { name: "Agent 面板", exact: true });
+  const panel = page.getByRole("complementary", {
+    name: "图片创作",
+    exact: true,
+  });
+  const unpin = page.getByRole("button", {
+    name: "取消固定创作面板",
+    exact: true,
+  });
+  await expect(direct).toHaveAttribute("aria-pressed", "true");
+  await expect(agent).toHaveAttribute("aria-pressed", "false");
+  await page.getByLabel("创作需求", { exact: true }).fill("独立的直接创作草稿");
+  await agent.click();
+  await expect(agent).toHaveAttribute("aria-pressed", "true");
+  await page
+    .getByLabel("告诉 Agent 你的想法", { exact: true })
+    .fill("独立的Agent想法");
+  await direct.click();
+  await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
+    "独立的直接创作草稿",
+  );
+  await agent.click();
+  await expect(
+    page.getByLabel("告诉 Agent 你的想法", { exact: true }),
+  ).toHaveValue("独立的Agent想法");
+  await agent.click();
+  await expect(agent).toHaveAttribute("aria-pressed", "false");
+  await expect
+    .poll(async () => (await panel.boundingBox())!.width)
+    .toBeCloseTo(40, 0);
+  expect(
+    await page.evaluate(() =>
+      localStorage.getItem("tuyile.creation-panel-pinned"),
+    ),
+  ).toBe("true");
+  await direct.click();
+  await expect(unpin).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "收起创作面板", exact: true }).click();
+  await agent.click();
+  await expect(unpin).toHaveAttribute("aria-pressed", "true");
+  await unpin.click();
+  await page
+    .locator(".react-flow__pane")
+    .click({ position: { x: 10, y: 100 } });
+  await expect(agent).toHaveAttribute("aria-pressed", "false");
+  await direct.hover();
+  await expect(direct).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByLabel("创作需求", { exact: true })).toHaveValue(
+    "独立的直接创作草稿",
+  );
+  await page.mouse.move(300, 500);
+  await expect(direct).toHaveAttribute("aria-pressed", "false");
+  await agent.hover();
+  await expect(agent).toHaveAttribute("aria-pressed", "true");
+  await agent.click();
+  await page.mouse.move(300, 500);
+  await expect(agent).toHaveAttribute("aria-pressed", "true");
+  await agent.click();
+  await expect(agent).toHaveAttribute("aria-pressed", "false");
+  const projectId = page.url().split("/").at(-1)!;
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/projects/${projectId}/draft`)
+          ).json()
+        ).document.agent.prompt,
+    )
+    .toBe("独立的Agent想法");
+  await page.reload();
+  await expect(direct).toBeVisible();
+  await expect(agent).toBeVisible();
+  await expect(
+    page
+      .getByRole("toolbar", { name: "创作面板导航", exact: true })
+      .getByRole("button"),
+  ).toHaveCount(2);
+  await expect(direct).toHaveAttribute("aria-pressed", "false");
+  await expect(agent).toHaveAttribute("aria-pressed", "false");
+  await page.screenshot({ path: ".codex-temp/two-tool-window-rail.png" });
+  await agent.click();
+  await expect(
+    page.getByLabel("告诉 Agent 你的想法", { exact: true }),
+  ).toHaveValue("独立的Agent想法");
+  expect(
+    (
+      await (
+        await page.request.get(`/api/images/tasks?projectId=${projectId}`)
+      ).json()
+    ).tasks,
+  ).toHaveLength(0);
 });

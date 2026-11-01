@@ -14,6 +14,8 @@ import {
   Info,
   PanelRightClose,
   PanelRightOpen,
+  WandSparkles,
+  Bot,
   Pin,
   PinOff,
 } from "lucide-react";
@@ -789,7 +791,7 @@ function CreationEditor({
             className="creation-panel"
             aria-label="图片创作"
             id={panelId}
-            onMouseEnter={panel.hoverStart}
+            onMouseEnter={panel.cancelHover}
             onMouseLeave={panel.hoverEnd}
             onPointerDownCapture={() => {
               if (!panelCollapsed) panel.engage();
@@ -856,7 +858,6 @@ function CreationEditor({
               >
                 <Button
                   type="button"
-                  ref={panelToggle}
                   disabled={false}
                   className="creation-panel-toggle"
                   aria-label={panelCollapsed ? "展开创作面板" : "收起创作面板"}
@@ -1044,6 +1045,51 @@ function CreationEditor({
             </div>
           </aside>
         </ControlScope>
+        <div
+          className="creation-tool-rail"
+          role="toolbar"
+          aria-label="创作面板导航"
+          onMouseEnter={panel.cancelHover}
+          onMouseLeave={panel.hoverEnd}
+        >
+          {(["direct", "agent"] as const).map((key) => (
+            <Tooltip
+              key={key}
+              title={key === "direct" ? "直接创作" : "Agent"}
+              placement="left"
+              classNames={{ root: "creation-panel-control-tip" }}
+            >
+              <Button
+                type="button"
+                ref={mode === key ? panelToggle : undefined}
+                aria-label={key === "direct" ? "直接创作面板" : "Agent 面板"}
+                aria-pressed={!panelCollapsed && mode === key}
+                aria-controls={panelId}
+                onMouseEnter={() => panel.hoverStart(() => setMode(key))}
+                onMouseLeave={panel.cancelHover}
+                onClick={() => {
+                  composing.current = false;
+                  if (
+                    mode === key &&
+                    !panelCollapsed &&
+                    (panel.pinned || panel.engaged)
+                  )
+                    panel.hide();
+                  else {
+                    setMode(key);
+                    panel.show();
+                  }
+                }}
+              >
+                {key === "direct" ? (
+                  <WandSparkles size={17} />
+                ) : (
+                  <Bot size={17} />
+                )}
+              </Button>
+            </Tooltip>
+          ))}
+        </div>
       </div>
     </section>
   );

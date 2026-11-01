@@ -97,21 +97,21 @@ try {
   );
   assert.equal(
     await page
-      .getByRole("button", { name: "展开创作面板", exact: true })
-      .getAttribute("aria-expanded"),
+      .getByRole("button", { name: "直接创作面板", exact: true })
+      .getAttribute("aria-pressed"),
     "false",
   );
   await page.screenshot({
     path: ".codex-temp/docker-creation-panel-collapsed.png",
   });
-  await page.getByRole("button", { name: "展开创作面板", exact: true }).click();
+  await page.getByRole("button", { name: "直接创作面板", exact: true }).click();
   await page.waitForFunction(
     () =>
       document.querySelector(".creation-panel")!.getBoundingClientRect().width >
       350,
   );
   assert.equal(await panelPrompt.inputValue(), "Docker retained panel draft");
-  await page.getByRole("button", { name: "固定创作面板", exact: true }).click();
+
   assert.equal(
     await page
       .getByRole("button", { name: "取消固定创作面板", exact: true })
@@ -136,20 +136,21 @@ try {
     .locator(".react-flow__pane")
     .click({ position: { x: 10, y: 100 } });
   await page
-    .getByRole("button", { name: "展开创作面板", exact: true })
+    .getByRole("button", { name: "直接创作面板", exact: true })
     .waitFor();
   assert(
     Math.abs((await canvasSurface.boundingBox())!.width - floatingCanvasWidth) <
       1,
   );
-  await page.getByRole("button", { name: "展开创作面板", exact: true }).click();
+  await page.getByRole("button", { name: "直接创作面板", exact: true }).click();
   await page.getByRole("button", { name: "固定创作面板", exact: true }).click();
 
   await page.waitForFunction(
     () =>
       Math.abs(
         document.querySelector(".creation-panel")!.getBoundingClientRect()
-          .width - Math.min(440, Math.max(360, innerWidth * 0.285)),
+          .width -
+          (Math.min(440, Math.max(360, innerWidth * 0.285)) + 40),
       ) < 0.5,
   );
   assert((await panel.boundingBox())!.width > 350);
