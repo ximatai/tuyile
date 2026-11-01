@@ -22,7 +22,9 @@
     "test:recovery": "node --env-file=.env.test scripts/run-db-tests.mjs recovery",
     "test:runtime": "node --env-file=.env.test scripts/run-db-tests.mjs runtime",
     "test:docker": "node --env-file=.env.docker --import tsx scripts/docker-smoke.ts && node --env-file=.env.docker --import tsx scripts/docker-browser-smoke.ts",
-    "check:release": "node scripts/check-release.mjs"
+    "check:release": "node scripts/check-release.mjs",
+    "test:e2e:smoke": "node --env-file=.env.test scripts/run-db-tests.mjs e2e --config playwright.smoke.config.ts",
+    "test:docker:full": "node --env-file=.env.docker --import tsx scripts/docker-smoke.ts && node --env-file=.env.docker --import tsx scripts/docker-browser-regression.ts"
   },
   "dependencies": {
     "@tuyile/contracts": "workspace:*",

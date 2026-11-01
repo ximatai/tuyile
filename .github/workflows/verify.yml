@@ -1,10 +1,19 @@
 name: Verify
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+concurrency:
+  group: verify-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 permissions:
   contents: read
 jobs:
   foundation:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -12,6 +21,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version-file: .node-version
+      - name: Choose verification scope
+        id: scope
+        env:
+          CI_EVENT: ${{ github.event_name }}
+          CI_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          CI_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: node scripts/ci-scope.mjs
       - run: corepack enable
       - run: corepack pnpm check:release
       - name: Scan complete Git history for secrets (offline container)
@@ -22,20 +38,31 @@ jobs:
           git /repo --config /repo/.gitleaks.toml --log-opts="--all --full-history" --redact=100 --no-banner
       - run: pnpm install --frozen-lockfile
       - run: pnpm env:init
-      - run: docker compose up -d --wait postgres
-      - run: docker compose --env-file .env.test -p tuyile-test up -d --wait postgres
-      - run: pnpm db:migrate
+      - if: steps.scope.outputs.code == 'true'
+        run: docker compose --env-file .env.test -p tuyile-test up -d --wait postgres
       - run: pnpm typecheck
       - run: pnpm build
       - run: pnpm test:unit
-      - run: pnpm test:integration
-      - run: pnpm test:runtime
-      - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm test:e2e
-      - run: docker compose config --quiet --no-env-resolution
-      - run: docker compose --env-file .env.docker -p tuyile-docker --profile app up -d --build --wait
-      - run: curl --fail http://127.0.0.1:8792/api/ready
-      - run: pnpm test:docker
+      - if: steps.scope.outputs.code == 'true'
+        run: pnpm test:integration
+      - if: steps.scope.outputs.code == 'true'
+        run: pnpm test:runtime
+      - if: steps.scope.outputs.code == 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      - if: steps.scope.outputs.code == 'true' && steps.scope.outputs.full == 'true'
+        run: pnpm test:e2e
+      - if: steps.scope.outputs.code == 'true' && steps.scope.outputs.full != 'true'
+        run: pnpm test:e2e:smoke
+      - if: steps.scope.outputs.docker == 'true'
+        run: docker compose config --quiet --no-env-resolution
+      - if: steps.scope.outputs.docker == 'true'
+        run: docker compose --env-file .env.docker -p tuyile-docker --profile app up -d --build --wait
+      - if: steps.scope.outputs.docker == 'true'
+        run: curl --fail http://127.0.0.1:8792/api/ready
+      - if: steps.scope.outputs.docker == 'true' && steps.scope.outputs.docker_extended != 'true'
+        run: pnpm test:docker
+      - if: steps.scope.outputs.docker == 'true' && steps.scope.outputs.docker_extended == 'true'
+        run: pnpm test:docker:full
       - if: always()
         run: |
           docker compose --env-file .env.docker -p tuyile-docker --profile app down
