@@ -1,3 +1,4 @@
+import { toolbarPlacement } from "./toolbar-placement";
 import { highlightLineage } from "./lineage";
 import { useTextReferences } from "../text-references";
 import { DemoImageDetails } from "../demo";
@@ -62,7 +63,7 @@ import {
   useConfirm,
   Upload,
   Input,
-  Select,
+  Radio,
 } from "@tuyile/ui";
 import { useNavigate } from "react-router-dom";
 import { EditorStore } from "./store";
@@ -217,20 +218,20 @@ function ImageCard({
   const actionCount =
     2 + Number(!!data.reference) + Number(!!data.reuse) + Number(!!data.info);
   const toolbarWidth = compact ? 28 : actionCount * 28 + (actionCount - 1) * 4;
-  const right = (positionAbsoluteX + width) * viewport.zoom + viewport.x;
-  const left = right - 8 - toolbarWidth;
-  const horizontalInset =
-    -8 + Math.max(0, 8 - left) - Math.max(0, right - 8 - (canvasWidth - 8));
-  const top = positionAbsoluteY * viewport.zoom + viewport.y;
-  const bottom = top + height * viewport.zoom;
-  const onScreen =
-    right > 0 &&
-    right - width * viewport.zoom < canvasWidth &&
-    bottom > 0 &&
-    top < canvasHeight;
-  const desiredTop = top + 8;
-  const toolbarTop = Math.max(8, Math.min(desiredTop, canvasHeight - 36));
-  const toolbarOffset = top - 28 - toolbarTop;
+  const {
+    onScreen,
+    horizontalInset,
+    offset: toolbarOffset,
+  } = toolbarPlacement({
+    x: positionAbsoluteX,
+    y: positionAbsoluteY,
+    width,
+    height,
+    viewport,
+    canvasWidth,
+    canvasHeight,
+    toolbarWidth,
+  });
   useEffect(() => setMenuOpen(false), [compact, onScreen]);
 
   return (
@@ -419,6 +420,10 @@ function GroupCard({
 function TextCard({
   data,
   selected,
+  width = 300,
+  height = 220,
+  positionAbsoluteX,
+  positionAbsoluteY,
 }: NodeProps<
   Node<{
     label: string;
@@ -426,7 +431,7 @@ function TextCard({
     tone: string;
     rename: (v: string) => void;
     update: (
-      patch: { text?: string; tone?: "plain" | "yellow" | "blue" | "green" },
+      patch: Pick<CanvasNode, "text" | "tone">,
       history?: boolean,
     ) => void;
     referenceText: () => void;
@@ -434,6 +439,20 @@ function TextCard({
     startEditing: boolean;
   }>
 >) {
+  const viewport = useViewport();
+  const canvasWidth = useStore((state) => state.width);
+  const canvasHeight = useStore((state) => state.height);
+  const placement = toolbarPlacement({
+    x: positionAbsoluteX,
+    y: positionAbsoluteY,
+    width,
+    height,
+    viewport,
+    canvasWidth,
+    canvasHeight,
+    toolbarWidth: 28,
+    outside: true,
+  });
   const [editing, setEditing] = useState(data.startEditing);
   const firstChange = useRef(true);
   const composing = useRef(false);
@@ -452,21 +471,35 @@ function TextCard({
       <NodeResizer minWidth={180} minHeight={140} isVisible={selected} />
       <div className="canvas-text-header">
         <NodeTitle label={data.label} kind="文案" onRename={data.rename} />
-        <Select
+        <Radio.Group
           aria-label="文案底色"
-          className="nodrag nopan"
-          size="small"
+          className="canvas-tone-picker nodrag nopan"
           value={data.tone || "plain"}
-          options={[
-            { value: "plain", label: "透明" },
-            { value: "yellow", label: "浅黄" },
-            { value: "blue", label: "浅蓝" },
-            { value: "green", label: "浅绿" },
-          ]}
-          onChange={(tone) =>
-            data.update({ tone: tone as "plain" | "yellow" | "blue" | "green" })
-          }
-        />
+          onChange={(event) => data.update({ tone: event.target.value })}
+        >
+          {(
+            [
+              { value: "plain", label: "透明" },
+              { value: "yellow", label: "浅黄" },
+              { value: "blue", label: "浅蓝" },
+              { value: "green", label: "浅绿" },
+              { value: "pink", label: "浅粉" },
+            ] as const
+          ).map((tone) => (
+            <Tooltip
+              key={tone.value}
+              title={tone.label}
+              trigger={["hover", "focus"]}
+            >
+              <Radio.Button value={tone.value} aria-label={tone.label}>
+                <span
+                  aria-hidden="true"
+                  className={`canvas-tone-dot tone-${tone.value}`}
+                />
+              </Radio.Button>
+            </Tooltip>
+          ))}
+        </Radio.Group>
       </div>
       {editing ? (
         <Input.TextArea
@@ -516,15 +549,26 @@ function TextCard({
           {data.text || "双击编写文案"}
         </div>
       )}
-      {selected && (
-        <Button
-          type="button"
-          className="nodrag nopan"
-          onClick={data.referenceText}
-        >
-          引用到当前创作
-        </Button>
-      )}
+      <NodeToolbar
+        isVisible={selected && placement.onScreen}
+        position={Position.Top}
+        align="end"
+        offset={placement.offset}
+        style={{ marginLeft: placement.horizontalInset }}
+        className="canvas-image-actions is-visible nodrag nopan"
+        role="toolbar"
+        aria-label="文案操作"
+      >
+        <Tooltip title="引用到当前创作" trigger={["hover", "focus"]}>
+          <Button
+            type="button"
+            aria-label="引用到当前创作"
+            onClick={data.referenceText}
+          >
+            <ImagePlus size={16} aria-hidden="true" />
+          </Button>
+        </Tooltip>
+      </NodeToolbar>
       <Handle type="source" position={Position.Right} isConnectable={false} />
     </div>
   );

@@ -17,7 +17,7 @@ export const canvasNode = z
       .max(4000)
       .refine((v) => !v.includes("\0"))
       .optional(),
-    tone: z.enum(["plain", "yellow", "blue", "green"]).optional(),
+    tone: z.enum(["plain", "yellow", "blue", "green", "pink"]).optional(),
     assetId: z.uuid().optional(),
     parentId: z.uuid().optional(),
   })

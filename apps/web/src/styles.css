@@ -3936,10 +3936,6 @@ h3 {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.canvas-text-card .canvas-text-header .ant-select {
-  width: 74px;
-  flex-shrink: 0;
-}
 .canvas-text-card .canvas-text-body,
 .canvas-text-card textarea.ant-input {
   flex: 1;
@@ -4082,4 +4078,74 @@ h3 {
 .react-flow__edge.lineage-active .react-flow__edge-text {
   fill: var(--brand-blue);
   font-weight: 600;
+}
+
+/* Project rows retain their intrinsic height instead of shrinking inside the sidebar. */
+.sidebar-projects {
+  min-height: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+  grid-auto-rows: max-content;
+  align-content: start;
+}
+.sidebar-projects a {
+  display: block;
+  min-height: 32px;
+  line-height: 20px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.canvas-text-card.tone-pink,
+.canvas-tone-dot.tone-pink {
+  background: #fff0f5;
+}
+.canvas-text-header .canvas-node-title {
+  flex: 1;
+}
+.canvas-tone-picker {
+  display: flex;
+  flex-shrink: 0;
+  gap: 2px;
+}
+.canvas-tone-picker .ant-radio-button-wrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 2px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: none;
+}
+.canvas-tone-picker .ant-radio-button-wrapper::before {
+  display: none;
+}
+.canvas-tone-picker .ant-radio-button-wrapper-checked {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: -1px;
+}
+.canvas-tone-picker .ant-radio-button-wrapper:focus-within {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 1px;
+}
+.canvas-tone-dot {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border: 1px solid #a7b5c6;
+  border-radius: 50%;
+}
+.canvas-tone-dot.tone-plain {
+  background: repeating-linear-gradient(45deg, #fff 0 3px, #e7edf5 3px 6px);
+}
+.canvas-tone-dot.tone-yellow {
+  background: #fff8d9;
+}
+.canvas-tone-dot.tone-blue {
+  background: #eaf3ff;
+}
+.canvas-tone-dot.tone-green {
+  background: #edf8ef;
 }

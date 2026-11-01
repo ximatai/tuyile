@@ -12,7 +12,54 @@ export async function verifyTextCanvas(page: Page) {
   const name = `文案验收-${randomUUID().slice(0, 8)}`;
   await page.getByLabel("项目名称").fill(name);
   await page.getByRole("button", { name: "创建项目", exact: true }).click();
+
+  const initialSession = await (
+    await page.request.get(apiUrl("/api/auth/me"))
+  ).json();
+  const projectHeaders = {
+    Origin: origin.origin,
+    "X-CSRF-Token": initialSession.csrfToken,
+  };
+  const longProjectName =
+    "侧边栏长项目名称验收：山间咖啡品牌文案与视觉创作素材编排";
+  for (let index = 0; index < 12; index++) {
+    const result = await page.request.post(apiUrl("/api/projects"), {
+      headers: projectHeaders,
+      data: { name: `${longProjectName} ${index + 1}` },
+    });
+    expect(result.ok()).toBe(true);
+  }
+  await page.reload();
   await page.getByRole("link", { name, exact: true }).click();
+  const initialViewport = page.viewportSize()!;
+  await page.setViewportSize({ width: initialViewport.width, height: 720 });
+  const projectLinks = page.locator(".sidebar-projects a");
+  await expect(projectLinks.filter({ hasText: longProjectName })).toHaveCount(
+    12,
+  );
+  const dimensions = await projectLinks.evaluateAll((links) =>
+    links.map((link) => ({
+      height: link.getBoundingClientRect().height,
+      scroll: link.scrollHeight,
+      client: link.clientHeight,
+    })),
+  );
+  expect(
+    dimensions.every((item) => item.height >= 32 && item.scroll <= item.client),
+  ).toBe(true);
+  expect(
+    await page
+      .locator(".sidebar-projects")
+      .evaluate((el) => el.scrollHeight > el.clientHeight),
+  ).toBe(true);
+  expect(
+    await projectLinks
+      .filter({ hasText: longProjectName })
+      .first()
+      .getAttribute("title"),
+  ).toContain(longProjectName);
+  await page.setViewportSize(initialViewport);
+
   const canvas = page.getByRole("region", { name: "项目画布", exact: true });
   await page.getByRole("button", { name: "添加文本", exact: true }).click();
   const editor = canvas.getByRole("textbox", { name: "文案正文", exact: true });
@@ -49,6 +96,108 @@ export async function verifyTextCanvas(page: Page) {
   await editor.press("Enter");
   await editor.press("ControlOrMeta+Enter");
   await expect(editor).toHaveCount(0);
+
+  const palette = canvas.locator(".canvas-tone-picker");
+  await expect(palette.getByRole("radio")).toHaveCount(5);
+  await palette
+    .locator("label")
+    .filter({ has: page.getByRole("radio", { name: "浅粉", exact: true }) })
+    .click();
+  await expect(canvas.locator(".canvas-text-card.tone-pink")).toHaveCount(1);
+  await page.getByRole("button", { name: "撤销", exact: true }).click();
+  await expect(
+    palette.getByRole("radio", { name: "浅黄", exact: true }),
+  ).toBeChecked();
+  await page.getByRole("button", { name: "重做", exact: true }).click();
+  await expect(
+    palette.getByRole("radio", { name: "浅粉", exact: true }),
+  ).toBeChecked();
+  await palette
+    .locator("label")
+    .filter({ has: page.getByRole("radio", { name: "浅蓝", exact: true }) })
+    .click();
+  await palette
+    .getByRole("radio", { name: "浅蓝", exact: true })
+    .press("ArrowRight");
+  await expect(
+    palette.getByRole("radio", { name: "浅绿", exact: true }),
+  ).toBeChecked();
+  const referenceIcon = canvas.getByRole("button", {
+    name: "引用到当前创作",
+    exact: true,
+  });
+  expect(await referenceIcon.textContent()).toBe("");
+  const iconBox = (await referenceIcon.boundingBox())!;
+  expect(iconBox.width).toBeLessThanOrEqual(36);
+  expect(iconBox.height).toBeLessThanOrEqual(36);
+
+  await expect(page.locator(".canvas-status")).toContainText("画布已保存");
+  for (const edge of ["top", "left", "right"]) {
+    const preview = await page.context().newPage();
+    try {
+      await preview.setViewportSize(page.viewportSize()!);
+      await preview.route("**/api/**", async (route) => {
+        if (route.request().method() === "POST") {
+          await route.abort();
+          return;
+        }
+        if (route.request().url().endsWith("/canvas")) {
+          const response = await route.fetch();
+          const body = await response.json();
+          const node = body.document.nodes[0];
+          const canvasWidth = (await canvas
+            .locator(".react-flow")
+            .boundingBox())!.width;
+          body.document = {
+            ...body.document,
+            viewport: { x: 0, y: 0, zoom: 1 },
+            nodes: [
+              {
+                ...node,
+                x:
+                  edge === "left"
+                    ? 20 - node.width
+                    : edge === "right"
+                      ? canvasWidth - 20
+                      : 80,
+                y: 0,
+              },
+            ],
+          };
+          await route.fulfill({ response, json: body });
+          return;
+        }
+        await route.continue();
+      });
+      await preview.goto(page.url());
+      const surface = preview.getByRole("region", {
+        name: "项目画布",
+        exact: true,
+      });
+      const node = surface.locator(".react-flow__node-text");
+      const width = (await node.boundingBox())!.width;
+      await node.click({
+        position: { x: edge === "left" ? width - 6 : 6, y: 80 },
+      });
+      const action = surface.getByRole("button", {
+        name: "引用到当前创作",
+        exact: true,
+      });
+      await action.click({ trial: true });
+      const bounds = (await surface.locator(".react-flow").boundingBox())!;
+      const button = (await action.boundingBox())!;
+      expect(button.x).toBeGreaterThanOrEqual(bounds.x);
+      expect(button.y).toBeGreaterThanOrEqual(bounds.y);
+      expect(button.x + button.width).toBeLessThanOrEqual(
+        bounds.x + bounds.width,
+      );
+      expect(button.y + button.height).toBeLessThanOrEqual(
+        bounds.y + bounds.height,
+      );
+    } finally {
+      await preview.close();
+    }
+  }
   const title = canvas.getByRole("button", {
     name: "重命名文案：文案",
     exact: true,

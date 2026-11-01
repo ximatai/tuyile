@@ -235,3 +235,22 @@ it("rejects stale and missing preview revisions before image/planning reservatio
   });
   expect(updatedJob.textSources?.[0].text).toBe("新文案");
 });
+
+it("persists the five note colors including pink through canvas saves", async () => {
+  const initial = await save();
+  const updated = await canvas.save(f.principal, f.project.id, {
+    revision,
+    requestKey: randomUUID(),
+    placements: [],
+    document: {
+      ...initial.document,
+      nodes: initial.document.nodes.map((node) => ({ ...node, tone: "pink" })),
+    },
+  });
+  expect(
+    (await canvas.load(f.principal, f.project.id)).document.nodes.every(
+      (node) => node.tone === "pink",
+    ),
+  ).toBe(true);
+  expect(updated.revision).toBe(revision + 1);
+});
