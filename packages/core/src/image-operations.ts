@@ -1,3 +1,4 @@
+import { composeCreativePrompt } from "@tuyile/contracts";
 import { createToolRegistry, defaultTool, type ToolRegistry } from "./tools.js";
 import { checkImageCapability } from "./capabilities.js";
 import type { ToolBinding } from "@tuyile/contracts";
@@ -31,6 +32,14 @@ export class ImageOperations {
     return this.store.write({ owners: [p.id], queue: true }, async (r) => {
       const existing = await r.tasks.existingAdmission(p, input, tool);
       if (existing) return existing;
+      const textSources = await r.tasks.resolveTextSources(
+        p,
+        input.projectId,
+        input.textNodeIds ?? [],
+        input.textCanvasRevision,
+      );
+      if (composeCreativePrompt({ ...input, textSources }).length > 12000)
+        throw new AppError("PROMPT_TOO_LONG", 400);
       await r.extensions.registerTools(this.registry.list());
       await r.extensions.requireTool(tool);
       const provider = await r.providers.current(input);
@@ -47,7 +56,14 @@ export class ImageOperations {
       );
       checkImageCapability(input, provider.capabilities);
       checkAdmissionBudget(snapshot.budget);
-      const task = await r.tasks.insert(p, input, snapshot, provider.id, tool);
+      const task = await r.tasks.insert(
+        p,
+        input,
+        snapshot,
+        provider.id,
+        tool,
+        textSources,
+      );
       await r.quota.reserve(p, task.id, snapshot);
       await r.assets.pin(p, task.id, input.referenceIds);
       return task;

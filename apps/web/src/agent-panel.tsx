@@ -1,3 +1,4 @@
+import { TextReferences, useTextReferences } from "./text-references";
 import { modelDisplayName } from "./model-presentation";
 import { ChevronDown, Settings2, Sparkles } from "lucide-react";
 import { useDraftValue } from "./project-draft";
@@ -73,6 +74,7 @@ export function AgentPanel({
   uploadBusy: boolean;
   tasks: ImageTask[];
 }) {
+  const textRefs = useTextReferences();
   const state = useSessionState(),
     api = client(state.session.csrfToken);
   const [prompt, setPrompt] = useDraftValue("agent", "prompt"),
@@ -190,7 +192,7 @@ export function AgentPanel({
     submitting.current = true;
     setBusy(true);
     setError("");
-    const input = pending ?? {
+    let input = pending ?? {
       projectId,
       requestKey: crypto.randomUUID(),
       prompt,
@@ -203,18 +205,27 @@ export function AgentPanel({
       quality: settings.quality,
       format: settings.format,
       referenceIds: references.map((r) => r.id),
+      textNodeIds: textRefs.ids,
       ...(skillId ? { skillId } : {}),
       ...(plan ? { previousPlanId: plan.id } : {}),
     };
-    setPending(input);
+    let submitted = false;
     try {
+      if (!pending && input.textNodeIds?.length) {
+        if (textRefs.issue) throw new Error(textRefs.issue);
+        input = { ...input, textCanvasRevision: await textRefs.flush() };
+      }
+      setPending(input);
+      submitted = true;
       const job = await api<PlanningJob>("/agent/planning", input);
       setCurrent(job.id);
       setSettingsOpen(false);
       setPending(null);
       await refresh();
     } catch (e) {
-      if (e instanceof ApiError && e.code !== "INTERNAL_ERROR")
+      if (e instanceof ApiError && e.code === "TEXT_REFERENCE_CONFLICT")
+        textRefs.store?.markReferenceConflict(e.message);
+      if (!submitted || (e instanceof ApiError && e.code !== "INTERNAL_ERROR"))
         setPending(null);
       setError((e as Error).message);
     } finally {
@@ -324,6 +335,25 @@ export function AgentPanel({
             key={job.id}
           >
             <p className="agent-user-message">{job.prompt}</p>
+            {!!job.textSources?.length && (
+              <Collapse
+                size="small"
+                items={[
+                  {
+                    key: "texts",
+                    label: "本次引用文案快照",
+                    children: job.textSources.map((s, i) => (
+                      <div key={`${s.nodeId}-${i}`}>
+                        <strong>
+                          {i + 1}. {s.title}
+                        </strong>
+                        <p className="text-prompt-preview">{s.text}</p>
+                      </div>
+                    )),
+                  },
+                ]}
+              />
+            )}
             {job.style && (
               <Collapse
                 ghost
@@ -456,6 +486,12 @@ export function AgentPanel({
                 />
               )}
             </div>
+            <TextReferences
+              visible={visible}
+              disabled={busy || !!pending || uploadBusy}
+              prompt={prompt}
+              style={style}
+            />
             <div className="agent-compose-toolbar">
               <Popover
                 trigger="click"
@@ -586,7 +622,12 @@ export function AgentPanel({
                 issues.length > 0 ||
                 conversationUnavailable ||
                 (style && !style.text.trim()) ||
-                composeCreativePrompt({ prompt, style }).length > 12000))
+                !!textRefs.issue ||
+                composeCreativePrompt({
+                  prompt,
+                  style,
+                  textSources: textRefs.sources,
+                }).length > 12000))
           }
         >
           {requestLabel}

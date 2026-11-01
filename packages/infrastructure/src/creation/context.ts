@@ -149,6 +149,7 @@ export class PgCreationContext {
       state: r.state,
       prompt: r.input.prompt,
       finalPrompt: r.input.finalPrompt ?? composeCreativePrompt(r.input),
+      textSources: r.input.textSources ?? [],
       model: r.input.model,
       count: r.input.count,
       settings: {

@@ -1,7 +1,9 @@
+import { verifyCanvasGestures } from "../tests/canvas-gesture-flow";
+import { verifyTextCanvas } from "../tests/text-browser-flow";
 import { verifyDemoOnboarding } from "../tests/demo-browser-flow";
 import { createDatabase } from "@tuyile/infrastructure";
 import { randomUUID } from "node:crypto";
-import { chromium, type Page } from "@playwright/test";
+import { chromium, expect, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
 async function selectCreationPanel(page: Page, mode: "direct" | "agent") {
@@ -18,9 +20,10 @@ const auth = JSON.parse(
 const browser = await chromium.launch({ channel: "chromium" });
 const errors: string[] = [];
 try {
-  const page = await browser.newPage({
+  const context = await browser.newContext({
     viewport: { width: 1440, height: 900 },
   });
+  const page = await context.newPage();
   page.on("console", (m) => {
     if (
       m.type() === "error" &&
@@ -613,6 +616,26 @@ try {
     path: ".codex-temp/docker-administration.png",
     animations: "disabled",
   });
+  await verifyTextCanvas(page);
+  await verifyCanvasGestures(page);
+  // The combined acceptance now submits more than six tasks. Respect the real
+  // per-minute admission limit before the three-image demo flow; never weaken it.
+  await expect
+    .poll(
+      async () => {
+        const response = await page.request.get(
+          "http://127.0.0.1:8792/api/images/tasks",
+        );
+        assert(response.ok());
+        const { tasks } = await response.json();
+        return tasks.filter(
+          (task: { createdAt: string }) =>
+            Date.parse(task.createdAt) > Date.now() - 61000,
+        ).length;
+      },
+      { timeout: 65000, intervals: [500, 1000, 2000] },
+    )
+    .toBeLessThanOrEqual(3);
   let templateId: string | undefined;
   try {
     await verifyDemoOnboarding(

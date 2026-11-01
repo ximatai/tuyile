@@ -1,3 +1,4 @@
+import { composeCreativePrompt } from "@tuyile/contracts";
 import type { ImageTask } from "@tuyile/contracts";
 export const taskStates = {
   queued: "排队中",
@@ -36,4 +37,12 @@ export function taskProblem(task: ImageTask): string | null {
     DISK_LOW: "服务器空间不足，请联系管理员。",
   };
   return `${reasons[task.errorCode ?? ""] ?? "这次生成未全部完成。"}${saved}${canReuseTask(task) ? "可复用设置，检查后重新提交。" : ""}`;
+}
+
+// Reuse the historical content without silently attaching the current canvas text.
+export function taskDraftPrompt(task: ImageTask) {
+  return composeCreativePrompt({
+    prompt: task.prompt,
+    textSources: task.textSources,
+  });
 }

@@ -4,7 +4,13 @@ import { toolBinding } from "./extensions.js";
 
 // A plan contains declarative image operations. Only server confirmation admits work.
 export const agentStep = imageInput
-  .omit({ projectId: true, requestKey: true, style: true })
+  .omit({
+    projectId: true,
+    requestKey: true,
+    style: true,
+    textNodeIds: true,
+    textCanvasRevision: true,
+  })
   .extend({
     title: z.string().trim().min(1).max(100),
     tool: toolBinding,
@@ -63,6 +69,7 @@ export interface AgentPlanVersion {
   taskIds: string[];
 }
 export interface PlanningJob {
+  textSources?: import("./creation.js").TextSource[];
   id: string;
   projectId: string;
   requestKey: string;

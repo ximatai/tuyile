@@ -1,3 +1,7 @@
+import { useCardActions } from "./use-card-actions";
+import { toolbarPlacement } from "./toolbar-placement";
+import { highlightLineage } from "./lineage";
+import { useTextReferences } from "../text-references";
 import { DemoImageDetails } from "../demo";
 import {
   useEffect,
@@ -6,6 +10,7 @@ import {
   useState,
   useSyncExternalStore,
   type ComponentRef,
+  type WheelEvent as ReactWheelEvent,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -60,6 +65,7 @@ import {
   useConfirm,
   Upload,
   Input,
+  Radio,
 } from "@tuyile/ui";
 import { useNavigate } from "react-router-dom";
 import { EditorStore } from "./store";
@@ -73,7 +79,7 @@ function canvasEventTarget(surface: HTMLElement, target: EventTarget | null) {
     target instanceof Element &&
     surface.contains(target) &&
     !target.closest(
-      "input,textarea,select,button,a,[contenteditable],[role=dialog],[role=menu],[role=combobox]",
+      "input,textarea,select,button,a,.canvas-text-body,[contenteditable],[role=dialog],[role=menu],[role=combobox]",
     )
   );
 }
@@ -93,6 +99,17 @@ type ImageNode = Node<
   },
   "image"
 >;
+// Pinch reaches React Flow; editable/overflowing text keeps ordinary wheel scrolling.
+function retainTextScrolling(event: ReactWheelEvent<HTMLElement>) {
+  const target = event.currentTarget;
+  if (
+    !event.ctrlKey &&
+    (target.tagName === "TEXTAREA" ||
+      target.scrollHeight > target.clientHeight ||
+      target.querySelector("input,textarea"))
+  )
+    event.stopPropagation();
+}
 function NodeTitle({
   label,
   kind,
@@ -100,7 +117,7 @@ function NodeTitle({
   className = "",
 }: {
   label: string;
-  kind: "图片" | "分组";
+  kind: "图片" | "分组" | "文案";
   onRename: (label: string) => void;
   className?: string;
 }) {
@@ -133,7 +150,8 @@ function NodeTitle({
   return (
     <span
       data-canvas-title
-      className={`canvas-node-title ${className} nodrag nopan nowheel${editing ? " is-editing" : ""}`}
+      className={`canvas-node-title ${className} nodrag nopan${kind === "文案" ? "" : " nowheel"}${editing ? " is-editing" : ""}`}
+      onWheelCapture={kind === "文案" ? retainTextScrolling : undefined}
       onPointerDown={(event) => event.stopPropagation()}
       onDoubleClick={(event) => event.stopPropagation()}
     >
@@ -141,7 +159,13 @@ function NodeTitle({
         <Input
           ref={input}
           variant="borderless"
-          aria-label={kind === "图片" ? "图片名称" : "分组标题"}
+          aria-label={
+            kind === "图片"
+              ? "图片名称"
+              : kind === "文案"
+                ? "文案标题"
+                : "分组标题"
+          }
           maxLength={100}
           value={value}
           onChange={(event) => setValue(event.target.value)}
@@ -199,7 +223,7 @@ function ImageCard({
   positionAbsoluteY,
 }: NodeProps<ImageNode>) {
   const [preview, setPreview] = useState(false);
-  const [hovered, setHovered] = useState(false);
+  const actions = useCardActions();
   const [menuOpen, setMenuOpen] = useState(false);
   const viewport = useViewport();
   const canvasWidth = useStore((state) => state.width);
@@ -208,27 +232,26 @@ function ImageCard({
   const actionCount =
     2 + Number(!!data.reference) + Number(!!data.reuse) + Number(!!data.info);
   const toolbarWidth = compact ? 28 : actionCount * 28 + (actionCount - 1) * 4;
-  const right = (positionAbsoluteX + width) * viewport.zoom + viewport.x;
-  const left = right - 8 - toolbarWidth;
-  const horizontalInset =
-    -8 + Math.max(0, 8 - left) - Math.max(0, right - 8 - (canvasWidth - 8));
-  const top = positionAbsoluteY * viewport.zoom + viewport.y;
-  const bottom = top + height * viewport.zoom;
-  const onScreen =
-    right > 0 &&
-    right - width * viewport.zoom < canvasWidth &&
-    bottom > 0 &&
-    top < canvasHeight;
-  const desiredTop = top + 8;
-  const toolbarTop = Math.max(8, Math.min(desiredTop, canvasHeight - 36));
-  const toolbarOffset = top - 28 - toolbarTop;
+  const {
+    onScreen,
+    horizontalInset,
+    offset: toolbarOffset,
+  } = toolbarPlacement({
+    x: positionAbsoluteX,
+    y: positionAbsoluteY,
+    width,
+    height,
+    viewport,
+    canvasWidth,
+    canvasHeight,
+    toolbarWidth,
+  });
   useEffect(() => setMenuOpen(false), [compact, onScreen]);
 
   return (
     <div
       className="canvas-image"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      {...actions.events}
       onDoubleClick={(event) => {
         event.stopPropagation();
         setPreview(true);
@@ -259,13 +282,12 @@ function ImageCard({
       <NodeToolbar
         nodeId={id}
         isVisible={onScreen}
-        position={Position.Top}
+        position={Position.Bottom}
         align="end"
         offset={toolbarOffset}
         style={{ marginLeft: horizontalInset }}
-        className={`canvas-image-actions nodrag nopan${hovered || selected || (compact && menuOpen) ? " is-visible" : ""}`}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
+        className={`canvas-image-actions nodrag nopan${actions.visible || (compact && menuOpen) ? " is-visible" : ""}`}
+        {...actions.events}
         role="toolbar"
         aria-label="图片操作"
         onDoubleClick={(event) => event.stopPropagation()}
@@ -407,11 +429,173 @@ function GroupCard({
     </div>
   );
 }
-const nodeTypes = { image: ImageCard, group: GroupCard };
+function TextCard({
+  data,
+  selected,
+  width = 300,
+  height = 220,
+  positionAbsoluteX,
+  positionAbsoluteY,
+}: NodeProps<
+  Node<{
+    label: string;
+    text: string;
+    tone: string;
+    rename: (v: string) => void;
+    update: (
+      patch: Pick<CanvasNode, "text" | "tone">,
+      history?: boolean,
+    ) => void;
+    referenceText: () => void;
+    finish: () => void;
+    startEditing: boolean;
+  }>
+>) {
+  const viewport = useViewport();
+  const canvasWidth = useStore((state) => state.width);
+  const canvasHeight = useStore((state) => state.height);
+  const placement = toolbarPlacement({
+    x: positionAbsoluteX,
+    y: positionAbsoluteY,
+    width,
+    height,
+    viewport,
+    canvasWidth,
+    canvasHeight,
+    toolbarWidth: 28,
+  });
+  const actions = useCardActions();
+  const [editing, setEditing] = useState(data.startEditing);
+  const firstChange = useRef(true);
+  const composing = useRef(false);
+  const original = useRef(data.text);
+  function start() {
+    original.current = data.text;
+    firstChange.current = true;
+    setEditing(true);
+  }
+  function update(text: string) {
+    data.update({ text }, firstChange.current);
+    firstChange.current = false;
+  }
+  return (
+    <div
+      className={`canvas-text-card tone-${data.tone || "plain"}`}
+      {...actions.events}
+    >
+      <NodeResizer minWidth={180} minHeight={140} isVisible={selected} />
+      <div className="canvas-text-header">
+        <NodeTitle label={data.label} kind="文案" onRename={data.rename} />
+        <Radio.Group
+          aria-label="文案底色"
+          className="canvas-tone-picker nodrag nopan"
+          value={data.tone || "plain"}
+          onChange={(event) => data.update({ tone: event.target.value })}
+        >
+          {(
+            [
+              { value: "plain", label: "透明" },
+              { value: "yellow", label: "浅黄" },
+              { value: "blue", label: "浅蓝" },
+              { value: "green", label: "浅绿" },
+              { value: "pink", label: "浅粉" },
+            ] as const
+          ).map((tone) => (
+            <Tooltip
+              key={tone.value}
+              title={tone.label}
+              trigger={["hover", "focus"]}
+            >
+              <Radio.Button value={tone.value} aria-label={tone.label}>
+                <span
+                  aria-hidden="true"
+                  className={`canvas-tone-dot tone-${tone.value}`}
+                />
+              </Radio.Button>
+            </Tooltip>
+          ))}
+        </Radio.Group>
+      </div>
+      {editing ? (
+        <Input.TextArea
+          autoFocus
+          aria-label="文案正文"
+          className="nodrag nopan"
+          onWheelCapture={retainTextScrolling}
+          maxLength={4000}
+          value={data.text}
+          onChange={(e) => update(e.target.value)}
+          onBlur={() => {
+            data.finish();
+            setEditing(false);
+          }}
+          onCompositionStart={() => {
+            composing.current = true;
+          }}
+          onCompositionEnd={() => {
+            composing.current = false;
+          }}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (
+              !composing.current &&
+              !e.nativeEvent.isComposing &&
+              (e.key === "Escape" ||
+                (e.key === "Enter" && (e.metaKey || e.ctrlKey)))
+            ) {
+              e.preventDefault();
+              if (e.key === "Escape") update(original.current);
+              e.currentTarget.blur();
+            }
+          }}
+        />
+      ) : (
+        <div
+          className="canvas-text-body nodrag nopan"
+          onWheelCapture={retainTextScrolling}
+          tabIndex={0}
+          onDoubleClick={start}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.stopPropagation();
+              start();
+            }
+          }}
+        >
+          {data.text || "双击编写文案"}
+        </div>
+      )}
+      <NodeToolbar
+        isVisible={placement.onScreen}
+        position={Position.Bottom}
+        align="end"
+        offset={placement.offset}
+        style={{ marginLeft: placement.horizontalInset }}
+        className={`canvas-image-actions nodrag nopan${actions.visible ? " is-visible" : ""}`}
+        {...actions.events}
+        role="toolbar"
+        aria-label="文案操作"
+      >
+        <Tooltip title="引用到当前创作" trigger={["hover", "focus"]}>
+          <Button
+            type="button"
+            aria-label="引用到当前创作"
+            onClick={data.referenceText}
+          >
+            <ImagePlus size={16} aria-hidden="true" />
+          </Button>
+        </Tooltip>
+      </NodeToolbar>
+      <Handle type="source" position={Position.Right} isConnectable={false} />
+    </div>
+  );
+}
+const nodeTypes = { image: ImageCard, group: GroupCard, text: TextCard };
 export function CanvasEditor({
   projectId,
   onReference,
   onSelectionChange,
+  onTextReference,
   onReuse,
   tasks,
   statusStale,
@@ -421,6 +605,7 @@ export function CanvasEditor({
   tasks: ImageTask[];
   projectId: string;
   onReference: (id: string) => void;
+  onTextReference?: (id: string) => void;
   onSelectionChange?: (assets: { id: string; name: string }[]) => void;
   onReuse?: (task: ImageTask) => void;
   statusStale?: boolean;
@@ -456,6 +641,7 @@ export function CanvasEditor({
       projectId={projectId}
       onReference={onReference}
       onSelectionChange={onSelectionChange}
+      onTextReference={onTextReference}
       onReuse={onReuse}
       statusStale={statusStale}
       onUpload={onUpload}
@@ -470,6 +656,7 @@ function CanvasView({
   projectId,
   onReference,
   onSelectionChange,
+  onTextReference,
   onReuse,
   tasks,
   statusStale,
@@ -480,12 +667,18 @@ function CanvasView({
   store: EditorStore;
   projectId: string;
   onReference: (id: string) => void;
+  onTextReference?: (id: string) => void;
   onSelectionChange?: (assets: { id: string; name: string }[]) => void;
   onReuse?: (task: ImageTask) => void;
   statusStale?: boolean;
   onUpload: (files: File[]) => void;
   uploadBusy: boolean;
 }) {
+  const textRefs = useTextReferences();
+  useEffect(() => {
+    textRefs.register(store);
+  }, [store]);
+  const [editingText, setEditingText] = useState("");
   const state = useSessionState(),
     snap = useSyncExternalStore(store.subscribe, store.get),
     confirm = useConfirm(),
@@ -596,6 +789,21 @@ function CanvasView({
             selected: snap.selected.includes(n.id),
             data: {
               label: n.label,
+              text: n.text ?? "",
+              tone: n.tone ?? "plain",
+              startEditing: editingText === n.id,
+              finish: () => store.finishTextEdit(),
+              update: (
+                patch: Pick<CanvasNode, "text" | "tone">,
+                history = true,
+              ) => store.updateText(n.id, patch, history),
+              referenceText: () => {
+                try {
+                  onTextReference?.(n.id);
+                } catch (e) {
+                  setOperationError((e as Error).message);
+                }
+              },
               rename: (label: string) => store.renameNode(n.id, label),
               info: demo.data?.images.some((i) => i.assetId === n.assetId)
                 ? () =>
@@ -628,8 +836,11 @@ function CanvasView({
         }),
     [
       snap.document,
+      editingText,
+      textRefs.ids,
       snap.selected,
       onReference,
+      onTextReference,
       onReuse,
       tasks,
       store,
@@ -661,12 +872,17 @@ function CanvasView({
           .filter((n) => n.assetId === r.assetId)
           .flatMap((target) =>
             snap.document.nodes
-              .filter((n) => n.assetId && r.sourceIds.includes(n.assetId))
+              .filter(
+                (n) =>
+                  (n.assetId && r.sourceIds.includes(n.assetId)) ||
+                  ("textNodeIds" in r &&
+                    (r as CanvasSources).textNodeIds?.includes(n.id)),
+              )
               .map((source) => ({
                 id: `${source.id}-${target.id}`,
                 source: source.id,
                 target: target.id,
-                label: "来源",
+                label: source.kind === "text" ? "文案" : "来源",
                 selectable: false,
                 style: { stroke: "#7ca8cf" },
               })),
@@ -674,6 +890,10 @@ function CanvasView({
       )
       .filter((e, i, a) => a.findIndex((x) => x.id === e.id) === i);
   }, [sources.data, outputs.data, snap.document]);
+  const focused = useMemo(
+    () => highlightLineage(nodes, edges, snap.selected),
+    [nodes, edges, snap.selected],
+  );
   function changes(changes: NodeChange[]) {
     changes = changes.filter((c) => !("id" in c) || !c.id.startsWith("task-"));
     if (!changes.length) return;
@@ -738,7 +958,7 @@ function CanvasView({
     }
     if (action === "group") {
       const picked = old.filter(
-        (n) => selected.has(n.id) && n.kind === "image",
+        (n) => selected.has(n.id) && n.kind !== "group",
       );
       if (picked.length < 2) return;
       const x = Math.min(...picked.map((n) => n.x)) - 25,
@@ -749,7 +969,9 @@ function CanvasView({
         {
           id,
           kind: "group",
-          label: "图片分组",
+          label: picked.some((n) => n.kind === "text")
+            ? "素材分组"
+            : "图片分组",
           x,
           y,
           width: Math.max(...picked.map((n) => n.x + n.width)) - x + 25,
@@ -773,7 +995,7 @@ function CanvasView({
     }
     if (action === "align") {
       const picked = old.filter(
-        (n) => selected.has(n.id) && n.kind === "image",
+        (n) => selected.has(n.id) && n.kind !== "group",
       );
       if (picked.length < 2) return;
       const x = Math.min(...picked.map((n) => n.x));
@@ -1010,8 +1232,8 @@ function CanvasView({
         </div>
       )}
       <ReactFlow
-        nodes={nodes}
-        edges={edges}
+        nodes={focused.nodes}
+        edges={focused.edges}
         nodeTypes={nodeTypes}
         onNodesChange={changes}
         defaultViewport={snap.document.viewport}
@@ -1041,6 +1263,22 @@ function CanvasView({
         </div>
       )}
       <div className="canvas-toolbar" role="toolbar" aria-label="画布操作">
+        <Tooltip title="添加文本" trigger={["hover", "focus"]}>
+          <Button
+            aria-label="添加文本"
+            disabled={snap.conflict || snap.document.nodes.length >= 1000}
+            onClick={() => {
+              try {
+                setHandMode(false);
+                setEditingText(store.addText());
+              } catch (e) {
+                setOperationError((e as Error).message);
+              }
+            }}
+          >
+            <FileText size={16} />
+          </Button>
+        </Tooltip>
         <Upload
           multiple
           accept="image/png,image/jpeg,image/webp"

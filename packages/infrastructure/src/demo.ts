@@ -178,6 +178,8 @@ class DemoRepository extends PgCreationContext {
       ? projectDraftDocument.parse(sourceDraft.document)
       : emptyProjectDraft();
     draft.mode = "direct";
+    // This template only publishes its three image nodes, never dangling text links.
+    draft.textNodeIds = [];
     draft.direct.settings.modelKey = "";
     draft.agent.settings.modelKey = "";
     draft.agent.conversationModel = "";

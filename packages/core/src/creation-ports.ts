@@ -37,6 +37,12 @@ export interface OutputsRepository {
   record(asset: PreparedAsset, attemptId: string): Promise<OutputSettlement>;
 }
 export interface TasksRepository {
+  resolveTextSources(
+    p: Principal,
+    projectId: string,
+    ids: string[],
+    revision?: number,
+  ): Promise<import("@tuyile/contracts").TextSource[]>;
   existingAdmission(
     p: Principal,
     input: ImageInput,
@@ -48,6 +54,7 @@ export interface TasksRepository {
     snapshot: AdmissionSnapshot,
     providerId: string,
     tool: ToolBinding,
+    textSources?: import("@tuyile/contracts").TextSource[],
   ): Promise<ImageTask>;
   tasks(
     p: Principal,

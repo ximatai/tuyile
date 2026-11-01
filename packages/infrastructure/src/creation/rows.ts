@@ -10,7 +10,10 @@ export interface TaskRow {
   user_id: string;
   input_hash: string;
   request_key: string;
-  input: ImageInput & { finalPrompt?: string };
+  input: ImageInput & {
+    finalPrompt?: string;
+    textSources?: import("@tuyile/contracts").TextSource[];
+  };
   policy: ImagePolicy;
   provider_id: string;
   tool_id: string;

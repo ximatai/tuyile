@@ -69,3 +69,5 @@ corepack pnpm test:recovery
 构建镜像不等于公开发布。分发源码或镜像前检查[发布指南](releasing.md)中的暂存区、Git历史、原生依赖许可和隐私要求；不把运行卷、Key或本地验收数据放入镜像。
 
 规划任务出现 `PLANNING_RESULT_UNKNOWN` 时，先按任务 ID 查询 `planning_attempts.error_code`。新调用可区分 `PLANNING_DNS_FAILURE`、`PLANNING_CONNECT_TIMEOUT`、`PLANNING_CONNECT_REFUSED`、`PLANNING_TLS_FAILURE`、`PLANNING_CONNECTION_LOST`、`PLANNING_RESPONSE_TIMEOUT`、`PLANNING_RESPONSE_READ_FAILED`、`PLANNING_RESPONSE_JSON_INVALID` 和 `PLANNING_TRANSPORT_FAILED`。这些是故障阶段提示，不能单凭连接断开认定上游未处理或未计费。历史同名泛化错误不含原始原因；不要为诊断盲目重放任务。调用中断沿用 `PLANNING_INTERRUPTED`，worker 中断沿用原有恢复规则。诊断记录不保存原始响应、异常消息或凭据。
+
+文案便签使用CanvasDocument v1的新增节点类型及任务JSONB快照，无需新增SQL迁移；升级时API、Worker与Web应使用同一镜像版本。旧版不认识text节点，不应在已有文案的实例上直接降级；先备份数据库与图片卷，并在隔离环境核对目标版本兼容性。

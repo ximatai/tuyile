@@ -2837,7 +2837,7 @@ h3 {
   transition: opacity 120ms ease;
 }
 .canvas-image-actions.is-visible,
-.canvas-image-actions:focus-within {
+.canvas-image-actions:has(:focus-visible) {
   opacity: 1;
   pointer-events: auto;
 }
@@ -3899,3 +3899,257 @@ h3 {
 .demo-record-grid strong { font-size: 12px; }
 .demo-reference-previews { display: flex; gap: 8px; }
 .demo-reference-previews img { width: 96px; height: 96px; object-fit: contain; }
+
+.canvas-text-card {
+  height: 100%;
+  width: 100%;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid #d7dee8;
+  border-radius: 6px;
+  box-sizing: border-box;
+  color: #172435;
+}
+.canvas-text-card.tone-plain {
+  background: transparent;
+}
+.canvas-text-card.tone-yellow {
+  background: #fff8d9;
+}
+.canvas-text-card.tone-blue {
+  background: #eaf3ff;
+}
+.canvas-text-card.tone-green {
+  background: #edf8ef;
+}
+.canvas-text-card .canvas-text-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: grab;
+}
+.canvas-text-card .canvas-text-header .canvas-node-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.canvas-text-card .canvas-text-body,
+.canvas-text-card textarea.ant-input {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.6;
+  user-select: text;
+}
+.canvas-text-card .canvas-text-body,
+.canvas-text-card textarea.ant-input {
+  overscroll-behavior: contain;
+}
+.canvas-text-card textarea.ant-input {
+  resize: none;
+  background: transparent;
+}
+.text-references {
+  margin: 16px 0;
+}
+.text-reference-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.text-reference-item,
+.text-picker-item {
+  display: block;
+  margin-top: 8px;
+  padding: 8px;
+  background: #f5f8fc;
+  border-radius: 6px;
+}
+.text-reference-item p,
+.text-picker-item p {
+  margin: 6px 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: #52647c;
+}
+.text-reference-item > div {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+.text-reference-item > button {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.text-prompt-preview {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 320px;
+  overflow: auto;
+}
+.canvas-text-card .canvas-text-header {
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  flex-shrink: 0;
+}
+
+.text-reference-item {
+  position: relative;
+  padding: 8px 10px;
+}
+.text-reference-item .text-reference-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: space-between;
+}
+.text-reference-item .text-reference-title {
+  display: block;
+  text-align: left;
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  height: 22px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.text-reference-item .text-reference-expand {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.text-reference-item p.text-reference-summary {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 2px 0 0;
+  padding-right: 80px;
+}
+.text-reference-item p.text-reference-full {
+  max-height: 180px;
+  overflow: auto;
+  margin-bottom: 26px;
+}
+.text-reference-item .text-reference-actions {
+  position: absolute;
+  bottom: 6px;
+  right: 8px;
+  display: flex;
+  gap: 2px;
+  opacity: 0;
+  pointer-events: none;
+  background: #f5f8fc;
+}
+.text-reference-actions > .ant-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+}
+.text-reference-item:hover .text-reference-actions,
+.text-reference-item:focus-within .text-reference-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+.react-flow__node.lineage-muted {
+  opacity: 0.3;
+}
+.react-flow__edge.lineage-muted {
+  opacity: 0.12;
+}
+.react-flow__node.lineage-related .canvas-text-card {
+  border-color: var(--brand-blue);
+}
+.react-flow__edge.lineage-active .react-flow__edge-text {
+  fill: var(--brand-blue);
+  font-weight: 600;
+}
+
+/* Project rows retain their intrinsic height instead of shrinking inside the sidebar. */
+.sidebar-projects {
+  min-height: 0;
+  min-width: 0;
+  flex: 1 1 auto;
+  grid-auto-rows: max-content;
+  align-content: start;
+}
+.sidebar-projects a {
+  display: block;
+  min-height: 32px;
+  line-height: 20px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.canvas-text-card.tone-pink,
+.canvas-tone-dot.tone-pink {
+  background: #fff0f5;
+}
+.canvas-text-header .canvas-node-title {
+  flex: 1;
+}
+.canvas-tone-picker {
+  display: flex;
+  flex-shrink: 0;
+  gap: 2px;
+}
+.canvas-tone-picker .ant-radio-button-wrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 2px;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: none;
+}
+.canvas-tone-picker .ant-radio-button-wrapper::before {
+  display: none;
+}
+.canvas-tone-picker .ant-radio-button-wrapper-checked {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: -1px;
+}
+.canvas-tone-picker .ant-radio-button-wrapper:focus-within {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 1px;
+}
+.canvas-tone-dot {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border: 1px solid #a7b5c6;
+  border-radius: 50%;
+}
+.canvas-tone-dot.tone-plain {
+  background: repeating-linear-gradient(45deg, #fff 0 3px, #e7edf5 3px 6px);
+}
+.canvas-tone-dot.tone-yellow {
+  background: #fff8d9;
+}
+.canvas-tone-dot.tone-blue {
+  background: #eaf3ff;
+}
+.canvas-tone-dot.tone-green {
+  background: #edf8ef;
+}
