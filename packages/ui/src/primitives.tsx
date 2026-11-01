@@ -188,6 +188,7 @@ export function ChoiceField({
 }) {
   const id = useId(),
     [local, setLocal] = useState(defaultValue ?? options[0]?.value ?? "");
+  const locked = useControlsDisabled(disabled);
   const current = value ?? local;
   return (
     <div className="field">
@@ -211,7 +212,7 @@ export function ChoiceField({
         id={id}
         value={current}
         options={groups ?? options}
-        disabled={disabled}
+        disabled={locked}
         showSearch={showSearch}
         optionRender={optionRender}
         labelRender={labelRender}

@@ -9,7 +9,7 @@ import { ResultImage } from "./result-image";
 import { TaskDetails, TaskProblem } from "./task-details";
 import { canReuseTask, taskStates as states } from "./task-presentation";
 import { useAdaptivePromptHeight } from "./use-adaptive-prompt-height";
-import { Info } from "lucide-react";
+import { Info, PanelRightClose, PanelRightOpen } from "lucide-react";
 import { composeCreativePrompt } from "@tuyile/contracts";
 import { HelpPopover } from "./interface-help";
 import { PromptComposer } from "./prompt-composer";
@@ -33,6 +33,7 @@ import {
   useState,
   useEffect,
   useRef,
+  useId,
   type FormEvent,
   type ComponentRef,
 } from "react";
@@ -47,6 +48,7 @@ import {
   useFeedback,
   Input,
   ControlScope,
+  Tooltip,
 } from "@tuyile/ui";
 import { client, ApiError } from "./api";
 function TaskTile({
@@ -299,9 +301,33 @@ function CreationEditor({
     >([]),
     [pending, setPending] = useState<ImageInput | null>(null),
     [mobile, setMobile] = useState("create");
+  const [panelCollapsed, setPanelCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("tuyile.creation-panel") === "collapsed";
+    } catch {
+      return false;
+    }
+  });
+  const panelId = useId();
+  const panelToggle = useRef<ComponentRef<typeof Button>>(null);
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "tuyile.creation-panel",
+        panelCollapsed ? "collapsed" : "expanded",
+      );
+    } catch {
+      /* Preference persistence is optional. */
+    }
+  }, [panelCollapsed]);
+  function togglePanel() {
+    setPanelCollapsed((old) => !old);
+    panelToggle.current?.focus({ preventScroll: true });
+  }
   const confirmDraft = useConfirm();
   const chooseReference = useCallback(
     (id: string) => {
+      setPanelCollapsed(false);
       if (busy || pending) {
         setError("请先确认当前提交结果，再修改草稿。");
         return;
@@ -421,6 +447,7 @@ function CreationEditor({
       ]
     : [];
   async function reuse(task: ImageTask) {
+    setPanelCollapsed(false);
     if (["queued", "running"].includes(task.state)) {
       setError("请等待这次任务结束后再复用设置。");
       return;
@@ -460,6 +487,10 @@ function CreationEditor({
     await Promise.all([usageQuery.refetch(), taskQuery.refetch()]);
   }
   const [uploadError, setUploadError] = useState("");
+  function reportUploadError(message: string) {
+    setUploadError(message);
+    setPanelCollapsed(false);
+  }
   const uploadController = useRef<AbortController | null>(null);
   useEffect(() => () => uploadController.current?.abort(), []);
   const [uploadProgress, setUploadProgress] = useState<{
@@ -494,7 +525,7 @@ function CreationEditor({
           throw new Error(`${file.name}：仅支持 PNG、JPEG 和 WebP 图片。`);
       }
     } catch (e) {
-      setUploadError((e as Error).message);
+      reportUploadError((e as Error).message);
       return;
     }
     const controller = new AbortController();
@@ -541,7 +572,7 @@ function CreationEditor({
           : e instanceof ApiError
             ? e.message
             : "上传结果未确认，请先到图库查看，避免重复上传。";
-        setUploadError(
+        reportUploadError(
           files.length > 1
             ? `已加入 ${done}/${files.length} 张。${reason} 后续图片未上传。`
             : reason,
@@ -558,7 +589,7 @@ function CreationEditor({
           );
         await refresh().catch(() => {
           if (!controller.signal.aborted)
-            setUploadError(
+            reportUploadError(
               "图片已加入画布，额度或任务信息未能刷新，请稍后重试。",
             );
         });
@@ -574,7 +605,7 @@ function CreationEditor({
   const formRef = useRef<HTMLFormElement>(null);
   const promptHeight = useAdaptivePromptHeight(
     formRef,
-    mode === "direct" && usageQuery.isSuccess,
+    !panelCollapsed && mode === "direct" && usageQuery.isSuccess,
   );
   async function send(input: ImageInput) {
     if (active.current) return;
@@ -671,7 +702,9 @@ function CreationEditor({
           任务与结果
         </Button>
       </div>
-      <div className={`creation-layout show-${mobile}`}>
+      <div
+        className={`creation-layout show-${mobile}${panelCollapsed ? " creation-panel-collapsed" : ""}`}
+      >
         <div className="creation-results" ref={resultsRef}>
           <Suspense fallback={<LoadingState variant="canvas" />}>
             <CanvasEditor
@@ -716,170 +749,213 @@ function CreationEditor({
             ]}
           />
         </div>
-        <aside className="creation-panel" aria-label="图片创作">
-          <Tabs
-            activeKey={mode}
-            onChange={(next) => {
-              setMode(next as "direct" | "agent");
-            }}
-            items={[
-              { key: "direct", label: "直接创作" },
-              { key: "agent", label: "Agent" },
-            ]}
-          />
-          {uploadProgress && (
-            <p role="status">
-              正在上传 {uploadProgress.done}/{uploadProgress.total} 张…
-            </p>
-          )}
-          {uploadError && <Notice error>{uploadError}</Notice>}
-          <div className="direct-creation" hidden={mode !== "direct"}>
-            {(usageQuery.error || taskQuery.error) && (
-              <Notice error>
-                {usageQuery.error?.message || taskQuery.error?.message}
-              </Notice>
-            )}
-            {usage?.providerMode === "fake" && (
-              <Notice>
-                本地测试模型：生成测试色块，不调用真实服务，不产生模型费用。
-              </Notice>
-            )}
-            {usage && !usage.models.length && (
-              <Notice>尚未配置可用的图片服务，请联系管理员。</Notice>
-            )}
-            <form ref={formRef} onSubmit={submit} aria-label="提交图片任务">
-              <ControlScope
-                componentDisabled={busy || !!pending || !usage?.models.length}
-              >
-                <fieldset disabled={busy || !!pending || !usage?.models.length}>
-                  <PromptComposer
-                    visible={mode === "direct"}
-                    height={promptHeight}
-                    value={prompt}
-                    onChange={setPrompt}
-                    style={style}
-                    onStyleChange={setStyle}
-                  />
-                  {mode === "direct" && (
-                    <ReferenceAttachments
-                      references={references}
-                      selected={canvasSelection}
-                      onUseSelected={useCanvasSelection}
-                      onRemove={(id) =>
-                        setReferences((v) => v.filter((r) => r.id !== id))
-                      }
-                      onUpload={(file) => void upload(file)}
-                      disabled={busy || !!pending}
-                      maxReferences={
-                        usage
-                          ? selectedCapability(usage, settings.modelKey)
-                              ?.editing
-                            ? selectedCapability(usage, settings.modelKey)!
-                                .maxReferences
-                            : 0
-                          : 0
-                      }
-                    />
-                  )}
-                  <ImageControls
-                    disabled={busy || !!pending}
-                    compact
-                    usage={usage}
-                    value={settings}
-                    onChange={setSettings}
-                  />
-                </fieldset>
-              </ControlScope>
-              {issues.length > 0 && !pending && (
-                <Notice error>{issues.join(" ")}</Notice>
-              )}
-              {error && <Notice error>{error}</Notice>}
-              <GenerationFeedback
-                tasks={tasks}
-                phase={phase}
-                pending={!!pending}
-                stale={!!taskQuery.error}
-                rejected={submissionRejected}
-                onShow={showTasks}
-                ready={taskQuery.isSuccess}
+        <ControlScope componentDisabled={panelCollapsed}>
+          <aside className="creation-panel" aria-label="图片创作" id={panelId}>
+            <div className="creation-panel-heading">
+              <Tabs
+                activeKey={mode}
+                onChange={(next) => {
+                  setMode(next as "direct" | "agent");
+                }}
+                items={[
+                  { key: "direct", label: "直接创作" },
+                  { key: "agent", label: "Agent" },
+                ]}
               />
-              <div className="generation-submit-row">
-                <Button
-                  className="primary"
-                  aria-busy={
-                    busy ||
-                    (!pending &&
-                      (!prompt.trim() || sameActiveDraft) &&
-                      generating &&
-                      !taskQuery.error)
-                  }
-                  loading={
-                    busy ||
-                    (!pending &&
-                      (!prompt.trim() || sameActiveDraft) &&
-                      generating &&
-                      !taskQuery.error)
-                  }
-                  aria-label={
-                    pending && phase === "idle"
-                      ? "重试同一提交"
-                      : "提交图片任务"
-                  }
-                  disabled={
-                    busy ||
-                    !usage?.models.length ||
-                    (!pending &&
-                      (!prompt.trim() || sameActiveDraft || issues.length > 0))
-                  }
-                >
-                  {busy
-                    ? phase === "submit"
-                      ? "正在提交…"
-                      : phase === "recover"
-                        ? "正在查找…"
-                        : "正在上传参考图…"
-                    : pending
-                      ? "重试同一提交"
-                      : (!prompt.trim() || sameActiveDraft) && generating
-                        ? taskQuery.error
-                          ? "状态暂不可用"
-                          : running
-                            ? "正在生成…"
-                            : "排队中…"
-                        : `生成 ${settings.count} 张`}
-                </Button>
-                <HelpPopover title="生成说明" visible={mode === "direct"}>
-                  生图任务是后台执行，关闭页面不影响任务执行和费用核算。
-                </HelpPopover>
-              </div>
-              {pending && (
+              <Tooltip
+                title={panelCollapsed ? "展开创作面板" : "收起创作面板"}
+                placement="left"
+                trigger={["hover", "focus"]}
+              >
                 <Button
                   type="button"
-                  disabled={busy}
-                  onClick={() => void recover()}
+                  ref={panelToggle}
+                  disabled={false}
+                  className="creation-panel-toggle"
+                  aria-label={panelCollapsed ? "展开创作面板" : "收起创作面板"}
+                  aria-expanded={!panelCollapsed}
+                  aria-controls={panelId}
+                  onClick={togglePanel}
                 >
-                  查找这次提交
+                  {panelCollapsed ? (
+                    <PanelRightOpen size={16} />
+                  ) : (
+                    <PanelRightClose size={16} />
+                  )}
                 </Button>
+              </Tooltip>
+            </div>
+            {uploadProgress && (
+              <p role="status">
+                正在上传 {uploadProgress.done}/{uploadProgress.total} 张…
+              </p>
+            )}
+            {uploadError && <Notice error>{uploadError}</Notice>}
+            <div
+              className="direct-creation"
+              hidden={mode !== "direct"}
+              inert={panelCollapsed}
+            >
+              {(usageQuery.error || taskQuery.error) && (
+                <Notice error>
+                  {usageQuery.error?.message || taskQuery.error?.message}
+                </Notice>
               )}
-            </form>
-          </div>
-          <div className="agent-creation" hidden={mode !== "agent"}>
-            <AgentPanel
-              visible={mode === "agent"}
-              projectId={projectId}
-              usage={usage}
-              tasks={tasks}
-              references={references}
-              selectedCanvas={canvasSelection}
-              onUseSelected={useCanvasSelection}
-              onRemove={(id) =>
-                setReferences((old) => old.filter((r) => r.id !== id))
-              }
-              onUpload={(file) => void upload(file)}
-              uploadBusy={busy || !!pending}
-            />
-          </div>
-        </aside>
+              {usage?.providerMode === "fake" && (
+                <Notice>
+                  本地测试模型：生成测试色块，不调用真实服务，不产生模型费用。
+                </Notice>
+              )}
+              {usage && !usage.models.length && (
+                <Notice>尚未配置可用的图片服务，请联系管理员。</Notice>
+              )}
+              <form ref={formRef} onSubmit={submit} aria-label="提交图片任务">
+                <ControlScope
+                  componentDisabled={
+                    panelCollapsed || busy || !!pending || !usage?.models.length
+                  }
+                >
+                  <fieldset
+                    disabled={busy || !!pending || !usage?.models.length}
+                  >
+                    <PromptComposer
+                      visible={!panelCollapsed && mode === "direct"}
+                      height={promptHeight}
+                      value={prompt}
+                      onChange={setPrompt}
+                      style={style}
+                      onStyleChange={setStyle}
+                    />
+                    {mode === "direct" && (
+                      <ReferenceAttachments
+                        references={references}
+                        selected={canvasSelection}
+                        onUseSelected={useCanvasSelection}
+                        onRemove={(id) =>
+                          setReferences((v) => v.filter((r) => r.id !== id))
+                        }
+                        onUpload={(file) => void upload(file)}
+                        disabled={busy || !!pending}
+                        maxReferences={
+                          usage
+                            ? selectedCapability(usage, settings.modelKey)
+                                ?.editing
+                              ? selectedCapability(usage, settings.modelKey)!
+                                  .maxReferences
+                              : 0
+                            : 0
+                        }
+                      />
+                    )}
+                    <ImageControls
+                      disabled={busy || !!pending}
+                      compact
+                      usage={usage}
+                      value={settings}
+                      onChange={setSettings}
+                    />
+                  </fieldset>
+                </ControlScope>
+                {issues.length > 0 && !pending && (
+                  <Notice error>{issues.join(" ")}</Notice>
+                )}
+                {error && <Notice error>{error}</Notice>}
+                <GenerationFeedback
+                  tasks={tasks}
+                  phase={phase}
+                  pending={!!pending}
+                  stale={!!taskQuery.error}
+                  rejected={submissionRejected}
+                  onShow={showTasks}
+                  ready={taskQuery.isSuccess}
+                />
+                <div className="generation-submit-row">
+                  <Button
+                    className="primary"
+                    aria-busy={
+                      busy ||
+                      (!pending &&
+                        (!prompt.trim() || sameActiveDraft) &&
+                        generating &&
+                        !taskQuery.error)
+                    }
+                    loading={
+                      busy ||
+                      (!pending &&
+                        (!prompt.trim() || sameActiveDraft) &&
+                        generating &&
+                        !taskQuery.error)
+                    }
+                    aria-label={
+                      pending && phase === "idle"
+                        ? "重试同一提交"
+                        : "提交图片任务"
+                    }
+                    disabled={
+                      busy ||
+                      !usage?.models.length ||
+                      (!pending &&
+                        (!prompt.trim() ||
+                          sameActiveDraft ||
+                          issues.length > 0))
+                    }
+                  >
+                    {busy
+                      ? phase === "submit"
+                        ? "正在提交…"
+                        : phase === "recover"
+                          ? "正在查找…"
+                          : "正在上传参考图…"
+                      : pending
+                        ? "重试同一提交"
+                        : (!prompt.trim() || sameActiveDraft) && generating
+                          ? taskQuery.error
+                            ? "状态暂不可用"
+                            : running
+                              ? "正在生成…"
+                              : "排队中…"
+                          : `生成 ${settings.count} 张`}
+                  </Button>
+                  <HelpPopover
+                    title="生成说明"
+                    visible={!panelCollapsed && mode === "direct"}
+                  >
+                    生图任务是后台执行，关闭页面不影响任务执行和费用核算。
+                  </HelpPopover>
+                </div>
+                {pending && (
+                  <Button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void recover()}
+                  >
+                    查找这次提交
+                  </Button>
+                )}
+              </form>
+            </div>
+            <div
+              className="agent-creation"
+              hidden={mode !== "agent"}
+              inert={panelCollapsed}
+            >
+              <AgentPanel
+                visible={!panelCollapsed && mode === "agent"}
+                projectId={projectId}
+                usage={usage}
+                tasks={tasks}
+                references={references}
+                selectedCanvas={canvasSelection}
+                onUseSelected={useCanvasSelection}
+                onRemove={(id) =>
+                  setReferences((old) => old.filter((r) => r.id !== id))
+                }
+                onUpload={(file) => void upload(file)}
+                uploadBusy={busy || !!pending}
+              />
+            </div>
+          </aside>
+        </ControlScope>
       </div>
     </section>
   );

@@ -5348,3 +5348,260 @@ test("canvas batches multiple uploads and drops, packs around existing nodes and
   ).toHaveLength(0);
   await transfer.dispose();
 });
+
+test("creation panel collapses into a rail without changing viewport or drafts and restores for explicit actions", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.getByLabel("项目名称").fill("创作面板折叠验证");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "创作面板折叠验证" })
+    .click();
+  const panel = page.getByRole("complementary", {
+    name: "图片创作",
+    exact: true,
+  });
+  const canvas = page.getByRole("region", { name: "项目画布", exact: true });
+  const prompt = page.getByLabel("创作需求", { exact: true });
+  await prompt.fill("折叠仍保留这个创作草稿");
+  const png = await (
+    await import("sharp")
+  )
+    .default({
+      create: { width: 320, height: 160, channels: 3, background: "#0062b0" },
+    })
+    .png()
+    .toBuffer();
+  await canvas.locator('input[type="file"]').setInputFiles({
+    name: "面板素材.png",
+    mimeType: "image/png",
+    buffer: png,
+  });
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(1);
+  await expect(
+    canvas.getByRole("button", { name: "上传图片到画布", exact: true }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "Zoom Out", exact: true }).click();
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(
+              `/api/projects/${page.url().split("/").at(-1)}/canvas`,
+            )
+          ).json()
+        ).document.viewport.zoom,
+    )
+    .toBeLessThan(1);
+  await expect(page.locator(".canvas-status")).toContainText("画布已保存");
+  const projectId = page.url().split("/").at(-1)!;
+  const snapshot = async () =>
+    await (await page.request.get(`/api/projects/${projectId}/canvas`)).json();
+  const before = await snapshot();
+  await page.getByRole("combobox", { name: "风格", exact: true }).click();
+  await page
+    .locator(".ant-select-dropdown:visible")
+    .getByText("真实摄影", { exact: true })
+    .click();
+  await page.getByRole("button", { name: "编辑风格", exact: true }).click();
+  await expect(page.locator(".style-editor")).toBeVisible();
+  await page.getByRole("button", { name: "收起创作面板", exact: true }).click();
+  const expand = page.getByRole("button", {
+    name: "展开创作面板",
+    exact: true,
+  });
+  await expect(expand).toBeFocused();
+  await expect(page.locator(".style-editor")).not.toBeVisible();
+  await expect
+    .poll(async () => (await panel.boundingBox())!.width)
+    .toBeCloseTo(40, 0);
+  expect((await snapshot()).document.viewport).toEqual(
+    before.document.viewport,
+  );
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/projects/${projectId}/draft`)
+          ).json()
+        ).document.direct.prompt,
+    )
+    .toBe("折叠仍保留这个创作草稿");
+  await page.reload();
+  await expect(expand).toBeVisible();
+  await expect
+    .poll(async () => (await panel.boundingBox())!.width)
+    .toBeCloseTo(40, 0);
+  await expand.click();
+  await expect(prompt).toHaveValue("折叠仍保留这个创作草稿");
+  await page.getByRole("combobox", { name: "风格", exact: true }).click();
+  await expect(page.locator(".ant-select-dropdown:visible")).toHaveCount(1);
+  await page.getByRole("button", { name: "收起创作面板", exact: true }).click();
+  await expect(page.locator(".ant-select-dropdown:visible")).toHaveCount(0);
+  await expand.click();
+  await expect(page.locator(".ant-select-dropdown:visible")).toHaveCount(0);
+  for (const width of [1440, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect
+      .poll(async () => (await panel.boundingBox())!.width)
+      .toBeGreaterThan(350);
+    const expandedCanvas = (await canvas.boundingBox())!.width;
+    const current = (await snapshot()).document.viewport;
+    await page
+      .getByRole("button", { name: "收起创作面板", exact: true })
+      .click();
+    await expect
+      .poll(async () => (await panel.boundingBox())!.width)
+      .toBeCloseTo(40, 0);
+    expect((await canvas.boundingBox())!.width).toBeGreaterThan(
+      expandedCanvas + 300,
+    );
+    expect((await snapshot()).document.viewport).toEqual(current);
+    await page.screenshot({
+      path: `.codex-temp/creation-panel-collapsed-${width}.png`,
+    });
+    await expand.click();
+    await expect
+      .poll(async () => (await panel.boundingBox())!.width)
+      .toBeGreaterThan(350);
+    await expect(prompt).toHaveValue("折叠仍保留这个创作草稿");
+  }
+  await page.getByRole("button", { name: "收起创作面板", exact: true }).click();
+  await page
+    .locator(".react-flow__node-image")
+    .first()
+    .click({ position: { x: 30, y: 30 } });
+  await expect(expand).toBeVisible();
+  await page
+    .locator(".react-flow__node-toolbar")
+    .getByRole("button", { name: "作为参考图", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "收起创作面板", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByTestId("reference-upload").locator(".attachment"),
+  ).toHaveCount(1);
+  await page.getByRole("button", { name: "提交图片任务", exact: true }).click();
+  await page.getByRole("button", { name: "收起创作面板", exact: true }).click();
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/images/tasks?projectId=${projectId}`)
+          ).json()
+        ).tasks[0]?.state,
+    )
+    .toBe("succeeded");
+  await expect(expand).toBeVisible();
+  const generated = page
+    .locator(".react-flow__node-image")
+    .filter({ has: page.getByRole("img", { name: "生成图片", exact: true }) });
+  await generated.hover();
+  await page
+    .locator(".react-flow__node-toolbar")
+    .getByRole("button", { name: "复用图片设置", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "收起创作面板", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("dialog", { name: "请确认", exact: true })
+    .getByRole("button", { name: "取消", exact: true })
+    .click();
+  await expect(prompt).toHaveValue("折叠仍保留这个创作草稿");
+  for (let i = 0; i < 2; i++) {
+    await page
+      .getByRole("button", { name: "收起创作面板", exact: true })
+      .click();
+    await canvas.locator('input[type="file"]').setInputFiles({
+      name: "相同错误.txt",
+      mimeType: "text/plain",
+      buffer: Buffer.from("unsupported"),
+    });
+    await expect(
+      page.getByRole("button", { name: "收起创作面板", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText(/仅支持 PNG、JPEG 和 WebP/)).toBeVisible();
+  }
+});
+
+test("collapsed creation panel retains unsaved Agent edits and closes its settings popup", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.getByLabel("项目名称").fill("折叠保留Agent方案");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "折叠保留Agent方案" })
+    .click();
+  const projectId = page.url().split("/").at(-1)!;
+  const session = await (await page.request.get("/api/auth/me")).json();
+  const headers = {
+    Origin: new URL(page.url()).origin,
+    "X-CSRF-Token": session.csrfToken,
+  };
+  expect(
+    (
+      await page.request.post("/api/image-admin/planning-providers", {
+        headers,
+        data: { mode: "fake", baseUrl: "", model: "collapse-planner" },
+      })
+    ).ok(),
+  ).toBe(true);
+  const job = await (
+    await page.request.post("/api/agent/planning", {
+      headers,
+      data: {
+        projectId,
+        requestKey: randomUUID(),
+        prompt: "合成商品方案",
+        model: "test-image",
+        width: 256,
+        height: 256,
+        quality: "medium",
+        format: "png",
+        referenceIds: [],
+      },
+    })
+  ).json();
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/agent/jobs?projectId=${projectId}`)
+          ).json()
+        ).jobs.find((j: any) => j.id === job.id)?.state,
+    )
+    .toBe("succeeded");
+  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await page.getByRole("button", { name: "编辑提示词", exact: true }).click();
+  const title = page.getByLabel("步骤 1 名称", { exact: true });
+  await title.fill("未保存但需要保留的方案");
+  await page.getByRole("button", { name: "收起创作面板", exact: true }).click();
+  await page.getByRole("button", { name: "展开创作面板", exact: true }).click();
+  await expect(title).toHaveValue("未保存但需要保留的方案");
+  await page.getByRole("button", { name: "保存计划修改", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "保存计划修改", exact: true }),
+  ).toBeHidden();
+  await page.getByRole("button", { name: "继续聊想法", exact: true }).click();
+  await page.getByRole("button", { name: "创作设置", exact: true }).click();
+  await expect(page.locator(".agent-settings-popover")).toBeVisible();
+  await page.getByRole("button", { name: "收起创作面板", exact: true }).click();
+  await expect(page.locator(".agent-settings-popover")).not.toBeVisible();
+  await page.getByRole("button", { name: "展开创作面板", exact: true }).click();
+  await expect(page.locator(".agent-settings-popover")).not.toBeVisible();
+  await expect(
+    page.getByRole("tab", { name: "Agent", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
+});

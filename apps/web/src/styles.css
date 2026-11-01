@@ -1066,10 +1066,10 @@ form {
   align-items: center;
   flex-shrink: 0;
 }
-.creation-panel > .ant-tabs {
+.creation-panel-heading > .ant-tabs {
   flex-shrink: 0;
 }
-.creation-panel > .ant-tabs .ant-tabs-nav {
+.creation-panel-heading > .ant-tabs .ant-tabs-nav {
   margin-bottom: 10px;
 }
 .agent-panel {
@@ -3849,3 +3849,16 @@ h3 {
   font-weight: 600;
   pointer-events: none;
 }
+
+/* Collapsing changes only the desktop grid; editors remain mounted. */
+.creation-panel-heading { display: flex; align-items: flex-start; gap: 8px; flex-shrink: 0; }
+.creation-panel-heading > .ant-tabs { flex: 1; min-width: 0; }
+.creation-panel-toggle { flex-shrink: 0; width: 28px; height: 28px; padding: 0; }
+.workspace-shell .creation-layout { transition: grid-template-columns 200ms ease; }
+.workspace-shell .creation-layout.creation-panel-collapsed { grid-template-columns: minmax(0, 1fr) 40px; }
+.creation-panel-collapsed .creation-panel { padding: 10px 5px; overflow: hidden; }
+.creation-panel-collapsed .creation-panel > :not(.creation-panel-heading),
+.creation-panel-collapsed .creation-panel-heading > .ant-tabs { display: none; }
+.creation-panel-collapsed .creation-panel-heading { justify-content: center; }
+.workspace-shell .creation-panel .agent-clear-history { right: 60px; }
+@media (prefers-reduced-motion: reduce) { .workspace-shell .creation-layout { transition: none; } }

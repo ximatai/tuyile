@@ -81,6 +81,37 @@ try {
     name: "项目画布",
     exact: true,
   });
+  const panelPrompt = page.getByLabel("创作需求", { exact: true });
+  await panelPrompt.fill("Docker retained panel draft");
+  const panel = page.getByRole("complementary", {
+    name: "图片创作",
+    exact: true,
+  });
+  await page.getByRole("button", { name: "收起创作面板", exact: true }).click();
+  await page.waitForFunction(
+    () =>
+      Math.abs(
+        document.querySelector(".creation-panel")!.getBoundingClientRect()
+          .width - 40,
+      ) < 0.5,
+  );
+  assert.equal(
+    await page
+      .getByRole("button", { name: "展开创作面板", exact: true })
+      .getAttribute("aria-expanded"),
+    "false",
+  );
+  await page.screenshot({
+    path: ".codex-temp/docker-creation-panel-collapsed.png",
+  });
+  await page.getByRole("button", { name: "展开创作面板", exact: true }).click();
+  await page.waitForFunction(
+    () =>
+      document.querySelector(".creation-panel")!.getBoundingClientRect().width >
+      350,
+  );
+  assert.equal(await panelPrompt.inputValue(), "Docker retained panel draft");
+  assert((await panel.boundingBox())!.width > 350);
   const dropped = await page.evaluateHandle((encoded) => {
     const data = new DataTransfer();
     data.items.add(
@@ -522,7 +553,7 @@ try {
   });
   assert.deepEqual(errors, []);
   console.log(
-    "Built Docker Chromium: canvas batch upload/layout/drop/screenshot paste/reference and keyboard copy/paste/undo, nonce styles, themed button, singleton model lock, confirmation dialog and medium/large desktop layout passed",
+    "Built Docker Chromium: collapsible creation panel, canvas batch upload/layout/drop/screenshot paste/reference and keyboard copy/paste/undo, nonce styles, themed button, singleton model lock, confirmation dialog and medium/large desktop layout passed",
   );
 } finally {
   await browser.close();

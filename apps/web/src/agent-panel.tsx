@@ -416,7 +416,9 @@ export function AgentPanel({
         onSubmit={request}
         aria-label="请求 Agent 规划"
       >
-        <ControlScope componentDisabled={busy || !!pending || uploadBusy}>
+        <ControlScope
+          componentDisabled={!visible || busy || !!pending || uploadBusy}
+        >
           <fieldset disabled={busy || !!pending || uploadBusy}>
             <PromptComposer
               value={prompt}
@@ -963,7 +965,7 @@ function PlanCard({
           {editing ? "返回方案" : confirmed ? "查看提示词" : "编辑提示词"}
         </Button>
       </div>
-      <ControlScope componentDisabled={locked || confirmed}>
+      <ControlScope componentDisabled={!visible || locked || confirmed}>
         <fieldset>
           <ol className="agent-plan-summary" aria-label="计划步骤摘要">
             {document.steps.map((step, index) => (
