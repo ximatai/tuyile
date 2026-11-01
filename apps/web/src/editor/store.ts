@@ -98,6 +98,19 @@ export class EditorStore {
   select(ids: string[]) {
     this.update({ selected: ids });
   }
+  renameNode(id: string, label: string) {
+    const name = label.trim();
+    if (!name) return;
+    if (name.length > 100) throw new Error("名称不能超过 100 个字符。");
+    const node = this.state.document.nodes.find((n) => n.id === id);
+    if (!node || node.label === name) return;
+    this.edit({
+      ...this.state.document,
+      nodes: this.state.document.nodes.map((n) =>
+        n.id === id ? { ...n, label: name } : n,
+      ),
+    });
+  }
   canAddImage(count = 1) {
     if (this.state.conflict)
       throw new Error("请先处理画布保存冲突，再上传图片。");

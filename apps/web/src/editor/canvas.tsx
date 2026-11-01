@@ -4,6 +4,7 @@ import {
   useMemo,
   useState,
   useSyncExternalStore,
+  type ComponentRef,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -56,6 +57,7 @@ import {
   Tooltip,
   useConfirm,
   Upload,
+  Input,
 } from "@tuyile/ui";
 import { useNavigate } from "react-router-dom";
 import { EditorStore } from "./store";
@@ -81,12 +83,108 @@ function nativeModifier(event: { metaKey: boolean; ctrlKey: boolean }) {
 type ImageNode = Node<
   {
     label: string;
+    rename: (label: string) => void;
     assetId?: string;
     reference?: (id: string) => void;
     reuse?: () => void;
   },
   "image"
 >;
+function NodeTitle({
+  label,
+  kind,
+  onRename,
+  className = "",
+}: {
+  label: string;
+  kind: "图片" | "分组";
+  onRename: (label: string) => void;
+  className?: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(label);
+  const active = useRef(false);
+  const composing = useRef(false);
+  const input = useRef<ComponentRef<typeof Input>>(null);
+  const title = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (editing) input.current?.focus({ cursor: "all", preventScroll: true });
+  }, [editing]);
+  function start() {
+    active.current = true;
+    composing.current = false;
+    setValue(label);
+    setEditing(true);
+  }
+  function finish(save: boolean, restoreFocus = false) {
+    if (!active.current) return;
+    active.current = false;
+    composing.current = false;
+    if (save) onRename(value);
+    setEditing(false);
+    if (restoreFocus)
+      requestAnimationFrame(() =>
+        title.current?.focus({ preventScroll: true }),
+      );
+  }
+  return (
+    <span
+      data-canvas-title
+      className={`canvas-node-title ${className} nodrag nopan nowheel${editing ? " is-editing" : ""}`}
+      onPointerDown={(event) => event.stopPropagation()}
+      onDoubleClick={(event) => event.stopPropagation()}
+    >
+      {editing ? (
+        <Input
+          ref={input}
+          aria-label={kind === "图片" ? "图片名称" : "分组标题"}
+          maxLength={100}
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          onBlur={() => finish(true)}
+          onCompositionStart={() => {
+            composing.current = true;
+          }}
+          onCompositionEnd={() => {
+            composing.current = false;
+          }}
+          onKeyDown={(event) => {
+            event.stopPropagation();
+            if (
+              event.nativeEvent.isComposing ||
+              composing.current ||
+              event.keyCode === 229
+            )
+              return;
+            if (event.key === "Enter" || event.key === "Escape") {
+              event.preventDefault();
+              finish(event.key === "Enter", true);
+            }
+          }}
+        />
+      ) : (
+        <span
+          ref={title}
+          role="button"
+          tabIndex={0}
+          className="canvas-node-title-display"
+          aria-label={`重命名${kind}：${label || "未命名"}`}
+          title={`${label || "未命名"}（双击重命名）`}
+          onDoubleClick={start}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === "F2") {
+              event.preventDefault();
+              event.stopPropagation();
+              start();
+            }
+          }}
+        >
+          {label || "未命名"}
+        </span>
+      )}
+    </span>
+  );
+}
 function ImageCard({
   id,
   data,
@@ -131,11 +229,12 @@ function ImageCard({
         setPreview(true);
       }}
     >
-      {data.label && (
-        <span className="canvas-image-caption" title={data.label}>
-          {data.label}
-        </span>
-      )}
+      <NodeTitle
+        label={data.label}
+        kind="图片"
+        onRename={data.rename}
+        className="canvas-image-caption"
+      />
       <Image.PreviewGroup
         items={[`/api/images/assets/${data.assetId}/original`]}
         preview={{ open: preview, onOpenChange: setPreview, motionName: "" }}
@@ -269,11 +368,16 @@ function ImageCard({
     </div>
   );
 }
-function GroupCard({ data, selected }: NodeProps) {
+function GroupCard({
+  data,
+  selected,
+}: NodeProps<
+  Node<{ label: string; rename: (label: string) => void }, "group">
+>) {
   return (
     <div className="canvas-group">
       <NodeResizer isVisible={selected} minWidth={120} minHeight={120} />
-      <span>{String(data.label)}</span>
+      <NodeTitle label={data.label} kind="分组" onRename={data.rename} />
     </div>
   );
 }
@@ -454,6 +558,7 @@ function CanvasView({
             selected: snap.selected.includes(n.id),
             data: {
               label: n.label,
+              rename: (label: string) => store.renameNode(n.id, label),
               assetId: n.assetId,
               reference: onReference,
               reuse:
@@ -477,7 +582,7 @@ function CanvasView({
             },
           };
         }),
-    [snap.document, snap.selected, onReference, onReuse, tasks],
+    [snap.document, snap.selected, onReference, onReuse, tasks, store],
   );
   const [nodes, setNodes] = useState<Node[]>(display);
   useEffect(
@@ -755,6 +860,11 @@ function CanvasView({
         }
       }}
       onPointerDownCapture={(e) => {
+        if (
+          e.target instanceof Element &&
+          e.target.closest("[data-canvas-title]")
+        )
+          return;
         if (!canvasEventTarget(e.currentTarget, e.target)) return;
         e.currentTarget.focus({ preventScroll: true });
       }}

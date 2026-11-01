@@ -475,3 +475,70 @@ it("includes generated placement receipts when a subscriber immediately saves th
   expect(requests[0].placements).toEqual([output.outputId]);
   store.dispose();
 });
+
+it("renames nodes as one undoable edit while preserving geometry and asset identity", async () => {
+  const image = node(),
+    requests: CanvasSave[] = [];
+  const group = {
+    id: randomUUID(),
+    kind: "group" as const,
+    label: "图片分组",
+    x: -25,
+    y: -40,
+    width: 250,
+    height: 280,
+  };
+  const store = new EditorStore(
+    {
+      document: {
+        ...emptyCanvas(),
+        nodes: [group, { ...image, parentId: group.id }],
+      },
+      revision: 0,
+    },
+    async (input) => {
+      requests.push(input);
+      return { document: input.document, revision: input.revision + 1 };
+    },
+  );
+  store.select([image.id]);
+  store.renameNode(image.id, "  A · 品牌标志  ");
+  expect(store.get().document.nodes[1]).toEqual({
+    ...image,
+    parentId: group.id,
+    label: "A · 品牌标志",
+  });
+  expect(store.get().selected).toEqual([image.id]);
+  store.undo();
+  expect(store.get().document.nodes[1].label).toBe(image.label);
+  store.redo();
+  expect(store.get().document.nodes[1].label).toBe("A · 品牌标志");
+  store.renameNode(group.id, "品牌参考");
+  await store.flush();
+  expect(requests).toHaveLength(1);
+  expect(requests[0].document.nodes.map((n) => n.label)).toEqual([
+    "品牌参考",
+    "A · 品牌标志",
+  ]);
+  expect(requests[0].placements).toEqual([]);
+  store.undo();
+  expect(store.get().document.nodes[0].label).toBe("图片分组");
+  store.dispose();
+});
+it("ignores empty and unchanged names without creating history and enforces the name limit", () => {
+  const image = node();
+  const store = new EditorStore(
+    { document: { ...emptyCanvas(), nodes: [image] }, revision: 0 },
+    async () => {
+      throw Error("not used");
+    },
+  );
+  store.renameNode(image.id, "   ");
+  store.renameNode(image.id, image.label);
+  store.renameNode(randomUUID(), "missing");
+  expect(store.get().dirty).toBe(false);
+  expect(store.get().canUndo).toBe(false);
+  expect(() => store.renameNode(image.id, "a".repeat(101))).toThrow("100");
+  expect(store.get().document.nodes[0]).toEqual(image);
+  store.dispose();
+});

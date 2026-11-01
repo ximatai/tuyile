@@ -6116,4 +6116,72 @@ test("canvas image captions remain separate from group titles", async ({
       animations: "disabled",
     });
   }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  // Move the group clear of the persistent save-status overlay before editing its title.
+  const canvasBox = (await canvas.boundingBox())!;
+  await page.mouse.move(canvasBox.x + 20, canvasBox.y + 400);
+  await page.mouse.down();
+  await page.mouse.move(canvasBox.x + 60, canvasBox.y + 500, { steps: 5 });
+  await page.mouse.up();
+  await expect
+    .poll(async () => (await groupTitle.boundingBox())!.y)
+    .toBeGreaterThan(canvasBox.y + 70);
+  await captions.first().dblclick();
+  const imageName = page.getByRole("textbox", {
+    name: "图片名称",
+    exact: true,
+  });
+  await expect(imageName).toBeFocused();
+  await imageName.fill("A · 可编辑的品牌标志");
+  await imageName.press("Enter");
+  await expect(captions.first()).toHaveText("A · 可编辑的品牌标志");
+  await expect(page.locator(".ant-image-preview")).toBeHidden();
+  await expect(captions.first().locator('[role="button"]')).toBeFocused();
+  await page.keyboard.press(
+    process.platform === "darwin" ? "Meta+z" : "Control+z",
+  );
+  await expect(captions.first()).toHaveText("A · 品牌标志.png");
+  await page.getByRole("button", { name: "重做", exact: true }).click();
+  await expect(captions.first()).toHaveText("A · 可编辑的品牌标志");
+  await captions.first().dblclick();
+  await imageName.fill("取消这次修改");
+  await imageName.dispatchEvent("compositionstart");
+  await imageName.press("Enter");
+  await expect(imageName).toBeVisible();
+  await imageName.dispatchEvent("compositionend");
+  await imageName.press("Escape");
+  await expect(captions.first()).toHaveText("A · 可编辑的品牌标志");
+  await captions.first().dblclick();
+  await imageName.fill("   ");
+  await imageName.press("Enter");
+  await expect(captions.first()).toHaveText("A · 可编辑的品牌标志");
+  await groupTitle.dblclick();
+  const groupName = page.getByRole("textbox", {
+    name: "分组标题",
+    exact: true,
+  });
+  await groupName.fill("品牌素材");
+  await canvas
+    .locator(".react-flow__pane")
+    .click({ position: { x: 10, y: 400 } });
+  await expect(groupTitle).toHaveText("品牌素材");
+  await page.getByRole("button", { name: "撤销", exact: true }).click();
+  await expect(groupTitle).toHaveText("图片分组");
+  await page.getByRole("button", { name: "重做", exact: true }).click();
+  await expect(groupTitle).toHaveText("品牌素材");
+  await groupTitle.locator('[role="button"]').focus();
+  await page.keyboard.press("F2");
+  await expect(groupName).toBeFocused();
+  await groupName.press("Escape");
+  await expect(page.locator(".canvas-status")).toContainText("画布已保存");
+  await page.reload();
+  await expect(captions.first()).toHaveText("A · 可编辑的品牌标志");
+  await expect(groupTitle).toHaveText("品牌素材");
+  await page
+    .locator(".react-flow__node-image")
+    .first()
+    .dblclick({ position: { x: 100, y: 100 } });
+  await expect(page.locator(".ant-image-preview")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".ant-image-preview")).toBeHidden();
 });

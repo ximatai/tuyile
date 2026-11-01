@@ -3883,3 +3883,9 @@ h3 {
 
 .canvas-group { position: relative; }
 .canvas-group > span { position: absolute; left: 8px; top: -22px; max-width: calc(100% - 16px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 18px; }
+
+.canvas-node-title { pointer-events: auto; }
+.canvas-node-title-display { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: text; border-radius: 2px; }
+.canvas-node-title-display:focus-visible { outline: 2px solid #1677ff; outline-offset: 2px; }
+.canvas-node-title.is-editing { width: 100%; overflow: visible; z-index: 5; }
+.canvas-node-title .ant-input { min-height: 22px; height: 22px; padding: 0 4px; font-size: 12px; line-height: 20px; }
