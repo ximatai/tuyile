@@ -111,7 +111,7 @@ export class PgAgentRepository
     await this.auth(this.c, p);
     const row = (
       await this.c.query(
-        "SELECT a.*,j.project_id,j.skill_id,j.provider_id FROM agent_plans a JOIN planning_jobs j ON j.id=a.job_id WHERE a.workspace_id=$1 AND a.id=$2 AND NOT j.archived FOR UPDATE OF a",
+        "SELECT a.*,j.project_id,j.skill_id,j.provider_id,j.input AS job_input FROM agent_plans a JOIN planning_jobs j ON j.id=a.job_id WHERE a.workspace_id=$1 AND a.id=$2 AND NOT j.archived FOR UPDATE OF a",
         [p.workspaceId, id],
       )
     ).rows[0];
@@ -135,6 +135,7 @@ export class PgAgentRepository
       projectId: row.project_id,
       skillId: row.skill_id,
       providerId: row.provider_id,
+      textSources: row.job_input?.textSources ?? [],
     };
   }
   async attach(
@@ -380,6 +381,7 @@ export class PgAgentRepository
   private async jobDto(row: any, loadedPlans?: any[]): Promise<PlanningJob> {
     const plans = loadedPlans ?? (await this.planRows([row.id]));
     return {
+      textSources: row.input?.textSources ?? [],
       id: row.id,
       projectId: row.project_id,
       requestKey: row.request_key,
@@ -473,6 +475,7 @@ export class PgAgentRepository
     tokens: number,
     day: string,
     referenceIds: string[],
+    textSources: import("@tuyile/contracts").TextSource[] = [],
   ) {
     const ids = [...new Set(referenceIds)].sort();
     if (
@@ -494,7 +497,7 @@ export class PgAgentRepository
           p.executionVersion,
           input.requestKey,
           hash(input),
-          input,
+          { ...input, textSources },
           JSON.stringify(messages),
           provider,
           input.skillId ?? null,

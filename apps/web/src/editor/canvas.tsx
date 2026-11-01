@@ -1,3 +1,4 @@
+import { useTextReferences } from "../text-references";
 import { DemoImageDetails } from "../demo";
 import {
   useEffect,
@@ -60,6 +61,7 @@ import {
   useConfirm,
   Upload,
   Input,
+  Select,
 } from "@tuyile/ui";
 import { useNavigate } from "react-router-dom";
 import { EditorStore } from "./store";
@@ -73,7 +75,7 @@ function canvasEventTarget(surface: HTMLElement, target: EventTarget | null) {
     target instanceof Element &&
     surface.contains(target) &&
     !target.closest(
-      "input,textarea,select,button,a,[contenteditable],[role=dialog],[role=menu],[role=combobox]",
+      "input,textarea,select,button,a,.canvas-text-body,[contenteditable],[role=dialog],[role=menu],[role=combobox]",
     )
   );
 }
@@ -100,7 +102,7 @@ function NodeTitle({
   className = "",
 }: {
   label: string;
-  kind: "图片" | "分组";
+  kind: "图片" | "分组" | "文案";
   onRename: (label: string) => void;
   className?: string;
 }) {
@@ -141,7 +143,13 @@ function NodeTitle({
         <Input
           ref={input}
           variant="borderless"
-          aria-label={kind === "图片" ? "图片名称" : "分组标题"}
+          aria-label={
+            kind === "图片"
+              ? "图片名称"
+              : kind === "文案"
+                ? "文案标题"
+                : "分组标题"
+          }
           maxLength={100}
           value={value}
           onChange={(event) => setValue(event.target.value)}
@@ -407,11 +415,125 @@ function GroupCard({
     </div>
   );
 }
-const nodeTypes = { image: ImageCard, group: GroupCard };
+function TextCard({
+  data,
+  selected,
+}: NodeProps<
+  Node<{
+    label: string;
+    text: string;
+    tone: string;
+    rename: (v: string) => void;
+    update: (
+      patch: { text?: string; tone?: "plain" | "yellow" | "blue" | "green" },
+      history?: boolean,
+    ) => void;
+    referenceText: () => void;
+    finish: () => void;
+    startEditing: boolean;
+  }>
+>) {
+  const [editing, setEditing] = useState(data.startEditing);
+  const firstChange = useRef(true);
+  const composing = useRef(false);
+  const original = useRef(data.text);
+  function start() {
+    original.current = data.text;
+    firstChange.current = true;
+    setEditing(true);
+  }
+  function update(text: string) {
+    data.update({ text }, firstChange.current);
+    firstChange.current = false;
+  }
+  return (
+    <div className={`canvas-text-card tone-${data.tone || "plain"}`}>
+      <NodeResizer minWidth={180} minHeight={140} isVisible={selected} />
+      <div className="canvas-text-header">
+        <NodeTitle label={data.label} kind="文案" onRename={data.rename} />
+        <Select
+          aria-label="文案底色"
+          className="nodrag nopan"
+          size="small"
+          value={data.tone || "plain"}
+          options={[
+            { value: "plain", label: "透明" },
+            { value: "yellow", label: "浅黄" },
+            { value: "blue", label: "浅蓝" },
+            { value: "green", label: "浅绿" },
+          ]}
+          onChange={(tone) =>
+            data.update({ tone: tone as "plain" | "yellow" | "blue" | "green" })
+          }
+        />
+      </div>
+      {editing ? (
+        <Input.TextArea
+          autoFocus
+          aria-label="文案正文"
+          className="nodrag nopan nowheel"
+          maxLength={4000}
+          value={data.text}
+          onChange={(e) => update(e.target.value)}
+          onBlur={() => {
+            data.finish();
+            setEditing(false);
+          }}
+          onCompositionStart={() => {
+            composing.current = true;
+          }}
+          onCompositionEnd={() => {
+            composing.current = false;
+          }}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (
+              !composing.current &&
+              !e.nativeEvent.isComposing &&
+              (e.key === "Escape" ||
+                (e.key === "Enter" && (e.metaKey || e.ctrlKey)))
+            ) {
+              e.preventDefault();
+              if (e.key === "Escape") update(original.current);
+              data.finish();
+              setEditing(false);
+            }
+          }}
+        />
+      ) : (
+        <div
+          className="canvas-text-body nodrag nopan nowheel"
+          tabIndex={0}
+          onDoubleClick={start}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.stopPropagation();
+              start();
+            }
+          }}
+        >
+          {data.text || "双击编写文案"}
+        </div>
+      )}
+      {selected && (
+        <Button
+          type="button"
+          className="nodrag nopan"
+          onClick={data.referenceText}
+        >
+          引用到当前创作
+        </Button>
+      )}
+      <Handle type="source" position={Position.Right} isConnectable={false} />
+    </div>
+  );
+}
+const nodeTypes = { image: ImageCard, group: GroupCard, text: TextCard };
 export function CanvasEditor({
   projectId,
   onReference,
   onSelectionChange,
+  onTextReference,
   onReuse,
   tasks,
   statusStale,
@@ -421,6 +543,7 @@ export function CanvasEditor({
   tasks: ImageTask[];
   projectId: string;
   onReference: (id: string) => void;
+  onTextReference?: (id: string) => void;
   onSelectionChange?: (assets: { id: string; name: string }[]) => void;
   onReuse?: (task: ImageTask) => void;
   statusStale?: boolean;
@@ -456,6 +579,7 @@ export function CanvasEditor({
       projectId={projectId}
       onReference={onReference}
       onSelectionChange={onSelectionChange}
+      onTextReference={onTextReference}
       onReuse={onReuse}
       statusStale={statusStale}
       onUpload={onUpload}
@@ -470,6 +594,7 @@ function CanvasView({
   projectId,
   onReference,
   onSelectionChange,
+  onTextReference,
   onReuse,
   tasks,
   statusStale,
@@ -480,12 +605,18 @@ function CanvasView({
   store: EditorStore;
   projectId: string;
   onReference: (id: string) => void;
+  onTextReference?: (id: string) => void;
   onSelectionChange?: (assets: { id: string; name: string }[]) => void;
   onReuse?: (task: ImageTask) => void;
   statusStale?: boolean;
   onUpload: (files: File[]) => void;
   uploadBusy: boolean;
 }) {
+  const textRefs = useTextReferences();
+  useEffect(() => {
+    textRefs.register(store);
+  }, [store]);
+  const [editingText, setEditingText] = useState("");
   const state = useSessionState(),
     snap = useSyncExternalStore(store.subscribe, store.get),
     confirm = useConfirm(),
@@ -596,6 +727,21 @@ function CanvasView({
             selected: snap.selected.includes(n.id),
             data: {
               label: n.label,
+              text: n.text ?? "",
+              tone: n.tone ?? "plain",
+              startEditing: editingText === n.id,
+              finish: () => store.finishTextEdit(),
+              update: (
+                patch: Pick<CanvasNode, "text" | "tone">,
+                history = true,
+              ) => store.updateText(n.id, patch, history),
+              referenceText: () => {
+                try {
+                  onTextReference?.(n.id);
+                } catch (e) {
+                  setOperationError((e as Error).message);
+                }
+              },
               rename: (label: string) => store.renameNode(n.id, label),
               info: demo.data?.images.some((i) => i.assetId === n.assetId)
                 ? () =>
@@ -628,8 +774,11 @@ function CanvasView({
         }),
     [
       snap.document,
+      editingText,
+      textRefs.ids,
       snap.selected,
       onReference,
+      onTextReference,
       onReuse,
       tasks,
       store,
@@ -661,12 +810,17 @@ function CanvasView({
           .filter((n) => n.assetId === r.assetId)
           .flatMap((target) =>
             snap.document.nodes
-              .filter((n) => n.assetId && r.sourceIds.includes(n.assetId))
+              .filter(
+                (n) =>
+                  (n.assetId && r.sourceIds.includes(n.assetId)) ||
+                  ("textNodeIds" in r &&
+                    (r as CanvasSources).textNodeIds?.includes(n.id)),
+              )
               .map((source) => ({
                 id: `${source.id}-${target.id}`,
                 source: source.id,
                 target: target.id,
-                label: "来源",
+                label: source.kind === "text" ? "文案" : "来源",
                 selectable: false,
                 style: { stroke: "#7ca8cf" },
               })),
@@ -738,7 +892,7 @@ function CanvasView({
     }
     if (action === "group") {
       const picked = old.filter(
-        (n) => selected.has(n.id) && n.kind === "image",
+        (n) => selected.has(n.id) && n.kind !== "group",
       );
       if (picked.length < 2) return;
       const x = Math.min(...picked.map((n) => n.x)) - 25,
@@ -749,7 +903,9 @@ function CanvasView({
         {
           id,
           kind: "group",
-          label: "图片分组",
+          label: picked.some((n) => n.kind === "text")
+            ? "素材分组"
+            : "图片分组",
           x,
           y,
           width: Math.max(...picked.map((n) => n.x + n.width)) - x + 25,
@@ -773,7 +929,7 @@ function CanvasView({
     }
     if (action === "align") {
       const picked = old.filter(
-        (n) => selected.has(n.id) && n.kind === "image",
+        (n) => selected.has(n.id) && n.kind !== "group",
       );
       if (picked.length < 2) return;
       const x = Math.min(...picked.map((n) => n.x));
@@ -1041,6 +1197,22 @@ function CanvasView({
         </div>
       )}
       <div className="canvas-toolbar" role="toolbar" aria-label="画布操作">
+        <Tooltip title="添加文本" trigger={["hover", "focus"]}>
+          <Button
+            aria-label="添加文本"
+            disabled={snap.conflict || snap.document.nodes.length >= 1000}
+            onClick={() => {
+              try {
+                setHandMode(false);
+                setEditingText(store.addText());
+              } catch (e) {
+                setOperationError((e as Error).message);
+              }
+            }}
+          >
+            <FileText size={16} />
+          </Button>
+        </Tooltip>
         <Upload
           multiple
           accept="image/png,image/jpeg,image/webp"

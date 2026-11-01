@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { textNodeIds } from "./creation.js";
 // Drafts accept incomplete input; execution applies the stricter creation schemas.
 const text = (max: number) =>
   z
@@ -34,6 +35,7 @@ export const projectDraftDocument = z
       .array(z.uuid())
       .max(4)
       .refine((ids) => new Set(ids).size === ids.length),
+    textNodeIds: textNodeIds.optional(),
     mode: z.enum(["direct", "agent"]),
   })
   .strict();

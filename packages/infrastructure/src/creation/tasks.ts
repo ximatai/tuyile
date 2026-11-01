@@ -8,6 +8,24 @@ import { AppError, ASSET_RESERVE } from "@tuyile/core";
 import type { Principal, ImageInput } from "@tuyile/contracts";
 import { PgCreationContext } from "./context.js";
 export class PgTasksRepository extends PgCreationContext {
+  async resolveTextSources(p: Principal, projectId: string, ids: string[]) {
+    await this.auth(this.c, p);
+    const row = (
+      await this.c.query(
+        "SELECT d.document FROM projects p LEFT JOIN project_documents d ON d.project_id=p.id AND d.workspace_id=p.workspace_id WHERE p.workspace_id=$1 AND p.id=$2 AND p.deleted_at IS NULL FOR UPDATE OF p",
+        [p.workspaceId, projectId],
+      )
+    ).rows[0];
+    if (!row) throw new AppError("NOT_FOUND", 404);
+    const nodes = (row.document?.nodes ??
+      []) as import("@tuyile/contracts").CanvasNode[];
+    return ids.map((id) => {
+      const node = nodes.find((n) => n.id === id && n.kind === "text");
+      if (!node?.text?.trim())
+        throw new AppError("TEXT_REFERENCE_UNAVAILABLE", 409);
+      return { nodeId: id, title: node.label, text: node.text };
+    });
+  }
   async existingAdmission(p: Principal, input: ImageInput, tool: ToolBinding) {
     const c = this.c;
 
@@ -45,6 +63,7 @@ export class PgTasksRepository extends PgCreationContext {
     snapshot: AdmissionSnapshot,
     providerId: string,
     tool: ToolBinding,
+    textSources: import("@tuyile/contracts").TextSource[] = [],
   ) {
     const c = this.c;
     const task = (
@@ -59,7 +78,8 @@ export class PgTasksRepository extends PgCreationContext {
           createHash("sha256").update(JSON.stringify(input)).digest("hex"),
           JSON.stringify({
             ...input,
-            finalPrompt: composeCreativePrompt(input),
+            textSources,
+            finalPrompt: composeCreativePrompt({ ...input, textSources }),
           }),
           JSON.stringify(snapshot.budget.policy),
           providerId,

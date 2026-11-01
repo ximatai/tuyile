@@ -1,3 +1,4 @@
+import { taskDraftPrompt } from "./task-presentation";
 import {
   createContext,
   useContext,
@@ -91,11 +92,12 @@ export class SessionState {
       const settings = taskSettings(input.task, usage);
       if (!settings) throw new Error("这次任务没有可复用的参数。");
       patch.direct = {
-        prompt: input.task.prompt,
+        prompt: taskDraftPrompt(input.task),
         style: input.task.settings?.style,
         settings,
       };
       patch.referenceIds = input.task.settings!.referenceIds;
+      patch.textNodeIds = [];
     }
     if (input.prompt !== undefined)
       patch.direct = {
@@ -124,7 +126,7 @@ export class SessionState {
     const stored = this.projectDrafts.get(projectId)?.get();
     if (!stored?.ready) return false;
     const current = stored.document.direct;
-    const prompt = input.task?.prompt ?? input.prompt;
+    const prompt = input.task ? taskDraftPrompt(input.task) : input.prompt;
     const referenceIds =
       input.task?.settings?.referenceIds ?? input.referenceIds;
     const style = input.task?.settings?.style;
@@ -146,6 +148,7 @@ export class SessionState {
     );
     return !!(
       parametersChanged ||
+      (!!input.task && !!stored.document.textNodeIds?.length) ||
       (current.prompt.trim() &&
         prompt !== undefined &&
         current.prompt !== prompt) ||

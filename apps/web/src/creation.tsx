@@ -1,3 +1,9 @@
+import { taskDraftPrompt } from "./task-presentation";
+import {
+  TextCanvasBoundary,
+  TextReferences,
+  useTextReferences,
+} from "./text-references";
 import { DemoRecords } from "./demo";
 import { useCreationPanel } from "./use-creation-panel";
 import { LoadingState } from "./loading-state";
@@ -279,7 +285,9 @@ export function TaskResults({
 export function CreationPage(props: { csrfToken: string; projectId: string }) {
   return (
     <ProjectDraftBoundary projectId={props.projectId}>
-      <CreationEditor {...props} />
+      <TextCanvasBoundary>
+        <CreationEditor {...props} />
+      </TextCanvasBoundary>
     </ProjectDraftBoundary>
   );
 }
@@ -290,6 +298,7 @@ function CreationEditor({
   csrfToken: string;
   projectId: string;
 }) {
+  const textRefs = useTextReferences();
   const sessionState = useSessionState();
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
@@ -398,6 +407,8 @@ function CreationEditor({
       saved.format === settings.format &&
       saved.style?.name === style?.name.trim() &&
       saved.style?.text === style?.text.trim() &&
+      JSON.stringify(task.textSources ?? []) ===
+        JSON.stringify(textRefs.sources) &&
       JSON.stringify(saved.referenceIds) ===
         JSON.stringify(references.map((r) => r.id))
     );
@@ -437,8 +448,13 @@ function CreationEditor({
     ? [
         ...settingsIssues(usage, settings, references.length),
         ...(style && !style.text.trim() ? ["请填写风格描述。"] : []),
-        ...(composeCreativePrompt({ prompt, style }).length > 12000
-          ? ["需求与风格合计不能超过 12000 字符。"]
+        ...(textRefs.issue ? [textRefs.issue] : []),
+        ...(composeCreativePrompt({
+          prompt,
+          style,
+          textSources: textRefs.sources,
+        }).length > 12000
+          ? ["需求、引用文案与风格合计不能超过 12000 字符。"]
           : []),
       ]
     : [];
@@ -467,7 +483,8 @@ function CreationEditor({
       return;
     initialized.current = true;
     setSettings(next);
-    setPrompt(task.prompt);
+    setPrompt(taskDraftPrompt(task));
+    textRefs.setIds([]);
     setStyle(task.settings?.style);
     setReferences(
       task.settings!.referenceIds.map((id) => ({ id, name: "任务参考图" })),
@@ -610,15 +627,22 @@ function CreationEditor({
     setSubmissionRejected(false);
     setBusy(true);
     setError("");
-    setPending(input);
+    let submitted = false;
     try {
+      if (!pending && input.textNodeIds?.length) {
+        if (textRefs.issue) throw new Error(textRefs.issue);
+        await textRefs.flush();
+      }
+      setPending(input);
+      submitted = true;
       const task = await client(csrfToken)<ImageTask>("/images/tasks", input);
       await acceptTask(task);
       setPending(null);
       setMobile("results");
       void refresh();
     } catch (e) {
-      const rejected = e instanceof ApiError && e.code !== "INTERNAL_ERROR";
+      const rejected =
+        !submitted || (e instanceof ApiError && e.code !== "INTERNAL_ERROR");
       if (rejected) {
         setPending(null);
         setSubmissionRejected(true);
@@ -660,6 +684,7 @@ function CreationEditor({
       format: settings.format,
       count: settings.count,
       referenceIds: references.map((r) => r.id),
+      textNodeIds: textRefs.ids,
     });
   }
   async function recover() {
@@ -745,6 +770,12 @@ function CreationEditor({
               statusStale={!!taskQuery.error}
               projectId={projectId}
               onReference={chooseReference}
+              onTextReference={(id) => {
+                if (busy || pending)
+                  throw new Error("请先确认当前提交结果，再修改引用文案。");
+                textRefs.link(id);
+                panel.show();
+              }}
               onUpload={(files) => void uploadFiles(files, "canvas")}
               uploadBusy={busy || !!pending}
               onSelectionChange={setCanvasSelection}
@@ -905,6 +936,12 @@ function CreationEditor({
                         }
                       />
                     )}
+                    <TextReferences
+                      visible={!panelCollapsed && mode === "direct"}
+                      disabled={busy || !!pending}
+                      prompt={prompt}
+                      style={style}
+                    />
                     <ImageControls
                       disabled={busy || !!pending}
                       compact

@@ -12,13 +12,27 @@ export const creationStyle = z
   })
   .strict();
 export type CreationStyle = z.infer<typeof creationStyle>;
+export interface TextSource {
+  nodeId: string;
+  title: string;
+  text: string;
+}
+export const textNodeIds = z
+  .array(z.uuid())
+  .max(8)
+  .refine((ids) => new Set(ids).size === ids.length);
 export function composeCreativePrompt(input: {
+  textSources?: TextSource[];
   prompt: string;
   style?: CreationStyle;
 }) {
-  return input.style
-    ? `${input.prompt.trim()}\n\n画面风格：${input.style.text}`
-    : input.prompt.trim();
+  return [
+    input.prompt.trim(),
+    ...(input.textSources?.map(
+      (s, i) => `引用文案 ${i + 1}（${s.title || "未命名文案"}）：\n${s.text}`,
+    ) ?? []),
+    ...(input.style ? [`画面风格：${input.style.text}`] : []),
+  ].join("\n\n");
 }
 export const imageInput = z.object({
   projectId: z.uuid(),
@@ -38,6 +52,7 @@ export const imageInput = z.object({
   format: z.enum(["png", "jpeg", "webp"]),
   count: z.number().int().min(1).max(16),
   referenceIds: z.array(z.uuid()).max(4).default([]),
+  textNodeIds: textNodeIds.optional(),
 });
 export type ImageInput = z.infer<typeof imageInput>;
 export const policyInput = z.object({
@@ -85,6 +100,7 @@ export interface ImageTask {
     "queued" | "running" | "succeeded" | "partial" | "failed" | "cancelled";
   prompt: string;
   finalPrompt?: string;
+  textSources?: TextSource[];
   model: string;
   count: number;
   settings?: Pick<

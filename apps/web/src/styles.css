@@ -3899,3 +3899,108 @@ h3 {
 .demo-record-grid strong { font-size: 12px; }
 .demo-reference-previews { display: flex; gap: 8px; }
 .demo-reference-previews img { width: 96px; height: 96px; object-fit: contain; }
+
+.canvas-text-card {
+  height: 100%;
+  width: 100%;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 1px solid #d7dee8;
+  border-radius: 6px;
+  box-sizing: border-box;
+  color: #172435;
+}
+.canvas-text-card.tone-plain {
+  background: transparent;
+}
+.canvas-text-card.tone-yellow {
+  background: #fff8d9;
+}
+.canvas-text-card.tone-blue {
+  background: #eaf3ff;
+}
+.canvas-text-card.tone-green {
+  background: #edf8ef;
+}
+.canvas-text-card .canvas-text-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  cursor: grab;
+}
+.canvas-text-card .canvas-text-header .canvas-node-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.canvas-text-card .canvas-text-header .ant-select {
+  width: 74px;
+  flex-shrink: 0;
+}
+.canvas-text-card .canvas-text-body,
+.canvas-text-card textarea.ant-input {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.6;
+  user-select: text;
+}
+.canvas-text-card textarea.ant-input {
+  resize: none;
+  background: transparent;
+}
+.text-references {
+  margin: 16px 0;
+}
+.text-reference-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.text-reference-item,
+.text-picker-item {
+  display: block;
+  margin-top: 8px;
+  padding: 8px;
+  background: #f5f8fc;
+  border-radius: 6px;
+}
+.text-reference-item p,
+.text-picker-item p {
+  margin: 6px 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: #52647c;
+}
+.text-reference-item > div {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+.text-reference-item > button {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.text-prompt-preview {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 320px;
+  overflow: auto;
+}
+.canvas-text-card .canvas-text-header {
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  flex-shrink: 0;
+}

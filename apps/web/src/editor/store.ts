@@ -64,6 +64,7 @@ export class EditorStore {
   private placements = new Set<string>();
   private seen = new Set<string>();
   private version = 0;
+  private lastTextUpdate?: { id: string; version: number };
   private epoch = 0;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private running: Promise<void> | undefined;
@@ -100,16 +101,66 @@ export class EditorStore {
   }
   renameNode(id: string, label: string) {
     const name = label.trim();
-    if (!name) return;
     if (name.length > 100) throw new Error("名称不能超过 100 个字符。");
     const node = this.state.document.nodes.find((n) => n.id === id);
-    if (!node || node.label === name) return;
+    if (!node || (!name && node.kind !== "text") || node.label === name) return;
     this.edit({
       ...this.state.document,
       nodes: this.state.document.nodes.map((n) =>
         n.id === id ? { ...n, label: name } : n,
       ),
     });
+  }
+  addText() {
+    this.canAddImage();
+    const { nodes, viewport } = this.state.document;
+    const position = imagePosition(nodes, viewport, 300, 220);
+    if (!position)
+      throw new Error("画布当前区域无法放置文案，请平移视图后重试。");
+    const node: CanvasNode = {
+      id: crypto.randomUUID(),
+      kind: "text",
+      label: "文案",
+      text: "",
+      tone: "yellow",
+      width: 300,
+      height: 220,
+      ...position,
+    };
+    this.edit({ ...this.state.document, nodes: [...nodes, node] });
+    this.select([node.id]);
+    return node.id;
+  }
+  updateText(
+    id: string,
+    patch: Pick<CanvasNode, "text" | "tone">,
+    history = true,
+  ) {
+    const before = this.version;
+    const merge =
+      !history &&
+      this.lastTextUpdate?.id === id &&
+      this.lastTextUpdate.version === before;
+    this.edit(
+      {
+        ...this.state.document,
+        nodes: this.state.document.nodes.map((n) =>
+          n.id === id && n.kind === "text" ? { ...n, ...patch } : n,
+        ),
+      },
+      !merge,
+    );
+    if (this.version !== before)
+      this.lastTextUpdate = { id, version: this.version };
+  }
+  finishTextEdit() {
+    this.lastTextUpdate = undefined;
+    while (
+      this.past.length &&
+      JSON.stringify(this.past.at(-1)) === JSON.stringify(this.state.document)
+    )
+      this.past.pop();
+    this.update({ canUndo: !!this.past.length, canRedo: !!this.future.length });
   }
   canAddImage(count = 1) {
     if (this.state.conflict)

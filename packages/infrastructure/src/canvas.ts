@@ -80,7 +80,7 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
       [id],
     );
     await this.c.query(
-      "UPDATE image_tasks SET input=jsonb_set(jsonb_set(input,'{prompt}',to_jsonb(''::text)),'{referenceIds}','[]'::jsonb) WHERE project_id=$1",
+      "UPDATE image_tasks SET input=jsonb_set(jsonb_set(input - 'textSources' - 'textNodeIds' - 'finalPrompt','{prompt}',to_jsonb(''::text)),'{referenceIds}','[]'::jsonb) WHERE project_id=$1",
       [id],
     );
     await this.c.query(
@@ -349,6 +349,16 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
         [p.workspaceId, project],
       )
     ).rows.map((r) => ({ assetId: r.asset_id, sourceIds: r.sources }));
+    const textGenerated = (
+      await this.c.query(
+        "SELECT DISTINCT o.asset_id,t.input->'textSources' AS texts FROM canvas_references c JOIN image_outputs o ON o.workspace_id=c.workspace_id AND o.asset_id=c.asset_id JOIN image_tasks t ON t.workspace_id=o.workspace_id AND t.id=o.task_id WHERE c.workspace_id=$1 AND c.project_id=$2 AND jsonb_array_length(coalesce(t.input->'textSources','[]'::jsonb))>0",
+        [p.workspaceId, project],
+      )
+    ).rows.map((r) => ({
+      assetId: r.asset_id,
+      sourceIds: [],
+      textNodeIds: r.texts.map((s: { nodeId: string }) => s.nodeId),
+    }));
     const demo = (
       await this.c.query(
         "SELECT images FROM demo_projects WHERE workspace_id=$1 AND project_id=$2",
@@ -357,6 +367,7 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
     ).rows[0];
     return [
       ...generated,
+      ...textGenerated,
       ...(demo?.images ?? []).map(
         (i: { assetId: string; sourceIds: string[] }) => ({
           assetId: i.assetId,

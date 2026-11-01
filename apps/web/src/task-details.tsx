@@ -52,6 +52,35 @@ export function TaskDetails({
         <h3>创作需求</h3>
         <p className="task-detail-prompt">{task.prompt || "未填写"}</p>
       </div>
+      {!!task.textSources?.length && (
+        <Collapse
+          items={[
+            {
+              key: "texts",
+              label: `引用文案快照 · ${task.textSources.length}`,
+              children: (
+                <>
+                  {task.textSources.map((s, i) => (
+                    <div key={`${s.nodeId}-${i}`}>
+                      <strong>
+                        {i + 1}. {s.title || "未命名文案"}
+                      </strong>
+                      <p className="task-detail-prompt">{s.text}</p>
+                    </div>
+                  ))}
+                </>
+              ),
+            },
+            {
+              key: "final-text",
+              label: "实际提交提示词",
+              children: (
+                <p className="task-detail-prompt">{task.finalPrompt}</p>
+              ),
+            },
+          ]}
+        />
+      )}
       {task.settings?.style && (
         <Collapse
           ghost

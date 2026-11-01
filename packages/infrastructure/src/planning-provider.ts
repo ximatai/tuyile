@@ -91,7 +91,10 @@ export class CompatiblePlanningProvider implements PlanningProvider {
           steps = [
             {
               title: "合成创作",
-              prompt: composeCreativePrompt(input),
+              prompt: composeCreativePrompt({
+                prompt: input.prompt,
+                style: input.style,
+              }),
               model: input.model,
               width: input.width,
               height: input.height,

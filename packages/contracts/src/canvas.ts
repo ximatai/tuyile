@@ -3,12 +3,21 @@ const coordinate = z.number().finite().min(-100000).max(100000);
 export const canvasNode = z
   .object({
     id: z.uuid(),
-    kind: z.enum(["image", "group"]),
+    kind: z.enum(["image", "group", "text"]),
     x: coordinate,
     y: coordinate,
     width: z.number().finite().min(40).max(10000),
     height: z.number().finite().min(40).max(10000),
-    label: z.string().max(100),
+    label: z
+      .string()
+      .max(100)
+      .refine((v) => !v.includes("\0")),
+    text: z
+      .string()
+      .max(4000)
+      .refine((v) => !v.includes("\0"))
+      .optional(),
+    tone: z.enum(["plain", "yellow", "blue", "green"]).optional(),
     assetId: z.uuid().optional(),
     parentId: z.uuid().optional(),
   })
@@ -33,7 +42,10 @@ export const canvasDocument = z
     for (const n of doc.nodes) {
       if (
         (n.kind === "image") !== !!n.assetId ||
-        (n.kind === "group" && n.parentId)
+        (n.kind === "group" && n.parentId) ||
+        (n.kind === "text"
+          ? n.text === undefined
+          : n.text !== undefined || n.tone !== undefined)
       )
         ctx.addIssue({ code: "custom", message: "Invalid node" });
       if (
@@ -72,6 +84,7 @@ export interface CanvasOutput {
   sourceIds: string[];
 }
 export interface CanvasSources {
+  textNodeIds?: string[];
   assetId: string;
   sourceIds: string[];
 }

@@ -4,7 +4,10 @@ const messages: Record<string, string> = {
   DRAFT_CONFLICT: "草稿已在其他页面更新，当前输入已保留。",
   STYLE_CONFLICT: "风格已被修改，请重新打开后编辑。当前输入已保留。",
   STYLE_LIMIT: "最多保存 200 个风格，请先清理不再使用的风格。",
-  PROMPT_TOO_LONG: "需求与风格合计不能超过 12000 字符，请精简后再提交。",
+  TEXT_REFERENCE_UNAVAILABLE:
+    "引用文案已删除或内容为空，请补充内容或移除引用。",
+  PROMPT_TOO_LONG:
+    "需求、引用文案与风格合计不能超过 12000 字符，请精简后再提交。",
   PROJECT_BUSY: "项目仍有活动或待核验任务，请等待处理完成后再删除。",
   EXPORT_LIMIT: "每批最多导出 5 张、合计 50 MiB，请分批导出。",
   PLANNING_IMAGES_UNSUPPORTED:
@@ -54,7 +57,8 @@ const messages: Record<string, string> = {
   QUEUE_FULL: "排队已满，请稍后重试。",
   SUBMISSION_RATE: "提交过于频繁，请稍后重试。",
   IMAGE_QUOTA: "图片额度不足，整单未提交。",
-  DEMO_SOURCE_INVALID: "示例来源须包含三张成功生成的图片，以及 A、B 到 C 的来源关系。",
+  DEMO_SOURCE_INVALID:
+    "示例来源须包含三张成功生成的图片，以及 A、B 到 C 的来源关系。",
   DEMO_TEMPLATE_UNAVAILABLE: "示例模板暂不可用，请稍后重试。",
   DEMO_INITIALIZATION_CONFLICT: "示例初始化状态已变化，请刷新后重试。",
   STORAGE_QUOTA: "存储空间不足，请先清理不再引用的图片。",
