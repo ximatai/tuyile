@@ -8,7 +8,6 @@ export function toolbarPlacement(input: {
   canvasWidth: number;
   canvasHeight: number;
   toolbarWidth: number;
-  outside?: boolean;
 }) {
   const {
     x,
@@ -19,17 +18,16 @@ export function toolbarPlacement(input: {
     canvasWidth,
     canvasHeight,
     toolbarWidth,
-    outside,
   } = input;
   const right = (x + width) * viewport.zoom + viewport.x;
   const left = right - 8 - toolbarWidth;
   const top = y * viewport.zoom + viewport.y;
   const bottom = top + height * viewport.zoom;
-  const preferredTop = outside ? top - 36 : top + 8;
-  // Prefer below the note when its header touches the top, keeping its palette clear.
+  // Both card kinds prefer the lower-right outside corner; flip above at the bottom edge.
+  const preferredTop = bottom + 8;
   const desiredTop =
-    outside && preferredTop < 8 && bottom + 36 <= canvasHeight
-      ? bottom + 8
+    preferredTop + 28 > canvasHeight - 8 && top - 36 >= 8
+      ? top - 36
       : preferredTop;
   const toolbarTop = Math.max(8, Math.min(desiredTop, canvasHeight - 36));
   return {
@@ -40,6 +38,6 @@ export function toolbarPlacement(input: {
       top < canvasHeight,
     horizontalInset:
       -8 + Math.max(0, 8 - left) - Math.max(0, right - 8 - (canvasWidth - 8)),
-    offset: top - 28 - toolbarTop,
+    offset: toolbarTop - bottom,
   };
 }

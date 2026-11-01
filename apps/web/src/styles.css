@@ -2837,7 +2837,7 @@ h3 {
   transition: opacity 120ms ease;
 }
 .canvas-image-actions.is-visible,
-.canvas-image-actions:focus-within {
+.canvas-image-actions:has(:focus-visible) {
   opacity: 1;
   pointer-events: auto;
 }

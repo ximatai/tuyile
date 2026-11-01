@@ -132,7 +132,7 @@ export async function verifyTextCanvas(page: Page) {
   expect(iconBox.height).toBeLessThanOrEqual(36);
 
   await expect(page.locator(".canvas-status")).toContainText("画布已保存");
-  for (const edge of ["top", "left", "right"]) {
+  for (const edge of ["top", "left", "right", "bottom"]) {
     const preview = await page.context().newPage();
     try {
       await preview.setViewportSize(page.viewportSize()!);
@@ -160,7 +160,11 @@ export async function verifyTextCanvas(page: Page) {
                     : edge === "right"
                       ? canvasWidth - 20
                       : 80,
-                y: 0,
+                y:
+                  edge === "bottom"
+                    ? (await canvas.locator(".react-flow").boundingBox())!
+                        .height - 20
+                    : 0,
               },
             ],
           };
@@ -177,7 +181,10 @@ export async function verifyTextCanvas(page: Page) {
       const node = surface.locator(".react-flow__node-text");
       const width = (await node.boundingBox())!.width;
       await node.click({
-        position: { x: edge === "left" ? width - 6 : 6, y: 80 },
+        position: {
+          x: edge === "left" ? width - 6 : 6,
+          y: edge === "bottom" ? 6 : 80,
+        },
       });
       const action = surface.getByRole("button", {
         name: "引用到当前创作",
@@ -205,13 +212,19 @@ export async function verifyTextCanvas(page: Page) {
   await title.dblclick();
   await canvas.getByLabel("文案标题", { exact: true }).fill("海报主标题");
   await canvas.getByLabel("文案标题", { exact: true }).press("Enter");
+  await canvas.locator(".canvas-text-card").last().hover();
   await canvas
+    .getByRole("toolbar", { name: "文案操作", exact: true })
+    .last()
     .getByRole("button", { name: "引用到当前创作", exact: true })
     .click();
   await page.getByRole("button", { name: "添加文本", exact: true }).click();
   await editor.fill("一杯拿铁，一段山间时光。");
   await editor.press("ControlOrMeta+Enter");
+  await canvas.locator(".canvas-text-card").last().hover();
   await canvas
+    .getByRole("toolbar", { name: "文案操作", exact: true })
+    .last()
     .getByRole("button", { name: "引用到当前创作", exact: true })
     .click();
   const refs = page.getByRole("region", { name: "引用文案", exact: true });
@@ -425,6 +438,40 @@ export async function verifyTextCanvas(page: Page) {
     path: ".codex-temp/compact-copy-acceptance.png",
     animations: "disabled",
   });
+
+  for (const [kind, label] of [
+    ["text", "文案操作"],
+    ["image", "图片操作"],
+  ]) {
+    const node = canvas.locator(`.react-flow__node-${kind}`).first();
+    const actions = canvas
+      .getByRole("toolbar", { name: label, exact: true })
+      .first();
+    const flow = (await canvas.locator(".react-flow").boundingBox())!;
+    const leave = async () => {
+      await canvas.focus();
+      await page.mouse.move(
+        flow.x + flow.width - 30,
+        flow.y + flow.height - 120,
+      );
+      await expect(actions).toHaveCSS("opacity", "0");
+    };
+    await leave();
+    await node.hover();
+    await expect(actions).toHaveCSS("opacity", "1");
+    const card = (await node.boundingBox())!,
+      bar = (await actions.boundingBox())!;
+    expect(bar.y).toBeGreaterThanOrEqual(card.y + card.height);
+    expect(bar.x + bar.width).toBeLessThanOrEqual(card.x + card.width);
+    await page.mouse.move(card.x + card.width - 10, card.y + card.height + 4);
+    await actions.hover();
+    await expect(actions).toHaveCSS("opacity", "1");
+    await leave();
+    await node.focus();
+    await page.keyboard.press("Tab");
+    await expect(actions).toHaveCSS("opacity", "1");
+    await leave();
+  }
   // Copy and delete operate on cards, while missing references remain explicit.
   await canvas.focus();
   await canvas.press("ControlOrMeta+A");

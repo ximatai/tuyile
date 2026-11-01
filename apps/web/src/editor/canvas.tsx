@@ -1,3 +1,4 @@
+import { useCardActions } from "./use-card-actions";
 import { toolbarPlacement } from "./toolbar-placement";
 import { highlightLineage } from "./lineage";
 import { useTextReferences } from "../text-references";
@@ -209,7 +210,7 @@ function ImageCard({
   positionAbsoluteY,
 }: NodeProps<ImageNode>) {
   const [preview, setPreview] = useState(false);
-  const [hovered, setHovered] = useState(false);
+  const actions = useCardActions();
   const [menuOpen, setMenuOpen] = useState(false);
   const viewport = useViewport();
   const canvasWidth = useStore((state) => state.width);
@@ -237,8 +238,7 @@ function ImageCard({
   return (
     <div
       className="canvas-image"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      {...actions.events}
       onDoubleClick={(event) => {
         event.stopPropagation();
         setPreview(true);
@@ -269,13 +269,12 @@ function ImageCard({
       <NodeToolbar
         nodeId={id}
         isVisible={onScreen}
-        position={Position.Top}
+        position={Position.Bottom}
         align="end"
         offset={toolbarOffset}
         style={{ marginLeft: horizontalInset }}
-        className={`canvas-image-actions nodrag nopan${hovered || selected || (compact && menuOpen) ? " is-visible" : ""}`}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
+        className={`canvas-image-actions nodrag nopan${actions.visible || (compact && menuOpen) ? " is-visible" : ""}`}
+        {...actions.events}
         role="toolbar"
         aria-label="图片操作"
         onDoubleClick={(event) => event.stopPropagation()}
@@ -451,8 +450,8 @@ function TextCard({
     canvasWidth,
     canvasHeight,
     toolbarWidth: 28,
-    outside: true,
   });
+  const actions = useCardActions();
   const [editing, setEditing] = useState(data.startEditing);
   const firstChange = useRef(true);
   const composing = useRef(false);
@@ -467,7 +466,10 @@ function TextCard({
     firstChange.current = false;
   }
   return (
-    <div className={`canvas-text-card tone-${data.tone || "plain"}`}>
+    <div
+      className={`canvas-text-card tone-${data.tone || "plain"}`}
+      {...actions.events}
+    >
       <NodeResizer minWidth={180} minHeight={140} isVisible={selected} />
       <div className="canvas-text-header">
         <NodeTitle label={data.label} kind="文案" onRename={data.rename} />
@@ -529,8 +531,7 @@ function TextCard({
             ) {
               e.preventDefault();
               if (e.key === "Escape") update(original.current);
-              data.finish();
-              setEditing(false);
+              e.currentTarget.blur();
             }
           }}
         />
@@ -550,12 +551,13 @@ function TextCard({
         </div>
       )}
       <NodeToolbar
-        isVisible={selected && placement.onScreen}
-        position={Position.Top}
+        isVisible={placement.onScreen}
+        position={Position.Bottom}
         align="end"
         offset={placement.offset}
         style={{ marginLeft: placement.horizontalInset }}
-        className="canvas-image-actions is-visible nodrag nopan"
+        className={`canvas-image-actions nodrag nopan${actions.visible ? " is-visible" : ""}`}
+        {...actions.events}
         role="toolbar"
         aria-label="文案操作"
       >
