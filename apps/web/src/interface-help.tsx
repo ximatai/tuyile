@@ -23,7 +23,7 @@ export function HelpPopover({
     if (!visible) setOpen(false);
   }, [visible]);
   function escape(event: React.KeyboardEvent) {
-    if (event.key === "Escape") {
+    if (event.key === "Escape" && open) {
       event.stopPropagation();
       setOpen(false);
       trigger.current?.focus();

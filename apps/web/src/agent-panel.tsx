@@ -50,6 +50,7 @@ const states: Record<string, string> = {
 };
 export function AgentPanel({
   visible,
+  autoFocusComposer = true,
   projectId,
   usage,
   references,
@@ -61,6 +62,7 @@ export function AgentPanel({
   tasks,
 }: {
   visible: boolean;
+  autoFocusComposer?: boolean;
   projectId: string;
   usage?: ImageUsage;
   references: { id: string; name: string }[];
@@ -256,6 +258,8 @@ export function AgentPanel({
   }
   const hasProposal = !!plan?.document.steps.length;
   const composeForm = useRef<HTMLFormElement>(null);
+  const composerFocusAllowed = useRef(autoFocusComposer);
+  composerFocusAllowed.current = autoFocusComposer;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
   useEffect(() => {
@@ -263,7 +267,7 @@ export function AgentPanel({
     setPlanDirty(false);
   }, [plan?.id, hasProposal]);
   useEffect(() => {
-    if (composeOpen && visible && plan)
+    if (composeOpen && visible && composerFocusAllowed.current && plan)
       composeForm.current?.querySelector("textarea")?.focus();
   }, [composeOpen, visible, plan?.id]);
   const settingsTrigger = useRef<React.ComponentRef<typeof Button>>(null);
@@ -460,7 +464,7 @@ export function AgentPanel({
                   <div
                     className="agent-settings-content"
                     onKeyDown={(event) => {
-                      if (event.key === "Escape") {
+                      if (event.key === "Escape" && settingsOpen) {
                         event.stopPropagation();
                         setSettingsOpen(false);
                         settingsTrigger.current?.focus();
@@ -533,7 +537,7 @@ export function AgentPanel({
                   ref={settingsTrigger}
                   aria-expanded={settingsOpen}
                   onKeyDown={(event) => {
-                    if (event.key === "Escape") {
+                    if (event.key === "Escape" && settingsOpen) {
                       event.stopPropagation();
                       setSettingsOpen(false);
                     }
@@ -1180,7 +1184,7 @@ function PlanStepParameters({
         <div
           className="agent-settings-content"
           onKeyDown={(event) => {
-            if (event.key === "Escape") {
+            if (event.key === "Escape" && open) {
               event.stopPropagation();
               setOpen(false);
               trigger.current?.focus();
@@ -1198,7 +1202,7 @@ function PlanStepParameters({
         aria-label={`步骤 ${index + 1} 图片设置`}
         aria-expanded={open}
         onKeyDown={(event) => {
-          if (event.key === "Escape") {
+          if (event.key === "Escape" && open) {
             event.stopPropagation();
             setOpen(false);
           }

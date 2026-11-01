@@ -5450,6 +5450,11 @@ test("creation panel collapses into a rail without changing viewport or drafts a
     await expect
       .poll(async () => (await panel.boundingBox())!.width)
       .toBeGreaterThan(350);
+    const pin = page.getByRole("button", { name: "固定创作面板", exact: true });
+    if (await pin.count()) await pin.click();
+    await expect
+      .poll(async () => (await panel.boundingBox())!.width)
+      .toBeCloseTo(Math.min(440, Math.max(360, width * 0.285)), 0);
     const expandedCanvas = (await canvas.boundingBox())!.width;
     const current = (await snapshot()).document.viewport;
     await page
@@ -5500,6 +5505,24 @@ test("creation panel collapses into a rail without changing viewport or drafts a
     )
     .toBe("succeeded");
   await expect(expand).toBeVisible();
+  await expand.click();
+  await page
+    .getByRole("button", { name: "任务与结果 · 1", exact: true })
+    .click();
+  const detailsTrigger = page.getByRole("button", {
+    name: "任务详情",
+    exact: true,
+  });
+  await detailsTrigger.click();
+  await expect(detailsTrigger).toHaveAttribute("aria-expanded", "true");
+  await detailsTrigger.press("Escape");
+  await expect(detailsTrigger).toHaveAttribute("aria-expanded", "false");
+  await expect(
+    page.getByRole("button", { name: "收起创作面板", exact: true }),
+  ).toBeVisible();
+  await detailsTrigger.press("Escape");
+  await expect(expand).toBeVisible();
+  await expect(expand).toBeFocused();
   const generated = page
     .locator(".react-flow__node-image")
     .filter({ has: page.getByRole("img", { name: "生成图片", exact: true }) });
@@ -5604,4 +5627,161 @@ test("collapsed creation panel retains unsaved Agent edits and closes its settin
   await expect(
     page.getByRole("tab", { name: "Agent", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("button", { name: "收起创作面板", exact: true }).click();
+  await page.mouse.move(300, 500);
+  await page.getByRole("button", { name: "展开创作面板", exact: true }).hover();
+  await expect(
+    page.getByRole("button", { name: "收起创作面板", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByLabel("告诉 Agent 你的想法", { exact: true }),
+  ).not.toBeFocused();
+  const settingsTrigger = page.getByRole("button", {
+    name: "创作设置",
+    exact: true,
+  });
+  await settingsTrigger.click();
+  await expect(settingsTrigger).toBeFocused();
+});
+
+test("anchored creation panel previews on hover, pins durably and dismisses without consuming canvas actions", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.getByLabel("项目名称").fill("锚定面板交互验证");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "锚定面板交互验证" })
+    .click();
+  const canvas = page.getByRole("region", { name: "项目画布", exact: true });
+  const panel = page.getByRole("complementary", {
+    name: "图片创作",
+    exact: true,
+  });
+  const expand = page.getByRole("button", {
+    name: "展开创作面板",
+    exact: true,
+  });
+  const collapse = page.getByRole("button", {
+    name: "收起创作面板",
+    exact: true,
+  });
+  const pin = page.getByRole("button", { name: "固定创作面板", exact: true });
+  const unpin = page.getByRole("button", {
+    name: "取消固定创作面板",
+    exact: true,
+  });
+  await expect(unpin).toHaveAttribute("aria-pressed", "true");
+  const png = await (
+    await import("sharp")
+  )
+    .default({
+      create: { width: 300, height: 160, channels: 3, background: "#0062b0" },
+    })
+    .png()
+    .toBuffer();
+  await canvas.locator('input[type="file"]').setInputFiles({
+    name: "点击选择验证.png",
+    mimeType: "image/png",
+    buffer: png,
+  });
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(1);
+  await expect(
+    canvas.getByRole("button", { name: "上传图片到画布", exact: true }),
+  ).toBeEnabled();
+  await expect(page.locator(".canvas-status")).toContainText("画布已保存");
+  await page
+    .locator(".react-flow__pane")
+    .click({ position: { x: 10, y: 100 } });
+  await expect(collapse).toBeVisible();
+  await expect(page.locator(".react-flow__node.selected")).toHaveCount(0);
+  const projectId = page.url().split("/").at(-1)!;
+  const viewport = (
+    await (await page.request.get(`/api/projects/${projectId}/canvas`)).json()
+  ).document.viewport;
+  const pinnedWidth = (await canvas.boundingBox())!.width;
+  await unpin.click();
+  await expect
+    .poll(async () => (await canvas.boundingBox())!.width)
+    .toBeGreaterThan(pinnedWidth + 300);
+  await expect
+    .poll(
+      async () =>
+        (await page.locator(".creation-layout").boundingBox())!.width -
+        (await canvas.boundingBox())!.width,
+    )
+    .toBeCloseTo(40, 0);
+  const floatingWidth = (await canvas.boundingBox())!.width;
+  await page
+    .locator(".react-flow__node-image")
+    .click({ position: { x: 20, y: 30 } });
+  await expect(expand).toBeVisible();
+  await expect(page.locator(".react-flow__node-image")).toHaveClass(/selected/);
+  expect((await canvas.boundingBox())!.width).toBeCloseTo(floatingWidth, 0);
+  await page.clock.install();
+  await expand.hover();
+  await page.clock.fastForward(350);
+  await expect(collapse).toBeVisible();
+  expect((await canvas.boundingBox())!.width).toBeCloseTo(floatingWidth, 0);
+  await page.mouse.move(300, 500);
+  await page.clock.fastForward(250);
+  await expect(expand).toBeVisible();
+  await expand.hover();
+  await page.clock.fastForward(350);
+  await page.keyboard.press("Escape");
+  await expect(expand).toBeVisible();
+  await page.mouse.move(300, 500);
+  await expand.hover();
+  await page.clock.fastForward(350);
+  const prompt = page.getByLabel("创作需求", { exact: true });
+  await prompt.fill("临时编辑也要保留");
+  await page.mouse.move(300, 500);
+  await page.clock.fastForward(500);
+  await expect(collapse).toBeVisible();
+  await page.getByRole("button", { name: "更多提示词", exact: true }).click();
+  await page.keyboard.press("Escape");
+  await expect(collapse).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(expand).toBeVisible();
+  await expect(expand).toBeFocused();
+  await expand.click();
+  await prompt.dispatchEvent("compositionstart");
+  await prompt.press("Escape");
+  await expect(collapse).toBeVisible();
+  await prompt.dispatchEvent("compositionend");
+  await prompt.press("Escape");
+  await expect(expand).toBeVisible();
+  await expand.click();
+  await pin.click();
+  await expect(unpin).toHaveAttribute("aria-pressed", "true");
+  await page
+    .locator(".react-flow__pane")
+    .click({ position: { x: 10, y: 100 } });
+  await expect(collapse).toBeVisible();
+  await page.clock.fastForward(1500);
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/projects/${projectId}/draft`)
+          ).json()
+        ).document.direct.prompt,
+    )
+    .toBe("临时编辑也要保留");
+  await page.reload();
+  await expect(unpin).toBeVisible();
+  await unpin.click();
+  await page.reload();
+  await expect(expand).toBeVisible();
+  expect(
+    (await (await page.request.get(`/api/projects/${projectId}/canvas`)).json())
+      .document.viewport,
+  ).toEqual(viewport);
+  await page.screenshot({ path: ".codex-temp/anchored-panel-rail.png" });
+  await expand.click();
+  await expect(collapse).toBeVisible();
+  await page.screenshot({ path: ".codex-temp/anchored-panel-preview.png" });
 });

@@ -1,3 +1,4 @@
+import { useCreationPanel } from "./use-creation-panel";
 import { LoadingState } from "./loading-state";
 import {
   ProjectDraftBoundary,
@@ -9,7 +10,13 @@ import { ResultImage } from "./result-image";
 import { TaskDetails, TaskProblem } from "./task-details";
 import { canReuseTask, taskStates as states } from "./task-presentation";
 import { useAdaptivePromptHeight } from "./use-adaptive-prompt-height";
-import { Info, PanelRightClose, PanelRightOpen } from "lucide-react";
+import {
+  Info,
+  PanelRightClose,
+  PanelRightOpen,
+  Pin,
+  PinOff,
+} from "lucide-react";
 import { composeCreativePrompt } from "@tuyile/contracts";
 import { HelpPopover } from "./interface-help";
 import { PromptComposer } from "./prompt-composer";
@@ -69,7 +76,7 @@ function TaskTile({
   const [detailsOpen, setDetailsOpen] = useState(false);
   const detailsTrigger = useRef<ComponentRef<typeof Button>>(null);
   function closeDetails(event: React.KeyboardEvent) {
-    if (event.key === "Escape") {
+    if (event.key === "Escape" && detailsOpen) {
       event.stopPropagation();
       setDetailsOpen(false);
       detailsTrigger.current?.focus();
@@ -301,33 +308,24 @@ function CreationEditor({
     >([]),
     [pending, setPending] = useState<ImageInput | null>(null),
     [mobile, setMobile] = useState("create");
-  const [panelCollapsed, setPanelCollapsed] = useState(() => {
-    try {
-      return localStorage.getItem("tuyile.creation-panel") === "collapsed";
-    } catch {
-      return false;
-    }
-  });
+  const panel = useCreationPanel();
+  const panelCollapsed = panel.collapsed;
   const panelId = useId();
   const panelToggle = useRef<ComponentRef<typeof Button>>(null);
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        "tuyile.creation-panel",
-        panelCollapsed ? "collapsed" : "expanded",
-      );
-    } catch {
-      /* Preference persistence is optional. */
-    }
-  }, [panelCollapsed]);
-  function togglePanel() {
-    setPanelCollapsed((old) => !old);
+  const composing = useRef(false);
+  function closeTemporaryPanel() {
+    panel.hide();
     panelToggle.current?.focus({ preventScroll: true });
+  }
+  function togglePanel() {
+    panel.toggle();
+    panelToggle.current?.focus({ preventScroll: true });
+    composing.current = false;
   }
   const confirmDraft = useConfirm();
   const chooseReference = useCallback(
     (id: string) => {
-      setPanelCollapsed(false);
+      panel.show();
       if (busy || pending) {
         setError("请先确认当前提交结果，再修改草稿。");
         return;
@@ -339,7 +337,7 @@ function CreationEditor({
       );
       setMobile("create");
     },
-    [busy, pending],
+    [busy, pending, panel.show],
   );
   function useCanvasSelection() {
     if (busy || pending) {
@@ -447,7 +445,7 @@ function CreationEditor({
       ]
     : [];
   async function reuse(task: ImageTask) {
-    setPanelCollapsed(false);
+    panel.show();
     if (["queued", "running"].includes(task.state)) {
       setError("请等待这次任务结束后再复用设置。");
       return;
@@ -489,7 +487,7 @@ function CreationEditor({
   const [uploadError, setUploadError] = useState("");
   function reportUploadError(message: string) {
     setUploadError(message);
-    setPanelCollapsed(false);
+    panel.show();
   }
   const uploadController = useRef<AbortController | null>(null);
   useEffect(() => () => uploadController.current?.abort(), []);
@@ -703,9 +701,46 @@ function CreationEditor({
         </Button>
       </div>
       <div
-        className={`creation-layout show-${mobile}${panelCollapsed ? " creation-panel-collapsed" : ""}`}
+        className={`creation-layout show-${mobile}${panelCollapsed ? " creation-panel-collapsed" : ""}${!panel.pinned ? " creation-panel-unpinned" : ""}`}
+        onKeyDownCapture={(event) => {
+          const target = event.target;
+          if (
+            event.key === "Escape" &&
+            !event.defaultPrevented &&
+            !event.nativeEvent.isComposing &&
+            !composing.current &&
+            !panel.pinned &&
+            !panelCollapsed &&
+            target instanceof Element &&
+            event.currentTarget.contains(target) &&
+            !target.closest(
+              '.creation-panel,input,textarea,[contenteditable],[role=menu],[role=dialog],button[aria-expanded="true"],[aria-haspopup][aria-expanded="true"]',
+            )
+          ) {
+            closeTemporaryPanel();
+          }
+        }}
       >
-        <div className="creation-results" ref={resultsRef}>
+        <div
+          className="creation-results"
+          ref={resultsRef}
+          onPointerDownCapture={(event) => {
+            const target = event.target;
+            if (
+              !panel.pinned &&
+              !panelCollapsed &&
+              !composing.current &&
+              target instanceof Element &&
+              event.currentTarget.contains(target) &&
+              target.closest(".react-flow__pane,.react-flow__node") &&
+              !target.closest(
+                "button,a,input,textarea,[contenteditable],.canvas-image-actions",
+              )
+            ) {
+              panel.hide();
+            }
+          }}
+        >
           <Suspense fallback={<LoadingState variant="canvas" />}>
             <CanvasEditor
               tasks={tasks}
@@ -750,7 +785,39 @@ function CreationEditor({
           />
         </div>
         <ControlScope componentDisabled={panelCollapsed}>
-          <aside className="creation-panel" aria-label="图片创作" id={panelId}>
+          <aside
+            className="creation-panel"
+            aria-label="图片创作"
+            id={panelId}
+            onMouseEnter={panel.hoverStart}
+            onMouseLeave={panel.hoverEnd}
+            onPointerDownCapture={() => {
+              if (!panelCollapsed) panel.engage();
+            }}
+            onFocusCapture={() => {
+              if (!panelCollapsed) panel.engage();
+            }}
+            onCompositionStartCapture={() => {
+              composing.current = true;
+            }}
+            onCompositionEndCapture={() => {
+              composing.current = false;
+            }}
+            onKeyDown={(event) => {
+              if (
+                event.key === "Escape" &&
+                !event.defaultPrevented &&
+                !event.nativeEvent.isComposing &&
+                !composing.current &&
+                !panel.pinned &&
+                !panelCollapsed
+              ) {
+                event.preventDefault();
+                event.stopPropagation();
+                closeTemporaryPanel();
+              }
+            }}
+          >
             <div className="creation-panel-heading">
               <Tabs
                 activeKey={mode}
@@ -762,9 +829,29 @@ function CreationEditor({
                   { key: "agent", label: "Agent" },
                 ]}
               />
+              {!panelCollapsed && (
+                <Tooltip
+                  title={panel.pinned ? "取消固定创作面板" : "固定创作面板"}
+                  placement="bottom"
+                  classNames={{ root: "creation-panel-control-tip" }}
+                >
+                  <Button
+                    type="button"
+                    className="creation-panel-pin"
+                    aria-label={
+                      panel.pinned ? "取消固定创作面板" : "固定创作面板"
+                    }
+                    aria-pressed={panel.pinned}
+                    onClick={panel.togglePin}
+                  >
+                    {panel.pinned ? <PinOff size={16} /> : <Pin size={16} />}
+                  </Button>
+                </Tooltip>
+              )}
               <Tooltip
                 title={panelCollapsed ? "展开创作面板" : "收起创作面板"}
-                placement="left"
+                placement="bottomRight"
+                classNames={{ root: "creation-panel-control-tip" }}
                 trigger={["hover", "focus"]}
               >
                 <Button
@@ -941,6 +1028,7 @@ function CreationEditor({
             >
               <AgentPanel
                 visible={!panelCollapsed && mode === "agent"}
+                autoFocusComposer={panel.pinned || panel.engaged}
                 projectId={projectId}
                 usage={usage}
                 tasks={tasks}

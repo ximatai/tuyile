@@ -3862,3 +3862,14 @@ h3 {
 .creation-panel-collapsed .creation-panel-heading { justify-content: center; }
 .workspace-shell .creation-panel .agent-clear-history { right: 60px; }
 @media (prefers-reduced-motion: reduce) { .workspace-shell .creation-layout { transition: none; } }
+
+.workspace-shell .creation-layout { position: relative; }
+.workspace-shell .creation-layout.creation-panel-unpinned { grid-template-columns: minmax(0, 1fr) 40px; }
+.creation-panel-unpinned:not(.creation-panel-collapsed) > .creation-panel {
+  position: absolute; inset: 0 0 0 auto; width: clamp(360px, 28.5vw, 440px);
+  z-index: 15; box-shadow: -8px 0 24px rgb(30 55 80 / 12%);
+}
+.creation-panel-pin { flex-shrink: 0; width: 28px; height: 28px; padding: 0; }
+.workspace-shell .creation-panel .agent-clear-history { right: 96px; }
+
+.creation-panel-control-tip, .creation-panel-control-tip * { pointer-events: none; }

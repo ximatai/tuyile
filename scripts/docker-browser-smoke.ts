@@ -111,6 +111,47 @@ try {
       350,
   );
   assert.equal(await panelPrompt.inputValue(), "Docker retained panel draft");
+  await page.getByRole("button", { name: "固定创作面板", exact: true }).click();
+  assert.equal(
+    await page
+      .getByRole("button", { name: "取消固定创作面板", exact: true })
+      .getAttribute("aria-pressed"),
+    "true",
+  );
+  await page
+    .getByRole("button", { name: "取消固定创作面板", exact: true })
+    .click();
+  await page.waitForFunction(
+    () =>
+      Math.abs(
+        document.querySelector(".creation-results")!.getBoundingClientRect()
+          .width -
+          (document.querySelector(".creation-layout")!.getBoundingClientRect()
+            .width -
+            40),
+      ) < 0.5,
+  );
+  const floatingCanvasWidth = (await canvasSurface.boundingBox())!.width;
+  await page
+    .locator(".react-flow__pane")
+    .click({ position: { x: 10, y: 100 } });
+  await page
+    .getByRole("button", { name: "展开创作面板", exact: true })
+    .waitFor();
+  assert(
+    Math.abs((await canvasSurface.boundingBox())!.width - floatingCanvasWidth) <
+      1,
+  );
+  await page.getByRole("button", { name: "展开创作面板", exact: true }).click();
+  await page.getByRole("button", { name: "固定创作面板", exact: true }).click();
+
+  await page.waitForFunction(
+    () =>
+      Math.abs(
+        document.querySelector(".creation-panel")!.getBoundingClientRect()
+          .width - Math.min(440, Math.max(360, innerWidth * 0.285)),
+      ) < 0.5,
+  );
   assert((await panel.boundingBox())!.width > 350);
   const dropped = await page.evaluateHandle((encoded) => {
     const data = new DataTransfer();
@@ -553,7 +594,7 @@ try {
   });
   assert.deepEqual(errors, []);
   console.log(
-    "Built Docker Chromium: collapsible creation panel, canvas batch upload/layout/drop/screenshot paste/reference and keyboard copy/paste/undo, nonce styles, themed button, singleton model lock, confirmation dialog and medium/large desktop layout passed",
+    "Built Docker Chromium: anchored temporary/pinned creation panel, canvas batch upload/layout/drop/screenshot paste/reference and keyboard copy/paste/undo, nonce styles, themed button, singleton model lock, confirmation dialog and medium/large desktop layout passed",
   );
 } finally {
   await browser.close();
