@@ -1,4 +1,5 @@
 import { expect, type Page } from "@playwright/test";
+import { ensureTestPlanner } from "./planner-fixture";
 import { randomUUID } from "node:crypto";
 async function createProject(page: Page) {
   const origin = new URL(page.url());
@@ -544,20 +545,8 @@ export async function verifyAgentTextCreation(page: Page) {
     canvas,
     editor,
   );
-  // The same links guide Agent planning; confirmation uses the frozen planning snapshot.
-  const session = await (await page.request.get(apiUrl("/api/auth/me"))).json();
-  const headers = {
-    Origin: new URL(page.url()).origin,
-    "X-CSRF-Token": session.csrfToken,
-  };
-  const configured = await page.request.post(
-    apiUrl("/api/image-admin/planning-providers"),
-    {
-      headers,
-      data: { mode: "fake", baseUrl: "", model: "text-canvas-planner" },
-    },
-  );
-  expect(configured.ok()).toBe(true);
+  // The same links guide Agent planning; use the current catalog ownership mode.
+  await ensureTestPlanner(page, "text-canvas-planner");
   await page.getByRole("button", { name: "Agent 面板", exact: true }).click();
   const agentRefs = page.getByRole("region", { name: "引用文案", exact: true });
   await expect(agentRefs).toContainText("引用文案 · 2");
