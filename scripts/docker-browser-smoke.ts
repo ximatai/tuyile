@@ -121,11 +121,28 @@ try {
         'button[aria-label="上传图片到画布"]',
       )?.disabled,
   );
+  await canvasSurface.locator('input[type="file"]').setInputFiles([
+    { name: "Docker batch 1.png", mimeType: "image/png", buffer: uploadPng },
+    { name: "Docker batch 2.png", mimeType: "image/png", buffer: uploadPng },
+  ]);
   await page
-    .context()
-    .grantPermissions(["clipboard-read", "clipboard-write"], {
-      origin: "http://127.0.0.1:8792",
-    });
+    .locator('.react-flow__node-image img[alt="Docker batch 2.png"]')
+    .waitFor();
+  await page.waitForFunction(
+    () =>
+      !document.querySelector<HTMLButtonElement>(
+        'button[aria-label="上传图片到画布"]',
+      )?.disabled,
+  );
+  const batchAssetIds = await page
+    .locator('.react-flow__node-image img[alt^="Docker batch "]')
+    .evaluateAll((images) =>
+      images.map((image) => image.getAttribute("src")!.split("/")[4]),
+    );
+  assert.equal(batchAssetIds.length, 2);
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"], {
+    origin: "http://127.0.0.1:8792",
+  });
   await page.evaluate(async (encoded) => {
     const blob = new Blob(
       [Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0))],
@@ -187,6 +204,7 @@ try {
   ).json();
   const expectedAssets = [
     uploadedAssetId,
+    ...batchAssetIds,
     screenshotAssetId,
     ...completed.tasks.flatMap((task: any) =>
       task.outputs.map((output: any) => output.id),
@@ -210,6 +228,24 @@ try {
     .locator(".canvas-status")
     .filter({ hasText: "画布已保存" })
     .waitFor();
+  const positioned = (
+    await (
+      await page.request.get(
+        `http://127.0.0.1:8792/api/projects/${projectId}/canvas`,
+      )
+    ).json()
+  ).document.nodes;
+  for (let i = 0; i < positioned.length; i++)
+    for (let j = i + 1; j < positioned.length; j++) {
+      const a = positioned[i],
+        b = positioned[j];
+      assert(
+        a.x >= b.x + b.width + 24 ||
+          b.x >= a.x + a.width + 24 ||
+          a.y >= b.y + b.height + 24 ||
+          b.y >= a.y + a.height + 24,
+      );
+    }
   const nodeCount = await page.locator(".react-flow__node-image").count();
   assert(nodeCount > 0);
   await canvas.focus();
@@ -486,7 +522,7 @@ try {
   });
   assert.deepEqual(errors, []);
   console.log(
-    "Built Docker Chromium: canvas drop/screenshot paste/upload/reference and keyboard copy/paste/undo, nonce styles, themed button, singleton model lock, confirmation dialog and medium/large desktop layout passed",
+    "Built Docker Chromium: canvas batch upload/layout/drop/screenshot paste/reference and keyboard copy/paste/undo, nonce styles, themed button, singleton model lock, confirmation dialog and medium/large desktop layout passed",
   );
 } finally {
   await browser.close();

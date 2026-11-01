@@ -462,12 +462,19 @@ function CreationEditor({
   const [uploadError, setUploadError] = useState("");
   const uploadController = useRef<AbortController | null>(null);
   useEffect(() => () => uploadController.current?.abort(), []);
-  async function upload(
-    file: File | undefined,
-    destination: "reference" | "canvas" = "reference",
+  const [uploadProgress, setUploadProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
+  function upload(file: File | undefined) {
+    return uploadFiles(file ? [file] : [], "reference");
+  }
+  async function uploadFiles(
+    files: File[],
+    destination: "reference" | "canvas",
   ) {
     if (
-      !file ||
+      !files.length ||
       uploadController.current ||
       active.current ||
       busy ||
@@ -478,11 +485,14 @@ function CreationEditor({
     const editor = sessionState.editors.get(projectId);
     try {
       if (!editor) throw new Error("画布正在加载，请稍后再上传图片。");
-      editor.canAddImage();
-      if (file.size > 20 * 1024 * 1024)
-        throw new Error("图片不能超过 20 MiB。");
-      if (!["image/png", "image/jpeg", "image/webp"].includes(file.type))
-        throw new Error("仅支持 PNG、JPEG 和 WebP 图片。");
+      if (files.length > 20) throw new Error("每批最多上传 20 张图片。");
+      editor.canAddImage(files.length);
+      for (const file of files) {
+        if (file.size > 20 * 1024 * 1024)
+          throw new Error(`${file.name}：图片不能超过 20 MiB。`);
+        if (!["image/png", "image/jpeg", "image/webp"].includes(file.type))
+          throw new Error(`${file.name}：仅支持 PNG、JPEG 和 WebP 图片。`);
+      }
     } catch (e) {
       setUploadError((e as Error).message);
       return;
@@ -491,44 +501,74 @@ function CreationEditor({
     uploadController.current = controller;
     setBusy(true);
     setUploadError("");
-    let uploaded = false;
+    setUploadProgress({ done: 0, total: files.length });
+    let done = 0,
+      uploaded = false;
+    const inserted: string[] = [];
     try {
-      const response = await fetch("/api/images/uploads", {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": file.type, "X-CSRF-Token": csrfToken },
-        body: file,
-        signal: controller.signal,
-      });
-      if (!response.ok) {
-        const body = await response.json();
-        throw new ApiError(body.error.code);
+      for (const file of files) {
+        if (controller.signal.aborted) return;
+        uploaded = false;
+        const response = await fetch("/api/images/uploads", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": file.type, "X-CSRF-Token": csrfToken },
+          body: file,
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          const body = await response.json();
+          throw new ApiError(body.error.code);
+        }
+        const asset = await response.json();
+        if (controller.signal.aborted) return;
+        uploaded = true;
+        if (destination === "reference")
+          setReferences((v) =>
+            v.length >= 4 || v.some((r) => r.id === asset.id)
+              ? v
+              : [...v, { id: asset.id, name: file.name }],
+          );
+        editor.addUploadedImage(asset, file.name);
+        inserted.push(asset.id);
+        done++;
+        setUploadProgress({ done, total: files.length });
       }
-      const asset = await response.json();
-      if (controller.signal.aborted) return;
-      uploaded = true;
-      // Both entry points use the same asset; only the reference entry edits the draft.
-      if (destination === "reference")
-        setReferences((v) =>
-          v.length >= 4 || v.some((r) => r.id === asset.id)
-            ? v
-            : [...v, { id: asset.id, name: file.name }],
-        );
-      editor.addUploadedImage(asset, file.name);
-      await refresh();
     } catch (e) {
-      if (!controller.signal.aborted)
+      if (!controller.signal.aborted) {
+        const reason = uploaded
+          ? `图片已上传，可在图库找回。${(e as Error).message}`
+          : e instanceof ApiError
+            ? e.message
+            : "上传结果未确认，请先到图库查看，避免重复上传。";
         setUploadError(
-          uploaded
-            ? `图片已上传，可在图库找回。${(e as Error).message}`
-            : e instanceof ApiError
-              ? e.message
-              : "上传结果未确认，请先到图库查看，避免重复上传。",
+          files.length > 1
+            ? `已加入 ${done}/${files.length} 张。${reason} 后续图片未上传。`
+            : reason,
         );
+      }
     } finally {
+      if (!controller.signal.aborted) {
+        if (inserted.length)
+          editor.select(
+            editor
+              .get()
+              .document.nodes.filter((n) => inserted.includes(n.assetId ?? ""))
+              .map((n) => n.id),
+          );
+        await refresh().catch(() => {
+          if (!controller.signal.aborted)
+            setUploadError(
+              "图片已加入画布，额度或任务信息未能刷新，请稍后重试。",
+            );
+        });
+      }
       if (uploadController.current === controller)
         uploadController.current = null;
-      if (!controller.signal.aborted) setBusy(false);
+      if (!controller.signal.aborted) {
+        setBusy(false);
+        setUploadProgress(null);
+      }
     }
   }
   const formRef = useRef<HTMLFormElement>(null);
@@ -639,7 +679,7 @@ function CreationEditor({
               statusStale={!!taskQuery.error}
               projectId={projectId}
               onReference={chooseReference}
-              onUpload={(file) => void upload(file, "canvas")}
+              onUpload={(files) => void uploadFiles(files, "canvas")}
               uploadBusy={busy || !!pending}
               onSelectionChange={setCanvasSelection}
               onReuse={(task) => void reuse(task)}
@@ -687,6 +727,11 @@ function CreationEditor({
               { key: "agent", label: "Agent" },
             ]}
           />
+          {uploadProgress && (
+            <p role="status">
+              正在上传 {uploadProgress.done}/{uploadProgress.total} 张…
+            </p>
+          )}
           {uploadError && <Notice error>{uploadError}</Notice>}
           <div className="direct-creation" hidden={mode !== "direct"}>
             {(usageQuery.error || taskQuery.error) && (

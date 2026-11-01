@@ -5129,7 +5129,7 @@ test("canvas accepts local image drops and native screenshot paste without inter
   }, b64);
   await canvas.dispatchEvent("dragenter", { dataTransfer: transfer });
   await expect(
-    page.getByText("松开以将图片上传到画布（每次一张）", { exact: true }),
+    page.getByText("松开以将图片上传到画布（每批最多20张）", { exact: true }),
   ).toBeVisible();
   await canvas.dispatchEvent("dragover", { dataTransfer: transfer });
   await canvas.dispatchEvent("drop", { dataTransfer: transfer });
@@ -5147,7 +5147,7 @@ test("canvas accepts local image drops and native screenshot paste without inter
   ).toHaveCount(0);
   const multiple = await page.evaluateHandle((encoded) => {
     const data = new DataTransfer();
-    for (const name of ["a.png", "b.png"])
+    for (const name of Array.from({ length: 21 }, (_, i) => `${i}.png`))
       data.items.add(
         new File(
           [Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0))],
@@ -5159,7 +5159,7 @@ test("canvas accepts local image drops and native screenshot paste without inter
   }, b64);
   await canvas.dispatchEvent("drop", { dataTransfer: multiple });
   await expect(
-    page.getByText("每次请拖入或粘贴一张图片。", { exact: true }),
+    page.getByText("每次可导入 1–20 张图片。", { exact: true }),
   ).toBeVisible();
   await expect(images).toHaveCount(1);
   await context.grantPermissions(["clipboard-read", "clipboard-write"], {
@@ -5221,4 +5221,130 @@ test("canvas accepts local image drops and native screenshot paste without inter
   await expect(images).toHaveCount(4);
   await transfer.dispose();
   await multiple.dispose();
+});
+
+test("canvas batches multiple uploads and drops, packs around existing nodes and retains partial success", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.getByLabel("项目名称").fill("批量导入排列验证");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "批量导入排列验证" })
+    .click();
+  const canvas = page.getByRole("region", { name: "项目画布", exact: true });
+  await expect(canvas).toBeVisible();
+  const sharp = (await import("sharp")).default;
+  const buffers = await Promise.all(
+    [
+      [400, 200],
+      [200, 500],
+      [300, 300],
+    ].map(([width, height]) =>
+      sharp({ create: { width, height, channels: 3, background: "#0062b0" } })
+        .png()
+        .toBuffer(),
+    ),
+  );
+  const file = (name: string, i = 0) => ({
+    name,
+    mimeType: "image/png",
+    buffer: buffers[i],
+  });
+  let uploads = 0;
+  page.on("request", (request) => {
+    if (
+      request.method() === "POST" &&
+      request.url().endsWith("/api/images/uploads")
+    )
+      uploads++;
+  });
+  const input = canvas.locator('input[type="file"]');
+  const ready = () =>
+    expect(
+      canvas.getByRole("button", { name: "上传图片到画布", exact: true }),
+    ).toBeEnabled();
+  const nodes = page.locator(".react-flow__node-image");
+  const projectId = page.url().split("/").at(-1)!;
+  const saved = async () =>
+    (await (await page.request.get(`/api/projects/${projectId}/canvas`)).json())
+      .document.nodes;
+  await input.setInputFiles(file("已有.png"));
+  await expect(nodes).toHaveCount(1);
+  await ready();
+  await expect(page.locator(".canvas-status")).toContainText("画布已保存");
+  const original = (await saved())[0];
+  await input.setInputFiles([
+    file("宽图.png"),
+    file("高图.png", 1),
+    file("方图.png", 2),
+  ]);
+  await expect(nodes).toHaveCount(4);
+  await ready();
+  await expect(page.locator(".react-flow__node.selected")).toHaveCount(3);
+  const transfer = await page.evaluateHandle((encoded) => {
+    const data = new DataTransfer();
+    for (const name of ["拖放1.png", "拖放2.png"])
+      data.items.add(
+        new File(
+          [Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0))],
+          name,
+          { type: "image/png" },
+        ),
+      );
+    return data;
+  }, buffers[0].toString("base64"));
+  await canvas.dispatchEvent("drop", { dataTransfer: transfer });
+  await expect(nodes).toHaveCount(6);
+  await ready();
+  expect(uploads).toBe(6);
+  await expect(page.locator(".canvas-status")).toContainText("画布已保存");
+  const placed = await saved();
+  expect(placed[0]).toEqual(original);
+  for (let i = 0; i < placed.length; i++)
+    for (let j = i + 1; j < placed.length; j++) {
+      const a = placed[i],
+        b = placed[j];
+      expect(
+        a.x >= b.x + b.width + 24 ||
+          b.x >= a.x + a.width + 24 ||
+          a.y >= b.y + b.height + 24 ||
+          b.y >= a.y + a.height + 24,
+      ).toBe(true);
+    }
+  await page
+    .getByTestId("reference-upload")
+    .getByRole("button", { name: "引用选中 2 张", exact: true })
+    .click();
+  await expect(
+    page.getByTestId("reference-upload").locator(".attachment"),
+  ).toHaveCount(2);
+  await input.setInputFiles([
+    file("不应上传.png"),
+    { name: "不支持.txt", mimeType: "text/plain", buffer: Buffer.from("no") },
+  ]);
+  await expect(page.getByText(/仅支持 PNG、JPEG 和 WebP/)).toBeVisible();
+  expect(uploads).toBe(6);
+  await input.setInputFiles([
+    file("保留.png"),
+    { name: "损坏.png", mimeType: "image/png", buffer: Buffer.from("broken") },
+    file("停止.png"),
+  ]);
+  await expect(page.getByText(/已加入 1\/3 张/)).toBeVisible();
+  await ready();
+  await expect(nodes).toHaveCount(7);
+  expect(uploads).toBe(8);
+  await expect(page.locator(".canvas-status")).toContainText("画布已保存");
+  await page.reload();
+  await expect(nodes).toHaveCount(7);
+  expect(
+    (
+      await (
+        await page.request.get(`/api/images/tasks?projectId=${projectId}`)
+      ).json()
+    ).tasks,
+  ).toHaveLength(0);
+  await transfer.dispose();
 });

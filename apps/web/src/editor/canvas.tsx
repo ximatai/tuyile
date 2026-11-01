@@ -289,7 +289,7 @@ export function CanvasEditor({
   onSelectionChange?: (assets: { id: string; name: string }[]) => void;
   onReuse?: (task: ImageTask) => void;
   statusStale?: boolean;
-  onUpload: (file: File) => void;
+  onUpload: (files: File[]) => void;
   uploadBusy: boolean;
 }) {
   const state = useSessionState();
@@ -348,7 +348,7 @@ function CanvasView({
   onSelectionChange?: (assets: { id: string; name: string }[]) => void;
   onReuse?: (task: ImageTask) => void;
   statusStale?: boolean;
-  onUpload: (file: File) => void;
+  onUpload: (files: File[]) => void;
   uploadBusy: boolean;
 }) {
   const state = useSessionState(),
@@ -402,8 +402,8 @@ function CanvasView({
   const [operationError, setOperationError] = useState("");
   const [fileDrag, setFileDrag] = useState(false);
   function importFiles(files: File[]) {
-    if (files.length !== 1) {
-      setOperationError("每次请拖入或粘贴一张图片。");
+    if (!files.length || files.length > 20) {
+      setOperationError("每次可导入 1–20 张图片。");
       return;
     }
     if (uploadBusy) {
@@ -411,13 +411,13 @@ function CanvasView({
       return;
     }
     try {
-      store.canAddImage();
+      store.canAddImage(files.length);
     } catch (error) {
       setOperationError((error as Error).message);
       return;
     }
     setOperationError("");
-    onUpload(files[0]);
+    onUpload(files);
   }
   function pasteNodes() {
     try {
@@ -806,7 +806,7 @@ function CanvasView({
     >
       {fileDrag && (
         <div className="canvas-file-drop-hint" role="status">
-          松开以将图片上传到画布（每次一张）
+          松开以将图片上传到画布（每批最多20张）
         </div>
       )}
       <div className="canvas-status" role="status">
@@ -875,13 +875,14 @@ function CanvasView({
       )}
       <div className="canvas-toolbar" role="toolbar" aria-label="画布操作">
         <Upload
+          multiple
           accept="image/png,image/jpeg,image/webp"
           showUploadList={false}
           disabled={
             uploadBusy || snap.conflict || snap.document.nodes.length >= 1000
           }
-          beforeUpload={(file) => {
-            onUpload(file);
+          beforeUpload={(file, files) => {
+            if (file.uid === files[0]?.uid) importFiles(files);
             return Upload.LIST_IGNORE;
           }}
         >

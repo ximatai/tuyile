@@ -337,3 +337,141 @@ it("matches clipboard markers only for the latest copied snapshot and preserves 
   expect(store.matchesCopiedSelection(latest)).toBe(false);
   other.dispose();
 });
+
+it("packs varying uploaded images around existing images and groups without moving them", () => {
+  const existing = { ...node(), x: 60, y: 70, width: 260, height: 500 };
+  const group = {
+    id: randomUUID(),
+    kind: "group" as const,
+    x: 344,
+    y: 70,
+    width: 260,
+    height: 600,
+    label: "group",
+  };
+  const store = new EditorStore(
+    { document: { ...emptyCanvas(), nodes: [existing, group] }, revision: 0 },
+    async () => {
+      throw new Error("not used");
+    },
+  );
+  for (let i = 0; i < 20; i++)
+    store.addUploadedImage(
+      { id: randomUUID(), width: 400, height: 100 + i * 80 },
+      `${i}.png`,
+    );
+  const nodes = store.get().document.nodes;
+  expect(nodes.slice(0, 2)).toEqual([existing, group]);
+  for (let i = 0; i < nodes.length; i++)
+    for (let j = i + 1; j < nodes.length; j++) {
+      const a = nodes[i],
+        b = nodes[j];
+      expect(
+        a.x >= b.x + b.width + 24 ||
+          b.x >= a.x + a.width + 24 ||
+          a.y >= b.y + b.height + 24 ||
+          b.y >= a.y + a.height + 24,
+      ).toBe(true);
+    }
+  store.undo();
+  expect(store.get().document.nodes).toHaveLength(21);
+  store.dispose();
+});
+it("checks whole-batch canvas capacity before upload and rejects exhausted coordinate space", () => {
+  const store = new EditorStore(
+    {
+      document: { ...emptyCanvas(), nodes: Array.from({ length: 999 }, node) },
+      revision: 0,
+    },
+    async () => {
+      throw new Error("not used");
+    },
+  );
+  expect(() => store.canAddImage(2)).toThrow("1000");
+  store.reset({
+    document: {
+      ...emptyCanvas(),
+      viewport: { x: -100000, y: -100000, zoom: 1 },
+      nodes: [{ ...node(), x: 99000, y: 99000, width: 10000, height: 10000 }],
+    },
+    revision: 0,
+  });
+  expect(() =>
+    store.addUploadedImage(
+      { id: randomUUID(), width: 100, height: 100 },
+      "full.png",
+    ),
+  ).toThrow("无可排列");
+  expect(store.get().document.nodes).toHaveLength(1);
+  store.dispose();
+});
+
+it("keeps late generated outputs clear of uploaded material and does not acknowledge unplaceable outputs", async () => {
+  const requests: CanvasSave[] = [];
+  const store = new EditorStore(
+    { document: emptyCanvas(), revision: 0 },
+    async (input) => {
+      requests.push(input);
+      return { document: input.document, revision: input.revision + 1 };
+    },
+  );
+  store.addUploadedImage(
+    { id: randomUUID(), width: 400, height: 200 },
+    "upload.png",
+  );
+  const output = {
+    outputId: randomUUID(),
+    assetId: randomUUID(),
+    taskId: randomUUID(),
+    width: 200,
+    height: 400,
+    sourceIds: [],
+  };
+  store.place([output]);
+  const [a, b] = store.get().document.nodes;
+  expect(b.x >= a.x + a.width + 24 || b.y >= a.y + a.height + 24).toBe(true);
+  store.reset({
+    document: {
+      ...emptyCanvas(),
+      viewport: { x: -100000, y: -100000, zoom: 1 },
+      nodes: [{ ...node(), x: 99000, y: 99000, width: 10000, height: 10000 }],
+    },
+    revision: 0,
+  });
+  store.place([output]);
+  expect(store.get().dirty).toBe(false);
+  store.edit({ ...store.get().document, viewport: { x: 0, y: 0, zoom: 1 } });
+  store.place([output]);
+  await store.flush();
+  expect(requests[0].placements).toEqual([output.outputId]);
+  expect(store.get().document.nodes).toHaveLength(2);
+  store.dispose();
+});
+
+it("includes generated placement receipts when a subscriber immediately saves the new layout", async () => {
+  const requests: CanvasSave[] = [];
+  const store = new EditorStore(
+    { document: emptyCanvas(), revision: 0 },
+    async (input) => {
+      requests.push(input);
+      return { document: input.document, revision: input.revision + 1 };
+    },
+  );
+  let saving: Promise<void> | undefined;
+  store.subscribe(() => {
+    if (store.get().dirty && !store.get().saving) saving = store.flush();
+  });
+  const output = {
+    outputId: randomUUID(),
+    assetId: randomUUID(),
+    taskId: randomUUID(),
+    width: 200,
+    height: 200,
+    sourceIds: [],
+  };
+  store.place([output]);
+  await saving;
+  expect(requests).toHaveLength(1);
+  expect(requests[0].placements).toEqual([output.outputId]);
+  store.dispose();
+});
