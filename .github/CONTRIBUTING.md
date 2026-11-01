@@ -13,7 +13,7 @@
 
 ## 开发与验证
 
-使用仓库固定的 Node/pnpm 及独立 PostgreSQL。初始化、账号与测试命令见[开发说明](../docs/development.md)。涉及代码时运行类型检查、构建及受影响的单元、真实 PG、浏览器和 Docker 检查；涉及恢复与部署时补充对应演练。
+使用仓库固定的 Node/pnpm 及独立 PostgreSQL。初始化、账号与测试命令见[开发说明](../docs/development.md)。按[验证选择](../docs/development.md#验证选择)根据改动风险选择检查，先复现并验证受影响行为；不要求每次修改都执行完整构建和全套测试。合入主分支或发布前安排与累计改动相符的回归，恢复与部署改动补充对应演练。
 
 数据库集成、浏览器、runtime 和恢复测试必须串行，只允许专用 loopback55440 / tuyile_test 执行 reset/seed。禁止清空开发库或复制其他实例的凭据和图片卷。自动回归使用 fake Provider，不产生真实模型费用。
 
