@@ -290,16 +290,20 @@ export function AgentPanel({
     <div
       className={`agent-panel ${!history.length ? "agent-panel-empty" : ""}`}
     >
-      {history.length > 0 && (
-        <Button
-          className="agent-clear-history"
-          disabled={busy || !!pending}
-          onClick={() => void clearHistory()}
-        >
-          清空规划对话
-        </Button>
-      )}
       <div className="agent-conversation" aria-label="Agent 对话">
+        {history.length > 0 && (
+          <div className="agent-conversation-heading">
+            <span>规划对话</span>
+            <Button
+              className="agent-clear-history"
+              aria-label="清空规划对话"
+              disabled={busy || !!pending}
+              onClick={() => void clearHistory()}
+            >
+              清空
+            </Button>
+          </div>
+        )}
         {!history.length && !jobs.isPending && (
           <div className="agent-intro">
             <div className="agent-intro-icon" aria-hidden="true">

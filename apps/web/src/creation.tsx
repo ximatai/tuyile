@@ -10,15 +10,7 @@ import { ResultImage } from "./result-image";
 import { TaskDetails, TaskProblem } from "./task-details";
 import { canReuseTask, taskStates as states } from "./task-presentation";
 import { useAdaptivePromptHeight } from "./use-adaptive-prompt-height";
-import {
-  Info,
-  PanelRightClose,
-  PanelRightOpen,
-  WandSparkles,
-  Bot,
-  Pin,
-  PinOff,
-} from "lucide-react";
+import { Info, WandSparkles, Bot, Pin } from "lucide-react";
 import { composeCreativePrompt } from "@tuyile/contracts";
 import { HelpPopover } from "./interface-help";
 import { PromptComposer } from "./prompt-composer";
@@ -317,11 +309,6 @@ function CreationEditor({
   function closeTemporaryPanel() {
     panel.hide();
     panelToggle.current?.focus({ preventScroll: true });
-  }
-  function togglePanel() {
-    panel.toggle();
-    panelToggle.current?.focus({ preventScroll: true });
-    composing.current = false;
   }
   const confirmDraft = useConfirm();
   const chooseReference = useCallback(
@@ -838,32 +825,10 @@ function CreationEditor({
                     aria-pressed={panel.pinned}
                     onClick={panel.togglePin}
                   >
-                    {panel.pinned ? <PinOff size={16} /> : <Pin size={16} />}
+                    <Pin size={14} />
                   </Button>
                 </Tooltip>
               )}
-              <Tooltip
-                title={panelCollapsed ? "展开创作面板" : "收起创作面板"}
-                placement="bottomRight"
-                classNames={{ root: "creation-panel-control-tip" }}
-                trigger={["hover", "focus"]}
-              >
-                <Button
-                  type="button"
-                  disabled={false}
-                  className="creation-panel-toggle"
-                  aria-label={panelCollapsed ? "展开创作面板" : "收起创作面板"}
-                  aria-expanded={!panelCollapsed}
-                  aria-controls={panelId}
-                  onClick={togglePanel}
-                >
-                  {panelCollapsed ? (
-                    <PanelRightOpen size={16} />
-                  ) : (
-                    <PanelRightClose size={16} />
-                  )}
-                </Button>
-              </Tooltip>
             </div>
             {uploadProgress && (
               <p role="status">

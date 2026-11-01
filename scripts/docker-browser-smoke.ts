@@ -105,7 +105,7 @@ try {
     name: "图片创作",
     exact: true,
   });
-  await page.getByRole("button", { name: "收起创作面板", exact: true }).click();
+  await page.locator('.creation-tool-rail button[aria-pressed="true"]').click();
   await page.waitForFunction(
     () =>
       Math.abs(

@@ -5417,7 +5417,7 @@ test("creation panel collapses into a rail without changing viewport or drafts a
     .click();
   await page.getByRole("button", { name: "编辑风格", exact: true }).click();
   await expect(page.locator(".style-editor")).toBeVisible();
-  await page.getByRole("button", { name: "收起创作面板", exact: true }).click();
+  await page.locator('.creation-tool-rail button[aria-pressed="true"]').click();
   const expand = page.getByRole("button", {
     name: "直接创作面板",
     exact: true,
@@ -5448,7 +5448,7 @@ test("creation panel collapses into a rail without changing viewport or drafts a
   await expect(prompt).toHaveValue("折叠仍保留这个创作草稿");
   await page.getByRole("combobox", { name: "风格", exact: true }).click();
   await expect(page.locator(".ant-select-dropdown:visible")).toHaveCount(1);
-  await page.getByRole("button", { name: "收起创作面板", exact: true }).click();
+  await page.locator('.creation-tool-rail button[aria-pressed="true"]').click();
   await expect(page.locator(".ant-select-dropdown:visible")).toHaveCount(0);
   await expand.click();
   await expect(page.locator(".ant-select-dropdown:visible")).toHaveCount(0);
@@ -5465,7 +5465,7 @@ test("creation panel collapses into a rail without changing viewport or drafts a
     const expandedCanvas = (await canvas.boundingBox())!.width;
     const current = (await snapshot()).document.viewport;
     await page
-      .getByRole("button", { name: "收起创作面板", exact: true })
+      .locator('.creation-tool-rail button[aria-pressed="true"]')
       .click();
     await expect
       .poll(async () => (await panel.boundingBox())!.width)
@@ -5483,7 +5483,7 @@ test("creation panel collapses into a rail without changing viewport or drafts a
       .toBeGreaterThan(350);
     await expect(prompt).toHaveValue("折叠仍保留这个创作草稿");
   }
-  await page.getByRole("button", { name: "收起创作面板", exact: true }).click();
+  await page.locator('.creation-tool-rail button[aria-pressed="true"]').click();
   await page
     .locator(".react-flow__node-image")
     .first()
@@ -5494,13 +5494,13 @@ test("creation panel collapses into a rail without changing viewport or drafts a
     .getByRole("button", { name: "作为参考图", exact: true })
     .click();
   await expect(
-    page.getByRole("button", { name: "收起创作面板", exact: true }),
+    page.locator('.creation-tool-rail button[aria-pressed="true"]'),
   ).toBeVisible();
   await expect(
     page.getByTestId("reference-upload").locator(".attachment"),
   ).toHaveCount(1);
   await page.getByRole("button", { name: "提交图片任务", exact: true }).click();
-  await page.getByRole("button", { name: "收起创作面板", exact: true }).click();
+  await page.locator('.creation-tool-rail button[aria-pressed="true"]').click();
   await expect
     .poll(
       async () =>
@@ -5528,7 +5528,7 @@ test("creation panel collapses into a rail without changing viewport or drafts a
   await detailsTrigger.press("Escape");
   await expect(detailsTrigger).toHaveAttribute("aria-expanded", "false");
   await expect(
-    page.getByRole("button", { name: "收起创作面板", exact: true }),
+    page.locator('.creation-tool-rail button[aria-pressed="true"]'),
   ).toBeVisible();
   await detailsTrigger.press("Escape");
   await expect(expand).toBeVisible();
@@ -5542,7 +5542,7 @@ test("creation panel collapses into a rail without changing viewport or drafts a
     .getByRole("button", { name: "复用图片设置", exact: true })
     .click();
   await expect(
-    page.getByRole("button", { name: "收起创作面板", exact: true }),
+    page.locator('.creation-tool-rail button[aria-pressed="true"]'),
   ).toBeVisible();
   await page
     .getByRole("dialog", { name: "请确认", exact: true })
@@ -5551,7 +5551,7 @@ test("creation panel collapses into a rail without changing viewport or drafts a
   await expect(prompt).toHaveValue("折叠仍保留这个创作草稿");
   for (let i = 0; i < 2; i++) {
     await page
-      .getByRole("button", { name: "收起创作面板", exact: true })
+      .locator('.creation-tool-rail button[aria-pressed="true"]')
       .click();
     await canvas.locator('input[type="file"]').setInputFiles({
       name: "相同错误.txt",
@@ -5559,7 +5559,7 @@ test("creation panel collapses into a rail without changing viewport or drafts a
       buffer: Buffer.from("unsupported"),
     });
     await expect(
-      page.getByRole("button", { name: "收起创作面板", exact: true }),
+      page.locator('.creation-tool-rail button[aria-pressed="true"]'),
     ).toBeVisible();
     await expect(page.getByText(/仅支持 PNG、JPEG 和 WebP/)).toBeVisible();
   }
@@ -5624,7 +5624,7 @@ test("collapsed creation panel retains unsaved Agent edits and closes its settin
   await expect(page.getByLabel("创作需求", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Agent 面板", exact: true }).click();
   await expect(title).toHaveValue("未保存但需要保留的方案");
-  await page.getByRole("button", { name: "收起创作面板", exact: true }).click();
+  await page.locator('.creation-tool-rail button[aria-pressed="true"]').click();
   await page.getByRole("button", { name: "Agent 面板", exact: true }).click();
   await expect(title).toHaveValue("未保存但需要保留的方案");
   await page.getByRole("button", { name: "保存计划修改", exact: true }).click();
@@ -5634,7 +5634,7 @@ test("collapsed creation panel retains unsaved Agent edits and closes its settin
   await page.getByRole("button", { name: "继续聊想法", exact: true }).click();
   await page.getByRole("button", { name: "创作设置", exact: true }).click();
   await expect(page.locator(".agent-settings-popover")).toBeVisible();
-  await page.getByRole("button", { name: "收起创作面板", exact: true }).click();
+  await page.locator('.creation-tool-rail button[aria-pressed="true"]').click();
   await expect(page.locator(".agent-settings-popover")).not.toBeVisible();
   await page.getByRole("button", { name: "Agent 面板", exact: true }).click();
   await expect(page.locator(".agent-settings-popover")).not.toBeVisible();
@@ -5644,11 +5644,11 @@ test("collapsed creation panel retains unsaved Agent edits and closes its settin
   await page
     .getByRole("button", { name: "取消固定创作面板", exact: true })
     .click();
-  await page.getByRole("button", { name: "收起创作面板", exact: true }).click();
+  await page.locator('.creation-tool-rail button[aria-pressed="true"]').click();
   await page.mouse.move(300, 500);
   await page.getByRole("button", { name: "Agent 面板", exact: true }).hover();
   await expect(
-    page.getByRole("button", { name: "收起创作面板", exact: true }),
+    page.locator('.creation-tool-rail button[aria-pressed="true"]'),
   ).toBeVisible();
   await expect(
     page.getByLabel("告诉 Agent 你的想法", { exact: true }),
@@ -5659,6 +5659,31 @@ test("collapsed creation panel retains unsaved Agent edits and closes its settin
   });
   await settingsTrigger.click();
   await expect(settingsTrigger).toBeFocused();
+  await settingsTrigger.press("Escape");
+  const clear = page
+    .locator(".agent-conversation-heading")
+    .getByRole("button", { name: "清空规划对话", exact: true });
+  await expect(clear).toHaveText("清空");
+  await expect(
+    page
+      .locator(".creation-panel-heading")
+      .getByRole("button", { name: "清空规划对话", exact: true }),
+  ).toHaveCount(0);
+  await clear.click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "取消", exact: true })
+    .click();
+  await expect(clear).toBeVisible();
+  await clear.click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "确认", exact: true })
+    .click();
+  await expect(clear).toHaveCount(0);
+  await expect(
+    page.getByRole("heading", { name: "先聊想法，再确认创作", exact: true }),
+  ).toBeVisible();
 });
 
 test("anchored creation panel previews on hover, pins durably and dismisses without consuming canvas actions", async ({
@@ -5681,10 +5706,9 @@ test("anchored creation panel previews on hover, pins durably and dismisses with
     name: "直接创作面板",
     exact: true,
   });
-  const collapse = page.getByRole("button", {
-    name: "收起创作面板",
-    exact: true,
-  });
+  const collapse = page.locator(
+    '.creation-tool-rail button[aria-pressed="true"]',
+  );
   const pin = page.getByRole("button", { name: "固定创作面板", exact: true });
   const unpin = page.getByRole("button", {
     name: "取消固定创作面板",
@@ -5855,7 +5879,7 @@ test("two tool-window rail icons switch independent drafts and hiding preserves 
   ).toBe("true");
   await direct.click();
   await expect(unpin).toHaveAttribute("aria-pressed", "true");
-  await page.getByRole("button", { name: "收起创作面板", exact: true }).click();
+  await page.locator('.creation-tool-rail button[aria-pressed="true"]').click();
   await agent.click();
   await expect(unpin).toHaveAttribute("aria-pressed", "true");
   await unpin.click();
@@ -5955,9 +5979,27 @@ test("creation header is a compact single row and mode switching stays on the to
       const panelBox = (await panel.boundingBox())!,
         headBox = (await header.boundingBox())!;
       expect(headBox.y - panelBox.y).toBeCloseTo(8, 0);
+      await expect(header.getByRole("button")).toHaveCount(1);
+      await expect(
+        page.getByRole("button", { name: "收起创作面板", exact: true }),
+      ).toHaveCount(0);
+      const titleBox = (await header.getByRole("heading").boundingBox())!;
+      const pin = header.getByRole("button", {
+        name: "取消固定创作面板",
+        exact: true,
+      });
+      const pinBox = (await pin.boundingBox())!;
+      expect(pinBox.x - titleBox.x - titleBox.width).toBeCloseTo(4, 0);
+      expect(pinBox.width).toBe(24);
+      expect(pinBox.height).toBe(24);
+      expect(
+        await pin.evaluate((el) => getComputedStyle(el).borderTopWidth),
+      ).toBe("0px");
+      await expect(
+        panel.getByRole("button", { name: "清空规划对话", exact: true }),
+      ).toHaveCount(0);
       const controls = [
         panel.getByRole("button", { name: "取消固定创作面板", exact: true }),
-        panel.getByRole("button", { name: "收起创作面板", exact: true }),
       ];
       for (const control of controls) {
         const box = (await control.boundingBox())!;
