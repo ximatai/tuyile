@@ -982,9 +982,8 @@ function CanvasView({
         <Background gap={20} size={1} />
         <Controls showInteractive={false} />
       </ReactFlow>
-      {tasks.some(
-        (t) => ["queued", "running"].includes(t.state) || t.pendingReview,
-      ) && (
+      {(tasks.some((t) => ["queued", "running"].includes(t.state)) ||
+        tasks[0]?.pendingReview) && (
         <div className="canvas-generation-status">
           <GenerationFeedback compact tasks={tasks} stale={statusStale} />
         </div>

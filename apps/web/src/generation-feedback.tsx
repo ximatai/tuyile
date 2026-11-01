@@ -67,27 +67,56 @@ export function GenerationFeedback({
     },
     [notification],
   );
-  if (!status || status.tone === "success") return null;
+  const historicalCount = tasks
+    .slice(1)
+    .filter((task) => task.pendingReview).length;
+  const showHistory =
+    !compact &&
+    phase === "idle" &&
+    !pending &&
+    !status?.busy &&
+    historicalCount > 0;
+  const showStatus = status && status.tone !== "success";
+  if (!showStatus && !showHistory) return null;
   return (
-    <div
-      className={`generation-feedback ${status.tone}`}
-      role={compact ? undefined : "status"}
-      aria-label={compact ? "画布生成进度" : "图片生成状态"}
-      aria-live={compact ? "off" : "polite"}
-      aria-atomic="true"
-    >
-      <span className="generation-indicator" aria-hidden="true">
-        {status.busy ? <Spin size="small" /> : <TriangleAlert size={17} />}
-      </span>
-      <div className="generation-feedback-copy">
-        <strong>{status.title}</strong>
-        <span>{status.detail}</span>
-      </div>
-      {onShow && tasks.length > 0 && (
-        <Button type="button" onClick={onShow}>
-          查看任务
-        </Button>
+    <>
+      {showStatus && (
+        <div
+          className={`generation-feedback ${status.tone}`}
+          role={compact ? undefined : "status"}
+          aria-label={compact ? "画布生成进度" : "图片生成状态"}
+          aria-live={compact ? "off" : "polite"}
+          aria-atomic="true"
+        >
+          <span className="generation-indicator" aria-hidden="true">
+            {status.busy ? <Spin size="small" /> : <TriangleAlert size={17} />}
+          </span>
+          <div className="generation-feedback-copy">
+            <strong>{status.title}</strong>
+            <span>{status.detail}</span>
+          </div>
+          {onShow && tasks.length > 0 && (
+            <Button type="button" onClick={onShow}>
+              查看任务
+            </Button>
+          )}
+        </div>
       )}
-    </div>
+      {showHistory && (
+        <div
+          className="generation-history-review"
+          role="status"
+          aria-label="历史任务待核验"
+        >
+          <TriangleAlert size={14} aria-hidden="true" />
+          <span>有 {historicalCount} 个历史任务待核验</span>
+          {onShow && (
+            <Button type="button" onClick={onShow}>
+              查看历史任务
+            </Button>
+          )}
+        </div>
+      )}
+    </>
   );
 }

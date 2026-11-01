@@ -55,13 +55,12 @@ export function generationStatus(
       tone: "active",
     };
   }
-  const review = tasks.find((t) => t.pendingReview),
-    latest = review ?? tasks[0];
+  const latest = tasks[0];
   if (!latest) return null;
-  if (review)
+  if (latest.pendingReview)
     return {
-      title: "生成结果待核验",
-      detail: `已保存 ${review.used} 张 · 请联系管理员核验`,
+      title: "最近一次生成结果待核验",
+      detail: `该任务已保存 ${latest.used} / ${latest.count} 张 · 请联系管理员核验`,
       busy: false,
       tone: "warning",
     };

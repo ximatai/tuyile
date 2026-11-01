@@ -3889,3 +3889,6 @@ h3 {
 .canvas-node-title-display:focus-visible { outline: 2px solid #1677ff; outline-offset: 2px; }
 .canvas-node-title.is-editing { width: 100%; overflow: visible; z-index: 5; }
 .canvas-node-title .ant-input { min-height: 18px; height: 18px; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: inherit; font-size: inherit; font-weight: inherit; line-height: 18px; }
+
+.generation-history-review { display: flex; align-items: center; gap: 6px; margin: 8px 0; color: #87622b; font-size: 12px; }
+.generation-history-review .button { margin-left: auto; min-height: 24px; height: 24px; padding: 0 4px; border: 0; background: transparent; box-shadow: none; color: #0062b0; font-size: 12px; }

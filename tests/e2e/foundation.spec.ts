@@ -6237,3 +6237,114 @@ test("canvas image captions remain separate from group titles", async ({
   await page.keyboard.press("Escape");
   await expect(page.locator(".ant-image-preview")).toBeHidden();
 });
+
+test("historical review does not obscure a later successful generation", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.getByLabel("项目名称").fill("历史核验提示验收");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "历史核验提示验收" })
+    .click();
+  await page
+    .getByLabel("创作需求", { exact: true })
+    .fill("本地合成图片，用于历史核验提示验收");
+  await page.getByRole("button", { name: "提交图片任务", exact: true }).click();
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(1, {
+    timeout: 20000,
+  });
+  const projectId = page.url().split("/").at(-1)!;
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/images/tasks?projectId=${projectId}`)
+          ).json()
+        ).tasks[0]?.state,
+    )
+    .toBe("succeeded");
+  await expect(page.locator(".canvas-status")).toContainText("画布已保存");
+  let latestNeedsReview = false;
+  const reviewId = randomUUID(),
+    reviewRequestKey = randomUUID();
+  await page.route(
+    `**/api/images/tasks?projectId=${projectId}`,
+    async (route) => {
+      const response = await route.fetch();
+      const body = await response.json();
+      const completed = body.tasks[0];
+      const unresolved = {
+        ...completed,
+        id: reviewId,
+        requestKey: reviewRequestKey,
+        prompt: "历史未确认任务",
+        state: "failed",
+        used: 0,
+        held: 1,
+        count: 1,
+        pendingReview: true,
+        errorCode: "RESULT_UNKNOWN",
+        outputs: [],
+        createdAt: new Date(
+          Date.parse(completed.createdAt) +
+            (latestNeedsReview ? 60000 : -60000),
+        ).toISOString(),
+      };
+      await route.fulfill({
+        response,
+        json: {
+          tasks: latestNeedsReview
+            ? [unresolved, completed]
+            : [completed, unresolved],
+        },
+      });
+    },
+  );
+  await page.reload();
+  const history = page.getByRole("status", {
+    name: "历史任务待核验",
+    exact: true,
+  });
+  await expect(history).toContainText("有 1 个历史任务待核验");
+  await expect(
+    page.getByRole("status", { name: "图片生成状态", exact: true }),
+  ).toHaveCount(0);
+  await expect(page.locator(".canvas-generation-status")).toHaveCount(0);
+  await history
+    .getByRole("button", { name: "查看历史任务", exact: true })
+    .click();
+  await expect(
+    page.locator(".task-tile-prompt").filter({ hasText: "历史未确认任务" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "任务与结果 · 2", exact: true })
+    .click();
+  await page.screenshot({
+    path: ".codex-temp/historical-review-1440.png",
+    animations: "disabled",
+  });
+  latestNeedsReview = true;
+  await page.reload();
+  const latest = page.getByRole("status", {
+    name: "图片生成状态",
+    exact: true,
+  });
+  await expect(latest).toContainText("最近一次生成结果待核验");
+  await expect(latest).toContainText("该任务已保存 0 / 1 张");
+  await expect(history).toHaveCount(0);
+  await expect(page.locator(".canvas-generation-status")).toContainText(
+    "最近一次生成结果待核验",
+  );
+  // The historical record is a UI fixture; no audit or quota mutation is performed.
+  expect(
+    (
+      await (
+        await page.request.get(`/api/images/tasks?projectId=${projectId}`)
+      ).json()
+    ).tasks,
+  ).toHaveLength(1);
+});

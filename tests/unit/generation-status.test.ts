@@ -72,6 +72,27 @@ it("keeps completion, partial failure, cancellation and unknown results distinct
   );
   expect(
     generationStatus([task({ state: "failed", pendingReview: true })])?.title,
-  ).toBe("生成结果待核验");
+  ).toBe("最近一次生成结果待核验");
   expect(generationStatus([])).toBeNull();
+});
+
+it("does not let historical review override a newer successful or failed task", () => {
+  const old = task({ state: "failed", pendingReview: true });
+  expect(
+    generationStatus([task({ state: "succeeded", used: 1, count: 1 }), old]),
+  ).toMatchObject({ tone: "success", detail: "已保存 1 张图片" });
+  expect(generationStatus([task({ state: "failed" }), old])).toMatchObject({
+    tone: "error",
+    title: "图片生成未完成",
+  });
+  expect(
+    generationStatus([
+      task({ state: "partial", used: 1, count: 2, pendingReview: true }),
+      old,
+    ]),
+  ).toMatchObject({
+    tone: "warning",
+    title: "最近一次生成结果待核验",
+    detail: "该任务已保存 1 / 2 张 · 请联系管理员核验",
+  });
 });
