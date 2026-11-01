@@ -137,6 +137,7 @@ function NodeTitle({
       {editing ? (
         <Input
           ref={input}
+          variant="borderless"
           aria-label={kind === "图片" ? "图片名称" : "分组标题"}
           maxLength={100}
           value={value}

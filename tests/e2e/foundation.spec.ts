@@ -6132,9 +6132,44 @@ test("canvas image captions remain separate from group titles", async ({
     exact: true,
   });
   await expect(imageName).toBeFocused();
+  const titleStyle = async (locator: import("@playwright/test").Locator) =>
+    locator.evaluate((el) => {
+      const s = getComputedStyle(el);
+      return {
+        background: s.backgroundColor,
+        border: s.borderTopWidth,
+        height: s.height,
+        padding: s.paddingLeft,
+      };
+    });
+  await expect
+    .poll(() => titleStyle(imageName))
+    .toEqual({
+      background: "rgba(0, 0, 0, 0)",
+      border: "0px",
+      height: "18px",
+      padding: "0px",
+    });
+
   await imageName.fill("A · 可编辑的品牌标志");
   await imageName.press("Enter");
   await expect(captions.first()).toHaveText("A · 可编辑的品牌标志");
+  await expect(imageName).toHaveCount(0);
+  await expect
+    .poll(() => titleStyle(captions.first()))
+    .toMatchObject({
+      background: "rgba(0, 0, 0, 0)",
+      border: "0px",
+      height: "18px",
+    });
+  await expect
+    .poll(() => titleStyle(captions.first().locator('[role="button"]')))
+    .toMatchObject({
+      background: "rgba(0, 0, 0, 0)",
+      border: "0px",
+      height: "18px",
+    });
+
   await expect(page.locator(".ant-image-preview")).toBeHidden();
   await expect(captions.first().locator('[role="button"]')).toBeFocused();
   await page.keyboard.press(
@@ -6160,11 +6195,28 @@ test("canvas image captions remain separate from group titles", async ({
     name: "分组标题",
     exact: true,
   });
+  await expect
+    .poll(() => titleStyle(groupName))
+    .toEqual({
+      background: "rgba(0, 0, 0, 0)",
+      border: "0px",
+      height: "18px",
+      padding: "0px",
+    });
   await groupName.fill("品牌素材");
   await canvas
     .locator(".react-flow__pane")
     .click({ position: { x: 10, y: 400 } });
   await expect(groupTitle).toHaveText("品牌素材");
+  await expect(groupName).toHaveCount(0);
+  await expect
+    .poll(() => titleStyle(groupTitle))
+    .toMatchObject({
+      background: "rgba(0, 0, 0, 0)",
+      border: "0px",
+      height: "18px",
+    });
+
   await page.getByRole("button", { name: "撤销", exact: true }).click();
   await expect(groupTitle).toHaveText("图片分组");
   await page.getByRole("button", { name: "重做", exact: true }).click();

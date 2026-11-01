@@ -3888,4 +3888,4 @@ h3 {
 .canvas-node-title-display { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: text; border-radius: 2px; }
 .canvas-node-title-display:focus-visible { outline: 2px solid #1677ff; outline-offset: 2px; }
 .canvas-node-title.is-editing { width: 100%; overflow: visible; z-index: 5; }
-.canvas-node-title .ant-input { min-height: 22px; height: 22px; padding: 0 4px; font-size: 12px; line-height: 20px; }
+.canvas-node-title .ant-input { min-height: 18px; height: 18px; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; color: inherit; font-size: inherit; font-weight: inherit; line-height: 18px; }
