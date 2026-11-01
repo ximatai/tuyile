@@ -19,6 +19,7 @@ export type EditorState = CanvasSnapshot & {
 export class EditorStore {
   private clipboard: CanvasNode[] = [];
   private pasteCount = 0;
+  private clipboardKey = "";
   private listeners = new Set<() => void>();
   private past: CanvasDocument[] = [];
   private future: CanvasDocument[] = [];
@@ -114,7 +115,14 @@ export class EditorStore {
       parentId: ids.has(n.parentId ?? "") ? n.parentId : undefined,
     }));
     this.pasteCount = 0;
+    this.clipboardKey = crypto.randomUUID();
     return true;
+  }
+  copiedSelectionKey() {
+    return this.clipboardKey;
+  }
+  matchesCopiedSelection(key: string) {
+    return !!key && key === this.clipboardKey;
   }
   pasteSelection() {
     if (!this.clipboard.length) return;
@@ -143,12 +151,14 @@ export class EditorStore {
     // Duplicating does not replace the user's copied selection.
     const clipboard = this.clipboard,
       count = this.pasteCount,
+      key = this.clipboardKey,
       selected = this.state.selected;
     try {
       if (this.copySelection()) this.pasteSelection();
     } finally {
       this.clipboard = clipboard;
       this.pasteCount = count;
+      this.clipboardKey = key;
       this.select(selected);
     }
   }
@@ -298,6 +308,7 @@ export class EditorStore {
   dispose() {
     this.epoch++;
     this.clipboard = [];
+    this.clipboardKey = "";
     this.pasteCount = 0;
     clearTimeout(this.timer);
     this.listeners.clear();

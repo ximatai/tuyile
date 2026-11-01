@@ -310,3 +310,30 @@ it("rejects uploaded image insertion before changing a full or conflicting canva
   expect(store.get().document.nodes).toHaveLength(1);
   store.dispose();
 });
+
+it("matches clipboard markers only for the latest copied snapshot and preserves them when duplicating", () => {
+  const image = node();
+  const make = () =>
+    new EditorStore(
+      { document: { ...emptyCanvas(), nodes: [image] }, revision: 0 },
+      async () => {
+        throw new Error("not used");
+      },
+    );
+  const store = make(),
+    other = make();
+  expect(store.matchesCopiedSelection("")).toBe(false);
+  store.selectAll();
+  store.copySelection();
+  const key = store.copiedSelectionKey();
+  expect(store.matchesCopiedSelection(key)).toBe(true);
+  expect(other.matchesCopiedSelection(key)).toBe(false);
+  store.duplicateSelection();
+  expect(store.matchesCopiedSelection(key)).toBe(true);
+  store.copySelection();
+  expect(store.matchesCopiedSelection(key)).toBe(false);
+  const latest = store.copiedSelectionKey();
+  store.dispose();
+  expect(store.matchesCopiedSelection(latest)).toBe(false);
+  other.dispose();
+});

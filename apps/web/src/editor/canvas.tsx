@@ -62,6 +62,22 @@ import { EditorStore } from "./store";
 import { GenerationFeedback } from "../generation-feedback";
 import { useSessionState } from "../session-state";
 import { client, ApiError } from "../api";
+const canvasClipboardType = "application/x-tuyile-canvas";
+const canvasClipboardPrefix = "Tuyile canvas:";
+function canvasEventTarget(surface: HTMLElement, target: EventTarget | null) {
+  return (
+    target instanceof Element &&
+    surface.contains(target) &&
+    !target.closest(
+      "input,textarea,select,button,a,[contenteditable],[role=dialog],[role=menu],[role=combobox]",
+    )
+  );
+}
+function nativeModifier(event: { metaKey: boolean; ctrlKey: boolean }) {
+  return /Mac|iPhone|iPad/.test(navigator.platform)
+    ? event.metaKey
+    : event.ctrlKey;
+}
 type ImageNode = Node<
   {
     label: string;
@@ -384,6 +400,33 @@ function CanvasView({
   const spacePressed = useKeyPress("Space");
   const panning = handMode || spacePressed;
   const [operationError, setOperationError] = useState("");
+  const [fileDrag, setFileDrag] = useState(false);
+  function importFiles(files: File[]) {
+    if (files.length !== 1) {
+      setOperationError("每次请拖入或粘贴一张图片。");
+      return;
+    }
+    if (uploadBusy) {
+      setOperationError("正在处理上传或提交，请稍后再导入图片。");
+      return;
+    }
+    try {
+      store.canAddImage();
+    } catch (error) {
+      setOperationError((error as Error).message);
+      return;
+    }
+    setOperationError("");
+    onUpload(files[0]);
+  }
+  function pasteNodes() {
+    try {
+      store.pasteSelection();
+      setOperationError("");
+    } catch (error) {
+      setOperationError((error as Error).message);
+    }
+  }
   const [copyMessage, setCopyMessage] = useState("");
   const [copyBusy, setCopyBusy] = useState(false);
   const copying = useRef(false);
@@ -632,34 +675,105 @@ function CanvasView({
 
   return (
     <section
-      className={`canvas-surface${panning ? " is-panning" : ""}`}
+      className={`canvas-surface${panning ? " is-panning" : ""}${fileDrag ? " is-file-drag" : ""}`}
       aria-label="项目画布"
       tabIndex={0}
-      onPointerDownCapture={(e) => {
-        const target = e.target as HTMLElement;
+      onDragEnter={(e) => {
         if (
-          !e.currentTarget.contains(target) ||
-          target.closest(
-            "input,textarea,select,button,a,[contenteditable],[role=dialog],[role=menu],[role=combobox]",
-          )
+          !e.currentTarget.contains(e.target as globalThis.Node) ||
+          !e.dataTransfer.types.includes("Files")
         )
           return;
+        e.preventDefault();
+        setFileDrag(true);
+      }}
+      onDragOver={(e) => {
+        if (
+          !e.currentTarget.contains(e.target as globalThis.Node) ||
+          !e.dataTransfer.types.includes("Files")
+        )
+          return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect =
+          uploadBusy || snap.conflict || snap.document.nodes.length >= 1000
+            ? "none"
+            : "copy";
+      }}
+      onDragLeave={(e) => {
+        if (
+          !(e.relatedTarget instanceof window.Node) ||
+          !e.currentTarget.contains(e.relatedTarget)
+        )
+          setFileDrag(false);
+      }}
+      onDrop={(e) => {
+        if (
+          !e.currentTarget.contains(e.target as globalThis.Node) ||
+          !e.dataTransfer.types.includes("Files")
+        )
+          return;
+        e.preventDefault();
+        e.stopPropagation();
+        setFileDrag(false);
+        if (!canvasEventTarget(e.currentTarget, e.target)) return;
+        e.currentTarget.focus({ preventScroll: true });
+        importFiles(Array.from(e.dataTransfer.files));
+      }}
+      onCopy={(e) => {
+        if (
+          e.defaultPrevented ||
+          !canvasEventTarget(e.currentTarget, e.target) ||
+          !store.copySelection()
+        )
+          return;
+        e.preventDefault();
+        e.stopPropagation();
+        const key = store.copiedSelectionKey();
+        e.clipboardData.setData(canvasClipboardType, key);
+        e.clipboardData.setData("text/plain", `${canvasClipboardPrefix}${key}`);
+      }}
+      onPaste={(e) => {
+        if (e.defaultPrevented || !canvasEventTarget(e.currentTarget, e.target))
+          return;
+        const key =
+          e.clipboardData.getData(canvasClipboardType) ||
+          e.clipboardData.getData("text/plain").replace(/^Tuyile canvas:/, "");
+        const files = Array.from(e.clipboardData.files);
+        if (store.matchesCopiedSelection(key)) {
+          e.preventDefault();
+          e.stopPropagation();
+          pasteNodes();
+        } else if (files.length) {
+          e.preventDefault();
+          e.stopPropagation();
+          importFiles(files);
+        }
+      }}
+      onPointerDownCapture={(e) => {
+        if (!canvasEventTarget(e.currentTarget, e.target)) return;
         e.currentTarget.focus({ preventScroll: true });
       }}
       onKeyDown={(e) => {
-        const target = e.target as HTMLElement;
         if (
           e.defaultPrevented ||
           e.nativeEvent.isComposing ||
-          !e.currentTarget.contains(target) ||
-          target.closest(
-            "input,textarea,select,button,a,[contenteditable],[role=dialog],[role=menu],[role=combobox]",
-          )
+          !canvasEventTarget(e.currentTarget, e.target)
         )
           return;
         const key = e.key.toLowerCase();
         const mod = e.ctrlKey || e.metaKey;
         if (e.altKey) return;
+        // Native copy/paste events expose clipboard data without requesting read permissions.
+        if (
+          mod &&
+          !e.shiftKey &&
+          (key === "c" || key === "v") &&
+          nativeModifier(e)
+        ) {
+          if (e.repeat) e.preventDefault();
+          e.stopPropagation();
+          return;
+        }
         const action =
           mod && !e.shiftKey
             ? {
@@ -690,6 +804,11 @@ function CanvasView({
         }
       }}
     >
+      {fileDrag && (
+        <div className="canvas-file-drop-hint" role="status">
+          松开以将图片上传到画布（每次一张）
+        </div>
+      )}
       <div className="canvas-status" role="status">
         {snap.saving ? "正在保存…" : snap.dirty ? "有未保存修改" : "画布已保存"}{" "}
         · v{snap.revision}

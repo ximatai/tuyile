@@ -77,14 +77,23 @@ try {
     })
     .png()
     .toBuffer();
-  await page
-    .getByRole("region", { name: "项目画布", exact: true })
-    .locator('input[type="file"]')
-    .setInputFiles({
-      name: "Docker canvas upload.png",
-      mimeType: "image/png",
-      buffer: uploadPng,
-    });
+  const canvasSurface = page.getByRole("region", {
+    name: "项目画布",
+    exact: true,
+  });
+  const dropped = await page.evaluateHandle((encoded) => {
+    const data = new DataTransfer();
+    data.items.add(
+      new File(
+        [Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0))],
+        "Docker canvas upload.png",
+        { type: "image/png" },
+      ),
+    );
+    return data;
+  }, uploadPng.toString("base64"));
+  await canvasSurface.dispatchEvent("drop", { dataTransfer: dropped });
+  await dropped.dispose();
   const uploadedImage = page.locator(
     '.react-flow__node-image img[alt="Docker canvas upload.png"]',
   );
@@ -103,6 +112,48 @@ try {
     })
     .click();
   await uploadedImage.waitFor();
+  await page
+    .getByRole("button", { name: "上传图片到画布", exact: true })
+    .waitFor({ state: "visible" });
+  await page.waitForFunction(
+    () =>
+      !document.querySelector<HTMLButtonElement>(
+        'button[aria-label="上传图片到画布"]',
+      )?.disabled,
+  );
+  await page
+    .context()
+    .grantPermissions(["clipboard-read", "clipboard-write"], {
+      origin: "http://127.0.0.1:8792",
+    });
+  await page.evaluate(async (encoded) => {
+    const blob = new Blob(
+      [Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0))],
+      { type: "image/png" },
+    );
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+  }, uploadPng.toString("base64"));
+  await canvasSurface.focus();
+  const screenshotResponse = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/images/uploads") &&
+      response.request().method() === "POST",
+  );
+  await page.keyboard.press(
+    `${process.platform === "darwin" ? "Meta" : "Control"}+v`,
+  );
+  const screenshotAssetId = (await (await screenshotResponse).json()).id;
+  await page
+    .locator(
+      `.react-flow__node-image img[src="/api/images/assets/${screenshotAssetId}/preview"]`,
+    )
+    .waitFor();
+  await page.waitForFunction(
+    () =>
+      !document.querySelector<HTMLButtonElement>(
+        'button[aria-label="上传图片到画布"]',
+      )?.disabled,
+  );
   await page
     .getByLabel("创作需求", { exact: true })
     .fill("Synthetic generation feedback acceptance");
@@ -136,6 +187,7 @@ try {
   ).json();
   const expectedAssets = [
     uploadedAssetId,
+    screenshotAssetId,
     ...completed.tasks.flatMap((task: any) =>
       task.outputs.map((output: any) => output.id),
     ),
@@ -434,7 +486,7 @@ try {
   });
   assert.deepEqual(errors, []);
   console.log(
-    "Built Docker Chromium: canvas upload/reference and keyboard copy/paste/undo, nonce styles, themed button, singleton model lock, confirmation dialog and medium/large desktop layout passed",
+    "Built Docker Chromium: canvas drop/screenshot paste/upload/reference and keyboard copy/paste/undo, nonce styles, themed button, singleton model lock, confirmation dialog and medium/large desktop layout passed",
   );
 } finally {
   await browser.close();

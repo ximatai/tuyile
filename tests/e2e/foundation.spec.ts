@@ -5072,13 +5072,11 @@ test("late canvas upload responses cannot write into another project and invalid
     unknownAssetId = (await response.json()).id;
     await route.abort("failed");
   });
-  await canvas
-    .locator('input[type="file"]')
-    .setInputFiles({
-      name: "响应丢失.png",
-      mimeType: "image/png",
-      buffer: png,
-    });
+  await canvas.locator('input[type="file"]').setInputFiles({
+    name: "响应丢失.png",
+    mimeType: "image/png",
+    buffer: png,
+  });
   await expect(
     page.getByText("上传结果未确认，请先到图库查看，避免重复上传。", {
       exact: true,
@@ -5093,4 +5091,134 @@ test("late canvas upload responses cannot write into another project and invalid
   expect(
     recovered.assets.some((asset: any) => asset.id === unknownAssetId),
   ).toBe(true);
+});
+
+test("canvas accepts local image drops and native screenshot paste without intercepting text editing", async ({
+  page,
+  context,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.getByLabel("项目名称").fill("拖放与截图验证");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "拖放与截图验证" })
+    .click();
+  const canvas = page.getByRole("region", { name: "项目画布", exact: true });
+  await expect(canvas).toBeVisible();
+  const png = await (
+    await import("sharp")
+  )
+    .default({
+      create: { width: 320, height: 160, channels: 3, background: "#0062b0" },
+    })
+    .png()
+    .toBuffer();
+  const b64 = png.toString("base64");
+  const transfer = await page.evaluateHandle((encoded) => {
+    const data = new DataTransfer();
+    data.items.add(
+      new File(
+        [Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0))],
+        "拖入.png",
+        { type: "image/png" },
+      ),
+    );
+    return data;
+  }, b64);
+  await canvas.dispatchEvent("dragenter", { dataTransfer: transfer });
+  await expect(
+    page.getByText("松开以将图片上传到画布（每次一张）", { exact: true }),
+  ).toBeVisible();
+  await canvas.dispatchEvent("dragover", { dataTransfer: transfer });
+  await canvas.dispatchEvent("drop", { dataTransfer: transfer });
+  const images = page.locator(".react-flow__node-image");
+  await expect(images).toHaveCount(1);
+  await expect(images.first().getByRole("img")).toHaveAttribute(
+    "alt",
+    "拖入.png",
+  );
+  await expect(
+    canvas.getByRole("button", { name: "上传图片到画布", exact: true }),
+  ).toBeEnabled();
+  await expect(
+    page.getByTestId("reference-upload").locator(".attachment"),
+  ).toHaveCount(0);
+  const multiple = await page.evaluateHandle((encoded) => {
+    const data = new DataTransfer();
+    for (const name of ["a.png", "b.png"])
+      data.items.add(
+        new File(
+          [Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0))],
+          name,
+          { type: "image/png" },
+        ),
+      );
+    return data;
+  }, b64);
+  await canvas.dispatchEvent("drop", { dataTransfer: multiple });
+  await expect(
+    page.getByText("每次请拖入或粘贴一张图片。", { exact: true }),
+  ).toBeVisible();
+  await expect(images).toHaveCount(1);
+  await context.grantPermissions(["clipboard-read", "clipboard-write"], {
+    origin: new URL(page.url()).origin,
+  });
+  const native = process.platform === "darwin" ? "Meta" : "Control";
+  // Use a real native shortcut and browser clipboard, not a synthetic paste handler.
+  await page.evaluate(async (encoded) => {
+    const blob = new Blob(
+      [Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0))],
+      { type: "image/png" },
+    );
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+  }, b64);
+  await canvas.focus();
+  await page.keyboard.press(`${native}+v`);
+  await expect(images).toHaveCount(2);
+  await expect(
+    canvas.getByRole("button", { name: "上传图片到画布", exact: true }),
+  ).toBeEnabled();
+  await canvas.focus();
+  await page.keyboard.press(`${native}+c`);
+  const marker = await page.evaluate(() => navigator.clipboard.readText());
+  expect(marker).toMatch(/^Tuyile canvas:[0-9a-f-]+$/);
+  await page.keyboard.press(`${native}+v`);
+  await expect(images).toHaveCount(3);
+  // Replacing the system clipboard with a new screenshot wins over old node copies.
+  await page.evaluate(async (encoded) => {
+    const blob = new Blob(
+      [Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0))],
+      { type: "image/png" },
+    );
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+  }, b64);
+  await page.keyboard.press(`${native}+v`);
+  await expect(images).toHaveCount(4);
+  await page.evaluate(() => navigator.clipboard.writeText("原生文本粘贴"));
+  const prompt = page.getByLabel("创作需求", { exact: true });
+  await prompt.fill("");
+  await prompt.press(`${native}+v`);
+  await expect(prompt).toHaveValue("原生文本粘贴");
+  await canvas.focus();
+  await page.keyboard.press(`${native}+v`);
+  await expect(images).toHaveCount(4);
+  await expect(page.locator(".canvas-status")).toContainText("画布已保存");
+  const projectId = page.url().split("/").at(-1)!;
+  const saved = await (
+    await page.request.get(`/api/projects/${projectId}/canvas`)
+  ).json();
+  expect(new Set(saved.document.nodes.map((n: any) => n.assetId)).size).toBe(3);
+  expect(
+    (
+      await (
+        await page.request.get(`/api/images/tasks?projectId=${projectId}`)
+      ).json()
+    ).tasks,
+  ).toHaveLength(0);
+  await page.reload();
+  await expect(images).toHaveCount(4);
+  await transfer.dispose();
+  await multiple.dispose();
 });
