@@ -69,6 +69,40 @@ try {
     .boundingBox();
   const quota = await page.locator("header .header-usage").boundingBox();
   assert(submit && quota && quota.y + quota.height <= submit.y);
+  const uploadPng = await (
+    await import("sharp")
+  )
+    .default({
+      create: { width: 400, height: 200, channels: 3, background: "#0062b0" },
+    })
+    .png()
+    .toBuffer();
+  await page
+    .getByRole("region", { name: "项目画布", exact: true })
+    .locator('input[type="file"]')
+    .setInputFiles({
+      name: "Docker canvas upload.png",
+      mimeType: "image/png",
+      buffer: uploadPng,
+    });
+  const uploadedImage = page.locator(
+    '.react-flow__node-image img[alt="Docker canvas upload.png"]',
+  );
+  await uploadedImage.waitFor();
+  const uploadedAssetId = (await uploadedImage.getAttribute("src"))!.split(
+    "/",
+  )[4];
+  await page
+    .getByTestId("reference-upload")
+    .getByRole("button", { name: "引用选中 1 张", exact: true })
+    .click();
+  await page
+    .getByRole("button", {
+      name: "移除引用 Docker canvas upload.png",
+      exact: true,
+    })
+    .click();
+  await uploadedImage.waitFor();
   await page
     .getByLabel("创作需求", { exact: true })
     .fill("Synthetic generation feedback acceptance");
@@ -100,9 +134,12 @@ try {
       `http://127.0.0.1:8792/api/images/tasks?projectId=${projectId}`,
     )
   ).json();
-  const expectedAssets = completed.tasks.flatMap((task: any) =>
-    task.outputs.map((output: any) => output.id),
-  ) as string[];
+  const expectedAssets = [
+    uploadedAssetId,
+    ...completed.tasks.flatMap((task: any) =>
+      task.outputs.map((output: any) => output.id),
+    ),
+  ] as string[];
   await page.waitForFunction((ids) => {
     const sources = Array.from(
       document.querySelectorAll<HTMLImageElement>(
@@ -397,7 +434,7 @@ try {
   });
   assert.deepEqual(errors, []);
   console.log(
-    "Built Docker Chromium: canvas keyboard copy/paste/undo, nonce styles, themed button, singleton model lock, confirmation dialog and medium/large desktop layout passed",
+    "Built Docker Chromium: canvas upload/reference and keyboard copy/paste/undo, nonce styles, themed button, singleton model lock, confirmation dialog and medium/large desktop layout passed",
   );
 } finally {
   await browser.close();

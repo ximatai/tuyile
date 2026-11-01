@@ -59,6 +59,46 @@ export class EditorStore {
   select(ids: string[]) {
     this.update({ selected: ids });
   }
+  canAddImage() {
+    if (this.state.conflict)
+      throw new Error("请先处理画布保存冲突，再上传图片。");
+    if (this.state.document.nodes.length >= 1000)
+      throw new Error("画布最多容纳 1000 个节点，请先移除部分节点。");
+  }
+  addUploadedImage(
+    asset: { id: string; width: number; height: number },
+    name: string,
+  ) {
+    const existing = this.state.document.nodes.find(
+      (n) => n.assetId === asset.id,
+    );
+    if (existing) {
+      this.select([existing.id]);
+      return;
+    }
+    this.canAddImage();
+    const { viewport, nodes } = this.state.document;
+    // Place new material inside the current view, staggered from earlier images.
+    const offset = (nodes.length % 8) * 30;
+    const image: CanvasNode = {
+      id: crypto.randomUUID(),
+      kind: "image",
+      assetId: asset.id,
+      label: name.slice(0, 100),
+      x: Math.max(
+        -99000,
+        Math.min(99000, (60 - viewport.x) / viewport.zoom + offset),
+      ),
+      y: Math.max(
+        -99000,
+        Math.min(99000, (70 - viewport.y) / viewport.zoom + offset),
+      ),
+      width: 260,
+      height: Math.max(40, Math.min(10000, (260 * asset.height) / asset.width)),
+    };
+    this.edit({ ...this.state.document, nodes: [...nodes, image] });
+    this.select([image.id]);
+  }
   selectAll() {
     this.select(this.state.document.nodes.map((n) => n.id));
   }

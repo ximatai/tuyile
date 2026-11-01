@@ -253,3 +253,60 @@ it("pastes a selected child independently at its absolute canvas position", () =
   expect(pasted.y).toBe(270);
   store.dispose();
 });
+
+it("adds uploaded assets in the current viewport, selects once, and keeps undo separate from assets", () => {
+  const asset = { id: randomUUID(), width: 800, height: 400 };
+  const store = new EditorStore(
+    {
+      document: { ...emptyCanvas(), viewport: { x: -500, y: -300, zoom: 0.5 } },
+      revision: 0,
+    },
+    async (input) => ({
+      document: input.document,
+      revision: input.revision + 1,
+    }),
+  );
+  store.addUploadedImage(asset, "uploaded.png");
+  const image = store.get().document.nodes[0];
+  expect(image).toMatchObject({
+    kind: "image",
+    assetId: asset.id,
+    label: "uploaded.png",
+    x: 1120,
+    y: 740,
+    width: 260,
+    height: 130,
+  });
+  expect(store.get().selected).toEqual([image.id]);
+  store.addUploadedImage(asset, "same asset.png");
+  expect(store.get().document.nodes).toHaveLength(1);
+  store.undo();
+  expect(store.get().document.nodes).toHaveLength(0);
+  store.redo();
+  expect(store.get().document.nodes[0].assetId).toBe(asset.id);
+  store.dispose();
+});
+it("rejects uploaded image insertion before changing a full or conflicting canvas", async () => {
+  const store = new EditorStore(
+    {
+      document: { ...emptyCanvas(), nodes: Array.from({ length: 1000 }, node) },
+      revision: 0,
+    },
+    async () => {
+      throw Object.assign(new Error("conflict"), { code: "CANVAS_CONFLICT" });
+    },
+  );
+  expect(() =>
+    store.addUploadedImage(
+      { id: randomUUID(), width: 1, height: 1 },
+      "full.png",
+    ),
+  ).toThrow("1000");
+  expect(store.get().dirty).toBe(false);
+  store.reset({ document: emptyCanvas(), revision: 0 });
+  store.edit({ ...emptyCanvas(), nodes: [node()] });
+  await expect(store.flush()).rejects.toThrow("conflict");
+  expect(() => store.canAddImage()).toThrow("保存冲突");
+  expect(store.get().document.nodes).toHaveLength(1);
+  store.dispose();
+});

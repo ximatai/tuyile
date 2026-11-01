@@ -32,6 +32,7 @@ import type {
   Project,
 } from "@tuyile/contracts";
 import {
+  Upload as UploadIcon,
   MoreHorizontal,
   Expand,
   Download,
@@ -54,6 +55,7 @@ import {
   Notice,
   Tooltip,
   useConfirm,
+  Upload,
 } from "@tuyile/ui";
 import { useNavigate } from "react-router-dom";
 import { EditorStore } from "./store";
@@ -262,6 +264,8 @@ export function CanvasEditor({
   onReuse,
   tasks,
   statusStale,
+  onUpload,
+  uploadBusy,
 }: {
   tasks: ImageTask[];
   projectId: string;
@@ -269,6 +273,8 @@ export function CanvasEditor({
   onSelectionChange?: (assets: { id: string; name: string }[]) => void;
   onReuse?: (task: ImageTask) => void;
   statusStale?: boolean;
+  onUpload: (file: File) => void;
+  uploadBusy: boolean;
 }) {
   const state = useSessionState();
   const api = client(state.session.csrfToken);
@@ -301,6 +307,8 @@ export function CanvasEditor({
       onSelectionChange={onSelectionChange}
       onReuse={onReuse}
       statusStale={statusStale}
+      onUpload={onUpload}
+      uploadBusy={uploadBusy}
     />
   ) : (
     <p role="status">正在打开画布…</p>
@@ -314,6 +322,8 @@ function CanvasView({
   onReuse,
   tasks,
   statusStale,
+  onUpload,
+  uploadBusy,
 }: {
   tasks: ImageTask[];
   store: EditorStore;
@@ -322,6 +332,8 @@ function CanvasView({
   onSelectionChange?: (assets: { id: string; name: string }[]) => void;
   onReuse?: (task: ImageTask) => void;
   statusStale?: boolean;
+  onUpload: (file: File) => void;
+  uploadBusy: boolean;
 }) {
   const state = useSessionState(),
     snap = useSyncExternalStore(store.subscribe, store.get),
@@ -743,6 +755,33 @@ function CanvasView({
         </div>
       )}
       <div className="canvas-toolbar" role="toolbar" aria-label="画布操作">
+        <Upload
+          accept="image/png,image/jpeg,image/webp"
+          showUploadList={false}
+          disabled={
+            uploadBusy || snap.conflict || snap.document.nodes.length >= 1000
+          }
+          beforeUpload={(file) => {
+            onUpload(file);
+            return Upload.LIST_IGNORE;
+          }}
+        >
+          <Tooltip title="上传图片到画布" trigger={["hover", "focus"]}>
+            <Button
+              type="button"
+              aria-label="上传图片到画布"
+              loading={uploadBusy}
+              disabled={
+                uploadBusy ||
+                snap.conflict ||
+                snap.document.nodes.length >= 1000
+              }
+            >
+              <UploadIcon size={16} />
+            </Button>
+          </Tooltip>
+        </Upload>
+
         <Tooltip title="选择" trigger={["hover", "focus"]}>
           <Button
             type="button"

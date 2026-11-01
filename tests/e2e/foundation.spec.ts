@@ -4856,3 +4856,241 @@ test("canvas keyboard shortcuts stay scoped and persist grouped node copies", as
   });
   expect((await wrongOrigin.json()).error.code).toBe("INVALID_ORIGIN");
 });
+
+test("canvas uploads and reference uploads share private assets without generation", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.getByLabel("项目名称").fill("上传图片到画布验证");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "上传图片到画布验证" })
+    .click();
+  const canvas = page.getByRole("region", { name: "项目画布", exact: true });
+  await expect(canvas).toBeVisible();
+  const usageBefore = await (
+    await page.request.get("/api/images/usage")
+  ).json();
+  const png = await (
+    await import("sharp")
+  )
+    .default({
+      create: { width: 400, height: 200, channels: 3, background: "#0062b0" },
+    })
+    .png()
+    .toBuffer();
+  const file = (name: string) => ({ name, mimeType: "image/png", buffer: png });
+  const nodes = page.locator(".react-flow__node-image");
+  const directRefs = page.getByTestId("reference-upload");
+  await canvas
+    .locator('input[type="file"]')
+    .setInputFiles(file("画布素材.png"));
+  await expect(nodes).toHaveCount(1);
+  await expect(nodes.first().getByRole("img")).toHaveAttribute(
+    "alt",
+    "画布素材.png",
+  );
+  await expect(directRefs.locator(".attachment")).toHaveCount(0);
+  await directRefs
+    .getByRole("button", { name: "引用选中 1 张", exact: true })
+    .click();
+  await expect(directRefs.locator(".attachment")).toHaveCount(1);
+  await expect(
+    directRefs.getByRole("button", { name: "引用选中 1 张", exact: true }),
+  ).toBeDisabled();
+  await directRefs
+    .locator('input[type="file"]')
+    .setInputFiles(file("参考素材.png"));
+  await expect(nodes).toHaveCount(2);
+  await expect(directRefs.locator(".attachment")).toHaveCount(2);
+  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  const agentRefs = page.getByTestId("agent-reference-upload");
+  await agentRefs
+    .locator('input[type="file"]')
+    .setInputFiles(file("Agent参考.png"));
+  await expect(nodes).toHaveCount(3);
+  await expect(agentRefs.locator(".attachment")).toHaveCount(3);
+  await page.getByRole("tab", { name: "直接创作", exact: true }).click();
+  await directRefs
+    .locator('input[type="file"]')
+    .setInputFiles(file("第四张.png"));
+  await expect(nodes).toHaveCount(4);
+  await expect(
+    directRefs.getByRole("button", { name: "上传参考图", exact: true }),
+  ).toBeDisabled();
+  await canvas.locator('input[type="file"]').setInputFiles(file("仅画布.png"));
+  await expect(nodes).toHaveCount(5);
+  await expect(directRefs.locator(".attachment")).toHaveCount(4);
+  await expect(page.locator(".canvas-status")).toContainText("画布已保存");
+  const projectId = page.url().split("/").at(-1)!;
+  const saved = await (
+    await page.request.get(`/api/projects/${projectId}/canvas`)
+  ).json();
+  expect(saved.document.nodes).toHaveLength(5);
+  expect(saved.document.nodes.every((n: any) => n.width / n.height === 2)).toBe(
+    true,
+  );
+  const assets = saved.document.nodes.map((n: any) => n.assetId);
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/projects/${projectId}/draft`)
+          ).json()
+        ).document.referenceIds.length,
+    )
+    .toBe(4);
+  const draft = await (
+    await page.request.get(`/api/projects/${projectId}/draft`)
+  ).json();
+  expect(
+    draft.document.referenceIds.every((id: string) => assets.includes(id)),
+  ).toBe(true);
+  expect(
+    (
+      await (
+        await page.request.get(`/api/images/tasks?projectId=${projectId}`)
+      ).json()
+    ).tasks,
+  ).toHaveLength(0);
+  const usageAfter = await (await page.request.get("/api/images/usage")).json();
+  expect(usageAfter.used).toBe(usageBefore.used);
+  expect(usageAfter.attempts).toBe(usageBefore.attempts);
+  expect(usageAfter.storageUsed).toBeGreaterThan(usageBefore.storageUsed);
+  await page.reload();
+  await expect(nodes).toHaveCount(5);
+  await expect(directRefs.locator(".attachment")).toHaveCount(4);
+  const session = await (await page.request.get("/api/auth/me")).json();
+  const deletion = await page.request.post(
+    `/api/images/assets/${assets[4]}/delete`,
+    {
+      headers: {
+        Origin: new URL(page.url()).origin,
+        "X-CSRF-Token": session.csrfToken,
+      },
+      data: {},
+    },
+  );
+  expect((await deletion.json()).error.code).toBe("ASSET_REFERENCED");
+  await canvas.focus();
+  await page.keyboard.press("Control+a");
+  await page.keyboard.press("Delete");
+  await expect(nodes).toHaveCount(0);
+  await expect(directRefs.locator(".attachment")).toHaveCount(4);
+  await page.keyboard.press("Control+z");
+  await expect(nodes).toHaveCount(5);
+  await expect(page.locator(".canvas-status")).toContainText("画布已保存");
+});
+
+test("late canvas upload responses cannot write into another project and invalid images stay rejected", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  for (const name of ["上传晚响应目标", "上传晚响应来源"]) {
+    await page.getByLabel("项目名称").fill(name);
+    await page.getByRole("button", { name: "创建项目", exact: true }).click();
+    await expect(
+      page.locator(".project-card").filter({ hasText: name }),
+    ).toBeVisible();
+  }
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "上传晚响应来源" })
+    .click();
+  const sourceUrl = page.url();
+  const canvas = page.getByRole("region", { name: "项目画布", exact: true });
+  await expect(canvas).toBeVisible();
+  const png = await (
+    await import("sharp")
+  )
+    .default({
+      create: { width: 64, height: 64, channels: 3, background: "#0062b0" },
+    })
+    .png()
+    .toBuffer();
+  let accepted!: () => void,
+    release!: () => void,
+    count = 0,
+    assetId = "";
+  const uploaded = new Promise<void>((resolve) => {
+    accepted = resolve;
+  });
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/images/uploads", async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    count++;
+    const response = await route.fetch();
+    assetId = (await response.json()).id;
+    accepted();
+    await gate;
+    await route.fulfill({ response }).catch(() => {});
+  });
+  await canvas
+    .locator('input[type="file"]')
+    .setInputFiles({ name: "晚到.png", mimeType: "image/png", buffer: png });
+  await uploaded;
+  await page.getByRole("link", { name: "上传晚响应目标", exact: true }).click();
+  await expect(page).not.toHaveURL(sourceUrl);
+  await expect(canvas).toBeVisible();
+  release();
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(0);
+  await expect(
+    page.getByTestId("reference-upload").locator(".attachment"),
+  ).toHaveCount(0);
+  await page.getByRole("link", { name: "上传晚响应来源", exact: true }).click();
+  await expect(page).toHaveURL(sourceUrl);
+  await expect(canvas).toBeVisible();
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(0);
+  const uploads = await (await page.request.get("/api/images/uploads")).json();
+  expect(uploads.assets.some((asset: any) => asset.id === assetId)).toBe(true);
+  expect(count).toBe(1);
+  await page.unroute("**/api/images/uploads");
+  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await canvas.locator('input[type="file"]').setInputFiles({
+    name: "伪造.png",
+    mimeType: "image/png",
+    buffer: Buffer.from("not an image"),
+  });
+  await expect(
+    page.getByText("图片格式、大小或解码检查未通过。", { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(0);
+  let unknownCalls = 0,
+    unknownAssetId = "";
+  await page.route("**/api/images/uploads", async (route) => {
+    unknownCalls++;
+    const response = await route.fetch();
+    unknownAssetId = (await response.json()).id;
+    await route.abort("failed");
+  });
+  await canvas
+    .locator('input[type="file"]')
+    .setInputFiles({
+      name: "响应丢失.png",
+      mimeType: "image/png",
+      buffer: png,
+    });
+  await expect(
+    page.getByText("上传结果未确认，请先到图库查看，避免重复上传。", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(0);
+  expect(unknownCalls).toBe(1);
+  await page.unroute("**/api/images/uploads");
+  const recovered = await (
+    await page.request.get("/api/images/uploads")
+  ).json();
+  expect(
+    recovered.assets.some((asset: any) => asset.id === unknownAssetId),
+  ).toBe(true);
+});
