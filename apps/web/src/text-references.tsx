@@ -1,3 +1,4 @@
+import { ArrowUp, ArrowDown, X, ChevronDown, ChevronUp } from "lucide-react";
 import {
   createContext,
   useContext,
@@ -8,7 +9,7 @@ import {
 } from "react";
 import type { TextSource } from "@tuyile/contracts";
 import { composeCreativePrompt } from "@tuyile/contracts";
-import { Button, Checkbox, Collapse, Modal, Notice } from "@tuyile/ui";
+import { Button, Checkbox, Collapse, Modal, Notice, Tooltip } from "@tuyile/ui";
 import { useProjectDraft } from "./project-draft";
 import type { EditorStore } from "./editor/store";
 const Context = createContext<{
@@ -77,6 +78,7 @@ export function TextReferences({
   const refs = useTextReferences();
   const [open, setOpen] = useState(false);
   const [selection, setSelection] = useState<string[]>([]);
+  const [expanded, setExpanded] = useState<string[]>([]);
   useEffect(() => {
     if (!visible) setOpen(false);
   }, [visible]);
@@ -98,30 +100,63 @@ export function TextReferences({
         const node = refs.nodes.find((n) => n.id === id);
         return (
           <div className="text-reference-item" key={id}>
-            <Button
-              type="button"
-
-              disabled={!node}
-              onClick={() => {
-                refs.store?.select([id]);
-                if (node)
-                  refs.store?.edit(
-                    {
-                      ...refs.store.get().document,
-                      viewport: {
-                        zoom: 1,
-                        x: Math.max(-100000, Math.min(100000, 60 - node.x)),
-                        y: Math.max(-100000, Math.min(100000, 70 - node.y)),
+            <div className="text-reference-row">
+              <Button
+                className="text-reference-title"
+                type="button"
+                disabled={!node}
+                onClick={() => {
+                  refs.store?.select([id]);
+                  if (node)
+                    refs.store?.edit(
+                      {
+                        ...refs.store.get().document,
+                        viewport: {
+                          zoom: 1,
+                          x: Math.max(-100000, Math.min(100000, 60 - node.x)),
+                          y: Math.max(-100000, Math.min(100000, 70 - node.y)),
+                        },
                       },
-                    },
-                    false,
-                  );
-              }}
+                      false,
+                    );
+                }}
+              >
+                {node ? node.label || "未命名文案" : "文案已删除"}
+              </Button>
+              <Tooltip title={expanded.includes(id) ? "收起全文" : "展开全文"}>
+                <Button
+                  className="text-reference-expand"
+                  type="button"
+                  aria-label={`${expanded.includes(id) ? "收起" : "展开"}文案 ${i + 1}`}
+                  aria-expanded={expanded.includes(id)}
+                  onClick={() =>
+                    setExpanded((old) =>
+                      old.includes(id)
+                        ? old.filter((item) => item !== id)
+                        : [...old, id],
+                    )
+                  }
+                >
+                  {expanded.includes(id) ? (
+                    <ChevronUp size={14} />
+                  ) : (
+                    <ChevronDown size={14} />
+                  )}
+                </Button>
+              </Tooltip>
+            </div>
+            <p
+              className={
+                expanded.includes(id)
+                  ? "text-reference-full"
+                  : "text-reference-summary"
+              }
             >
-              {node ? node.label || "未命名文案" : "文案已删除"}
-            </Button>
-            <p>{node?.text?.slice(0, 100) || "内容为空"}</p>
-            <div>
+              {expanded.includes(id)
+                ? node?.text || "内容为空"
+                : node?.text?.slice(0, 100) || "内容为空"}
+            </p>
+            <div className="text-reference-actions">
               <Button
                 type="button"
                 disabled={disabled || i === 0}
@@ -132,7 +167,7 @@ export function TextReferences({
                 }}
                 aria-label={`上移文案 ${i + 1}`}
               >
-                上移
+                <ArrowUp size={14} />
               </Button>
               <Button
                 type="button"
@@ -144,7 +179,7 @@ export function TextReferences({
                 }}
                 aria-label={`下移文案 ${i + 1}`}
               >
-                下移
+                <ArrowDown size={14} />
               </Button>
               <Button
                 type="button"
@@ -152,7 +187,7 @@ export function TextReferences({
                 onClick={() => refs.setIds(refs.ids.filter((n) => n !== id))}
                 aria-label={`移除文案 ${i + 1}`}
               >
-                移除
+                <X size={14} />
               </Button>
             </div>
           </div>

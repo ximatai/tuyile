@@ -1,3 +1,4 @@
+import { highlightLineage } from "./lineage";
 import { useTextReferences } from "../text-references";
 import { DemoImageDetails } from "../demo";
 import {
@@ -828,6 +829,10 @@ function CanvasView({
       )
       .filter((e, i, a) => a.findIndex((x) => x.id === e.id) === i);
   }, [sources.data, outputs.data, snap.document]);
+  const focused = useMemo(
+    () => highlightLineage(nodes, edges, snap.selected),
+    [nodes, edges, snap.selected],
+  );
   function changes(changes: NodeChange[]) {
     changes = changes.filter((c) => !("id" in c) || !c.id.startsWith("task-"));
     if (!changes.length) return;
@@ -1166,8 +1171,8 @@ function CanvasView({
         </div>
       )}
       <ReactFlow
-        nodes={nodes}
-        edges={edges}
+        nodes={focused.nodes}
+        edges={focused.edges}
         nodeTypes={nodeTypes}
         onNodesChange={changes}
         defaultViewport={snap.document.viewport}

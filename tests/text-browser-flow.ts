@@ -51,9 +51,13 @@ export async function verifyTextCanvas(page: Page) {
       unintended.push(request.url());
   };
   page.on("request", track);
+  await refs.locator(".text-reference-item").nth(1).hover();
   await refs.getByRole("button", { name: "上移文案 2", exact: true }).click();
+  await refs.locator(".text-reference-item").nth(0).hover();
   await refs.getByRole("button", { name: "下移文案 1", exact: true }).click();
+  await refs.locator(".text-reference-item").nth(1).hover();
   await refs.getByRole("button", { name: "上移文案 2", exact: true }).click();
+  await refs.locator(".text-reference-item").nth(1).hover();
   await refs.getByRole("button", { name: "移除文案 2", exact: true }).click();
   await refs.getByRole("button", { name: "从画布选择", exact: true }).click();
   const picker = page.getByRole("dialog", {
@@ -67,6 +71,32 @@ export async function verifyTextCanvas(page: Page) {
     .getByRole("checkbox", { name: "海报主标题", exact: true })
     .check();
   await picker.getByRole("button", { name: /确定/ }).click();
+  await page.mouse.move(220, 80);
+  expect(
+    await refs
+      .locator(".text-reference-actions")
+      .first()
+      .evaluate((el) => getComputedStyle(el).opacity),
+  ).toBe("0");
+  expect(
+    (await refs.locator(".text-reference-item").first().boundingBox())!.height,
+  ).toBeLessThan(80);
+  await refs.getByRole("button", { name: "展开文案 1", exact: true }).click();
+  await expect(refs.locator(".text-reference-full")).toContainText(
+    "一杯拿铁，一段山间时光。",
+  );
+  await refs.getByRole("button", { name: "收起文案 1", exact: true }).click();
+  await refs.getByRole("button", { name: "展开文案 1", exact: true }).focus();
+  await page.keyboard.press("Tab");
+  await expect(
+    refs.getByRole("button", { name: "下移文案 1", exact: true }),
+  ).toBeFocused();
+  expect(
+    await refs
+      .locator(".text-reference-actions")
+      .first()
+      .evaluate((el) => getComputedStyle(el).opacity),
+  ).toBe("1");
   await refs.getByText("查看组合后的创作需求", { exact: true }).click();
   await expect(refs.locator(".text-prompt-preview")).toContainText(
     "引用文案 1（文案）：\n一杯拿铁",
@@ -163,6 +193,30 @@ export async function verifyTextCanvas(page: Page) {
   await expect(canvas.locator(".canvas-group")).toHaveCount(1);
   await page.getByRole("button", { name: "解除分组", exact: true }).click();
   await expect(canvas.locator(".canvas-group")).toHaveCount(0);
+  await refs.locator(".text-reference-title").first().click();
+  await expect(canvas.locator(".react-flow__edge.lineage-active")).toHaveCount(
+    1,
+  );
+  await expect(canvas.locator(".react-flow__node.lineage-muted")).toHaveCount(
+    1,
+  );
+  await canvas
+    .locator(".react-flow__node-image")
+    .first()
+    .click({ position: { x: 6, y: 60 } });
+  await expect(canvas.locator(".react-flow__edge.lineage-active")).toHaveCount(
+    2,
+  );
+  await expect(canvas.locator(".react-flow__node.lineage-muted")).toHaveCount(
+    0,
+  );
+  await canvas.focus();
+  await canvas.press("Escape");
+  await expect(canvas.locator(".lineage-active,.lineage-muted")).toHaveCount(0);
+  await page.screenshot({
+    path: ".codex-temp/compact-copy-acceptance.png",
+    animations: "disabled",
+  });
   // Copy and delete operate on cards, while missing references remain explicit.
   await canvas.focus();
   await canvas.press("ControlOrMeta+A");
