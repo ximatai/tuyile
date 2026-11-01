@@ -1066,12 +1066,6 @@ form {
   align-items: center;
   flex-shrink: 0;
 }
-.creation-panel-heading > .ant-tabs {
-  flex-shrink: 0;
-}
-.creation-panel-heading > .ant-tabs .ant-tabs-nav {
-  margin-bottom: 10px;
-}
 .agent-panel {
   display: flex;
   flex: 1;
@@ -3851,14 +3845,11 @@ h3 {
 }
 
 /* Collapsing changes only the desktop grid; editors remain mounted. */
-.creation-panel-heading { display: flex; align-items: flex-start; gap: 8px; flex-shrink: 0; }
-.creation-panel-heading > .ant-tabs { flex: 1; min-width: 0; }
+.creation-panel-heading { display: flex; align-items: center; gap: 8px; flex-shrink: 0; height: 28px; margin-bottom: 8px; }
 .creation-panel-toggle { flex-shrink: 0; width: 28px; height: 28px; padding: 0; }
 .workspace-shell .creation-layout { transition: grid-template-columns 200ms ease; }
 .workspace-shell .creation-layout.creation-panel-collapsed { grid-template-columns: minmax(0, 1fr) 40px; }
 .creation-panel-collapsed .creation-panel { padding: 10px 5px; overflow: hidden; }
-.creation-panel-collapsed .creation-panel > :not(.creation-panel-heading),
-.creation-panel-collapsed .creation-panel-heading > .ant-tabs { display: none; }
 .creation-panel-collapsed .creation-panel-heading { justify-content: center; }
 .workspace-shell .creation-panel .agent-clear-history { right: 60px; }
 @media (prefers-reduced-motion: reduce) { .workspace-shell .creation-layout { transition: none; } }
@@ -3883,3 +3874,9 @@ h3 {
 .creation-panel-unpinned:not(.creation-panel-collapsed) > .creation-panel { width: calc(clamp(360px, 28.5vw, 440px) + 40px); }
 .creation-panel-collapsed .creation-panel > * { display: none; }
 .workspace-shell .creation-panel .agent-clear-history { right: 136px; }
+
+.workspace-shell .creation-layout:not(.creation-panel-collapsed) > .creation-panel { padding-top: 8px; }
+.creation-panel-title { flex: 1; min-width: 0; margin: 0; font-size: 13px; line-height: 28px; font-weight: 600; }
+.workspace-shell .creation-panel .agent-clear-history { top: 8px; }
+
+.creation-panel-heading .button { min-height: 28px; }

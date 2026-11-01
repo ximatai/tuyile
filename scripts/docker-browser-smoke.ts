@@ -1,7 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { chromium } from "@playwright/test";
+import { chromium, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
 import assert from "node:assert/strict";
+async function selectCreationPanel(page: Page, mode: "direct" | "agent") {
+  const button = page.getByRole("button", {
+    name: mode === "direct" ? "直接创作面板" : "Agent 面板",
+    exact: true,
+  });
+  if ((await button.getAttribute("aria-pressed")) !== "true")
+    await button.click();
+}
 const auth = JSON.parse(
   await readFile(".codex-temp/docker-login.json", "utf8"),
 );
@@ -83,6 +91,14 @@ try {
   });
   const panelPrompt = page.getByLabel("创作需求", { exact: true });
   await panelPrompt.fill("Docker retained panel draft");
+  assert.equal(
+    await page.locator(".creation-panel").getByRole("tablist").count(),
+    0,
+  );
+  const compactHeader = await page
+    .locator(".creation-panel-heading")
+    .boundingBox();
+  assert(compactHeader && Math.abs(compactHeader.height - 28) < 0.5);
   const panel = page.getByRole("complementary", {
     name: "图片创作",
     exact: true,
@@ -448,7 +464,7 @@ try {
     },
   });
   await page.reload();
-  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await selectCreationPanel(page, "agent");
   await page.getByLabel("计划步骤摘要").waitFor();
   for (const viewport of [
     { width: 1440, height: 900 },
@@ -507,10 +523,10 @@ try {
     });
   }
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await selectCreationPanel(page, "agent");
   await page.getByRole("button", { name: "继续聊想法", exact: true }).click();
   await page.getByLabel("告诉 Agent 你的想法", { exact: true }).waitFor();
-  await page.getByRole("tab", { name: "直接创作", exact: true }).click();
+  await selectCreationPanel(page, "direct");
   assert.equal(
     await page.getByLabel("图片模型", { exact: true }).isEnabled(),
     false,
@@ -595,7 +611,7 @@ try {
   });
   assert.deepEqual(errors, []);
   console.log(
-    "Built Docker Chromium: anchored temporary/pinned creation panel, canvas batch upload/layout/drop/screenshot paste/reference and keyboard copy/paste/undo, nonce styles, themed button, singleton model lock, confirmation dialog and medium/large desktop layout passed",
+    "Built Docker Chromium: compact creation header and anchored temporary/pinned panel, canvas batch upload/layout/drop/screenshot paste/reference and keyboard copy/paste/undo, nonce styles, themed button, singleton model lock, confirmation dialog and medium/large desktop layout passed",
   );
 } finally {
   await browser.close();

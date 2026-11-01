@@ -15,6 +15,14 @@ async function login(
   await page.getByRole("button", { name: "登录", exact: true }).click();
   await expect(page.getByRole("heading", { name: "我的项目" })).toBeVisible();
 }
+async function selectCreationPanel(page: Page, mode: "direct" | "agent") {
+  const button = page.getByRole("button", {
+    name: mode === "direct" ? "直接创作面板" : "Agent 面板",
+    exact: true,
+  });
+  if ((await button.getAttribute("aria-pressed")) !== "true")
+    await button.click();
+}
 async function logoutFromMenu(page: Page) {
   await page.getByRole("button", { name: "账户菜单", exact: true }).click();
   await page.getByRole("menuitem", { name: "退出登录", exact: true }).click();
@@ -966,9 +974,9 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     .click();
   await expect(quotaTrigger).toBeFocused();
   await expect(quotaTrigger).toHaveAttribute("aria-expanded", "false");
-  await reopened.getByRole("tab", { name: "Agent", exact: true }).click();
+  await selectCreationPanel(reopened, "agent");
   await expect(reopened.getByRole("tooltip")).toBeHidden();
-  await reopened.getByRole("tab", { name: "直接创作", exact: true }).click();
+  await selectCreationPanel(reopened, "direct");
   await reopened.setViewportSize({ width: 1920, height: 1080 });
   await expect(reopened.locator(".react-flow__node-image")).toHaveCount(5);
   await expect(
@@ -1697,7 +1705,7 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
     .filter({ hasText: "Agent 顺序创作" })
     .click();
   const projectId = page.url().split("/").at(-1)!;
-  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await selectCreationPanel(page, "agent");
   await page.getByRole("button", { name: "灵感与风格", exact: true }).click();
   await expect(
     page
@@ -1809,7 +1817,7 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
     )
     .toBe(2);
   await page.reload();
-  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await selectCreationPanel(page, "agent");
   await expect(page.getByLabel("计划步骤摘要")).toBeVisible();
   await page.getByRole("button", { name: "编辑提示词", exact: true }).click();
   await page
@@ -1929,7 +1937,7 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
   ).toBeEnabled();
   await page.reload();
   await expect(page.locator(".react-flow__node-image")).toHaveCount(3);
-  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await selectCreationPanel(page, "agent");
   await expect(page.getByText("计划已确认", { exact: true })).toBeVisible();
   await page.setViewportSize({ width: 1920, height: 1080 });
   await page.screenshot({
@@ -2219,7 +2227,7 @@ test("administration saves bounded execution policies and clearing ended Agent h
     .locator(".project-card")
     .filter({ hasText: "Agent 顺序创作" })
     .click();
-  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await selectCreationPanel(page, "agent");
   await expect(page.getByText("计划已确认", { exact: true })).toBeVisible();
   const before = await (await page.request.get("/api/agent/usage")).json(),
     imagesBefore = await (await page.request.get("/api/images/usage")).json();
@@ -2386,7 +2394,7 @@ test("administrators add a service and users select same-named models from the c
   await expect(page.locator(".react-flow__node-image")).toHaveCount(1, {
     timeout: 20000,
   });
-  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await selectCreationPanel(page, "agent");
   await page.getByRole("button", { name: "创作设置", exact: true }).click();
   await page.getByLabel("对话模型", { exact: true }).click();
   await page
@@ -4077,7 +4085,7 @@ test("server drafts persist direct and Agent inputs across refresh and login and
   await expect(
     page.getByTestId("reference-upload").locator(".attachment"),
   ).toHaveCount(1);
-  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await selectCreationPanel(page, "agent");
   const agent = page.getByLabel("告诉 Agent 你的想法", { exact: true });
   await agent.fill("独立保留的 Agent 想法");
   await expect
@@ -4105,9 +4113,9 @@ test("server drafts persist direct and Agent inputs across refresh and login and
   await page.reload();
   await expect(agent).toHaveValue("独立保留的 Agent 想法");
   await expect(
-    page.getByRole("tab", { name: "Agent", exact: true }),
-  ).toHaveAttribute("aria-selected", "true");
-  await page.getByRole("tab", { name: "直接创作", exact: true }).click();
+    page.getByRole("button", { name: "Agent 面板", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await selectCreationPanel(page, "direct");
   await expect(prompt).toHaveValue("刷新后应恢复的创作需求");
   await expect(
     page.getByRole("combobox", { name: "风格", exact: true }).locator(".."),
@@ -4501,7 +4509,7 @@ test("Agent clarification stays conversational and proposals separate creative a
     await route.fulfill({ json: saved });
   });
   await page.goto(`/projects/${project.id}`);
-  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await selectCreationPanel(page, "agent");
   const prompt = page.getByLabel("告诉 Agent 你的想法", { exact: true });
   await prompt.fill("设计咖啡店开业海报");
   await page.getByRole("button", { name: "生成计划", exact: true }).click();
@@ -4628,7 +4636,7 @@ test("Agent clarification stays conversational and proposals separate creative a
   expect(inputs[2].previousPlanId).toBe(jobs[1].plans.at(-1).id);
   jobs[0].plans[0].confirmed = true;
   await page.reload();
-  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await selectCreationPanel(page, "agent");
   await page
     .getByRole("button", { name: "步骤 1 图片设置", exact: true })
     .click();
@@ -4686,7 +4694,7 @@ test("shared creation controls respect parent locks and dismiss helpers across m
     .click();
   await page.getByRole("button", { name: "编辑风格", exact: true }).click();
   await page.getByLabel("风格描述", { exact: true }).fill("尚未应用的临时编辑");
-  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await selectCreationPanel(page, "agent");
   await expect(page.locator(".style-editor:visible")).toHaveCount(0);
   const agentHelp = page.getByRole("button", {
     name: "规划与执行规则",
@@ -4697,7 +4705,7 @@ test("shared creation controls respect parent locks and dismiss helpers across m
   await content.press("Escape");
   await expect(agentHelp).toBeFocused();
   await agentHelp.click();
-  await page.getByRole("tab", { name: "直接创作", exact: true }).click();
+  await selectCreationPanel(page, "direct");
   await expect(page.locator(".help-content:visible")).toHaveCount(0);
   await expect(prompt).toHaveValue("共享控件测试：暖色咖啡店海报");
   const directHelp = page.getByRole("button", {
@@ -4905,14 +4913,14 @@ test("canvas uploads and reference uploads share private assets without generati
     .setInputFiles(file("参考素材.png"));
   await expect(nodes).toHaveCount(2);
   await expect(directRefs.locator(".attachment")).toHaveCount(2);
-  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await selectCreationPanel(page, "agent");
   const agentRefs = page.getByTestId("agent-reference-upload");
   await agentRefs
     .locator('input[type="file"]')
     .setInputFiles(file("Agent参考.png"));
   await expect(nodes).toHaveCount(3);
   await expect(agentRefs.locator(".attachment")).toHaveCount(3);
-  await page.getByRole("tab", { name: "直接创作", exact: true }).click();
+  await selectCreationPanel(page, "direct");
   await directRefs
     .locator('input[type="file"]')
     .setInputFiles(file("第四张.png"));
@@ -5054,7 +5062,7 @@ test("late canvas upload responses cannot write into another project and invalid
   expect(uploads.assets.some((asset: any) => asset.id === assetId)).toBe(true);
   expect(count).toBe(1);
   await page.unroute("**/api/images/uploads");
-  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await selectCreationPanel(page, "agent");
   await canvas.locator('input[type="file"]').setInputFiles({
     name: "伪造.png",
     mimeType: "image/png",
@@ -5608,7 +5616,7 @@ test("collapsed creation panel retains unsaved Agent edits and closes its settin
         ).jobs.find((j: any) => j.id === job.id)?.state,
     )
     .toBe("succeeded");
-  await page.getByRole("tab", { name: "Agent", exact: true }).click();
+  await selectCreationPanel(page, "agent");
   await page.getByRole("button", { name: "编辑提示词", exact: true }).click();
   const title = page.getByLabel("步骤 1 名称", { exact: true });
   await title.fill("未保存但需要保留的方案");
@@ -5631,8 +5639,8 @@ test("collapsed creation panel retains unsaved Agent edits and closes its settin
   await page.getByRole("button", { name: "Agent 面板", exact: true }).click();
   await expect(page.locator(".agent-settings-popover")).not.toBeVisible();
   await expect(
-    page.getByRole("tab", { name: "Agent", exact: true }),
-  ).toHaveAttribute("aria-selected", "true");
+    page.getByRole("button", { name: "Agent 面板", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
   await page
     .getByRole("button", { name: "取消固定创作面板", exact: true })
     .click();
@@ -5902,4 +5910,55 @@ test("two tool-window rail icons switch independent drafts and hiding preserves 
       ).json()
     ).tasks,
   ).toHaveLength(0);
+});
+
+test("creation header is a compact single row and mode switching stays on the tool rail", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.getByLabel("项目名称").fill("紧凑标题栏验证");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "紧凑标题栏验证" })
+    .click();
+  const panel = page.getByRole("complementary", {
+    name: "图片创作",
+    exact: true,
+  });
+  const header = panel.locator(".creation-panel-heading");
+  for (const width of [1440, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const mode of ["direct", "agent"] as const) {
+      await selectCreationPanel(page, mode);
+      await expect(
+        header.getByRole("heading", {
+          name: mode === "direct" ? "直接创作" : "Agent",
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(panel.getByRole("tablist")).toHaveCount(0);
+      await expect
+        .poll(async () => (await header.boundingBox())!.height)
+        .toBeCloseTo(28, 0);
+      const panelBox = (await panel.boundingBox())!,
+        headBox = (await header.boundingBox())!;
+      expect(headBox.y - panelBox.y).toBeCloseTo(8, 0);
+      const controls = [
+        panel.getByRole("button", { name: "取消固定创作面板", exact: true }),
+        panel.getByRole("button", { name: "收起创作面板", exact: true }),
+      ];
+      for (const control of controls) {
+        const box = (await control.boundingBox())!;
+        expect(box.y).toBeGreaterThanOrEqual(headBox.y - 1);
+        expect(box.y + box.height).toBeLessThanOrEqual(
+          headBox.y + headBox.height + 1,
+        );
+      }
+      await page.screenshot({
+        path: `.codex-temp/compact-header-${mode}-${width}.png`,
+      });
+    }
+  }
 });

@@ -48,7 +48,6 @@ import {
 } from "react";
 import type { ImageInput, ImageTask, ImageUsage } from "@tuyile/contracts";
 import {
-  Tabs,
   Collapse,
   Popover,
   Button,
@@ -821,16 +820,9 @@ function CreationEditor({
             }}
           >
             <div className="creation-panel-heading">
-              <Tabs
-                activeKey={mode}
-                onChange={(next) => {
-                  setMode(next as "direct" | "agent");
-                }}
-                items={[
-                  { key: "direct", label: "直接创作" },
-                  { key: "agent", label: "Agent" },
-                ]}
-              />
+              <h2 className="creation-panel-title">
+                {mode === "direct" ? "直接创作" : "Agent"}
+              </h2>
               {!panelCollapsed && (
                 <Tooltip
                   title={panel.pinned ? "取消固定创作面板" : "固定创作面板"}
