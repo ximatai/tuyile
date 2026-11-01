@@ -202,7 +202,6 @@ export function ProjectHeading() {
   });
   return (
     <span className="workspace-title">
-      <Link to="/projects">返回项目</Link>
       <h1>{query.data?.name ?? "项目画布"}</h1>
     </span>
   );

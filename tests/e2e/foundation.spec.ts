@@ -5923,6 +5923,16 @@ test("creation header is a compact single row and mode switching stays on the to
     .locator(".project-card")
     .filter({ hasText: "紧凑标题栏验证" })
     .click();
+  await expect(
+    page
+      .locator(".main-column > header")
+      .getByRole("link", { name: "返回项目", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page
+      .locator(".main-column > header")
+      .getByRole("heading", { name: "紧凑标题栏验证", exact: true }),
+  ).toBeVisible();
   const panel = page.getByRole("complementary", {
     name: "图片创作",
     exact: true,
@@ -5961,4 +5971,17 @@ test("creation header is a compact single row and mode switching stays on the to
       });
     }
   }
+  await page.getByRole("link", { name: "项目", exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "我的项目", exact: true }),
+  ).toBeVisible();
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "紧凑标题栏验证" })
+    .click();
+  await expect(
+    page
+      .locator(".main-column > header")
+      .getByRole("heading", { name: "紧凑标题栏验证", exact: true }),
+  ).toBeVisible();
 });

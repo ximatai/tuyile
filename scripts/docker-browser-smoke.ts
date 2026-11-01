@@ -72,6 +72,8 @@ try {
     .getByRole("button", { name: "提交图片任务", exact: true })
     .waitFor();
   await page.locator("header .header-usage").waitFor();
+  assert.equal(await page.locator(".workspace-title a").count(), 0);
+  await page.locator(".workspace-title h1").waitFor();
   const submit = await page
     .getByRole("button", { name: "提交图片任务", exact: true })
     .boundingBox();
