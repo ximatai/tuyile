@@ -5737,6 +5737,10 @@ test("anchored creation panel previews on hover, pins durably and dismisses with
   });
   await expect(page.locator(".react-flow__node-image")).toHaveCount(1);
   await expect(
+    page.locator(".react-flow__node-image .canvas-image-caption"),
+  ).toHaveText("点击选择验证.png");
+
+  await expect(
     canvas.getByRole("button", { name: "上传图片到画布", exact: true }),
   ).toBeEnabled();
   await expect(page.locator(".canvas-status")).toContainText("画布已保存");
@@ -6065,4 +6069,51 @@ test("creation header is a compact single row and mode switching stays on the to
       .locator(".main-column > header")
       .getByRole("heading", { name: "紧凑标题栏验证", exact: true }),
   ).toBeVisible();
+});
+
+test("canvas image captions remain separate from group titles", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await login(page);
+  await page.getByLabel("项目名称").fill("图片标题与分组验收");
+  await page.getByRole("button", { name: "创建项目", exact: true }).click();
+  await page
+    .locator(".project-card")
+    .filter({ hasText: "图片标题与分组验收" })
+    .click();
+  const canvas = page.getByRole("region", { name: "项目画布", exact: true });
+  const png = await (
+    await import("sharp")
+  )
+    .default({
+      create: { width: 300, height: 200, channels: 3, background: "#173D32" },
+    })
+    .png()
+    .toBuffer();
+  await canvas.locator('input[type="file"]').setInputFiles([
+    { name: "A · 品牌标志.png", mimeType: "image/png", buffer: png },
+    { name: "B · 产品插画.png", mimeType: "image/png", buffer: png },
+  ]);
+  const captions = page.locator(".canvas-image-caption");
+  await expect(captions).toHaveText(["A · 品牌标志.png", "B · 产品插画.png"]);
+  await canvas.focus();
+  await page.keyboard.press(
+    process.platform === "darwin" ? "Meta+a" : "Control+a",
+  );
+  await page.getByRole("button", { name: "分组", exact: true }).click();
+  const groupTitle = page.locator(".canvas-group > span");
+  await expect(groupTitle).toHaveText("图片分组");
+  for (const width of [1440, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    const title = (await groupTitle.boundingBox())!;
+    for (const caption of await captions.all()) {
+      const box = (await caption.boundingBox())!;
+      expect(box.y).toBeGreaterThan(title.y + title.height);
+    }
+    await page.screenshot({
+      path: `.codex-temp/captions-group-${width}.png`,
+      animations: "disabled",
+    });
+  }
 });

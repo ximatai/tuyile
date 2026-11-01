@@ -131,6 +131,11 @@ function ImageCard({
         setPreview(true);
       }}
     >
+      {data.label && (
+        <span className="canvas-image-caption" title={data.label}>
+          {data.label}
+        </span>
+      )}
       <Image.PreviewGroup
         items={[`/api/images/assets/${data.assetId}/original`]}
         preview={{ open: preview, onOpenChange: setPreview, motionName: "" }}

@@ -3877,3 +3877,9 @@ h3 {
 .agent-conversation-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); }
 .agent-conversation-heading .agent-clear-history { border: 0; box-shadow: none; background: transparent; color: var(--muted); padding: 0 6px; }
 .agent-conversation-heading .agent-clear-history:hover:not(:disabled) { color: #0062b0; background: #e6f4ff; }
+
+/* Names sit in the existing inter-node gap without changing image geometry. */
+.canvas-image-caption { position: absolute; left: 0; top: -22px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 18px; font-weight: 500; color: #344861; pointer-events: none; }
+
+.canvas-group { position: relative; }
+.canvas-group > span { position: absolute; left: 8px; top: -22px; max-width: calc(100% - 16px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; line-height: 18px; }
