@@ -1,3 +1,5 @@
+import { referencePrice, type ModelUsage } from "@tuyile/core";
+import { recordModelUsage } from "../model-usage.js";
 import { createHash } from "node:crypto";
 import {
   AppError,
@@ -256,11 +258,27 @@ export class PgAgentRepository
     );
     const attempt = (
       await this.c.query(
-        "INSERT INTO planning_attempts(job_id,ordinal,requested_tokens,state) VALUES($1,$2,$3,'dispatched') RETURNING id",
-        [work.id, row.calls + 1, budget],
+        "INSERT INTO planning_attempts(job_id,ordinal,requested_tokens,state,price_snapshot,created_at) VALUES($1,$2,$3,'dispatched',$4,clock_timestamp()) RETURNING id",
+        [
+          work.id,
+          row.calls + 1,
+          budget,
+          referencePrice(
+            (
+              await this.c.query(
+                "SELECT model FROM planning_provider_versions WHERE id=$1",
+                [row.provider_id],
+              )
+            ).rows[0].model,
+            "planning",
+          ),
+        ],
       )
     ).rows[0];
     return { attemptId: attempt.id, budget };
+  }
+  recordUsage(id: string, usage: ModelUsage) {
+    return recordModelUsage(this.c, "planning", id, usage);
   }
   async attemptResult(
     id: string,
@@ -268,6 +286,14 @@ export class PgAgentRepository
     reply?: PlanningReply,
     code?: string,
   ) {
+    if (reply)
+      await this.recordUsage(id, {
+        inputTokens: reply.inputTokens,
+        outputTokens: reply.outputTokens,
+        cachedInputTokens: null,
+        textInputTokens: reply.inputTokens,
+        imageInputTokens: 0,
+      });
     const row = (
       await this.c.query(
         "UPDATE planning_attempts SET state=$2,input_tokens=$3,output_tokens=$4,error_code=$5 WHERE id=$1 AND state='dispatched' RETURNING *",

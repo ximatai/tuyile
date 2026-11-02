@@ -627,7 +627,7 @@ it("searches the complete private project list before pagination and excludes de
     (await f.service.projects(f.principal)).some((p) => p.id === target.id),
   ).toBe(false);
   expect(await f.service.projects(f.principal, 0, "unique old")).toEqual([
-    target,
+    { ...target, coverAssetIds: [] },
   ]);
   const created = await f.service.createUser(
     f.principal,

@@ -61,7 +61,7 @@ const app = createApp(
   new CanvasService(new PgCanvasStore(pool)),
   new AgentService(creationStore, files),
   new LibraryService(new PgLibraryStore(pool)),
-  new AdministrationService(new PgAdministrationStore(pool)),
+  new AdministrationService(new PgAdministrationStore(pool), files),
   new ModelCatalogService(
     creationStore,
     new CompatibleModelDirectory(imageConfig.fakeAllowed),

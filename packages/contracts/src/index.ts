@@ -29,6 +29,7 @@ export interface UserView {
   enabled: boolean;
   activated: boolean;
   mustChangePassword?: boolean;
+  today?: AdminUserUsage;
 }
 export interface TemporaryPasswordResult {
   demo?: import("./demo.js").DemoStatus;
@@ -45,6 +46,7 @@ export interface SessionView {
   csrfToken: string;
 }
 export interface Project {
+  coverAssetIds?: string[];
   id: string;
   workspaceId: string;
   name: string;
@@ -88,3 +90,26 @@ export * from "./model-catalog.js";
 export * from "./image-model-knowledge.js";
 export * from "./project-draft.js";
 export * from "./demo.js";
+
+export interface AdminQuota {
+  used: number;
+  held: number;
+  limit: number;
+  earlierHeld: number;
+}
+export interface AdminUserUsage {
+  day: string;
+  images: AdminQuota;
+  planning: AdminQuota;
+}
+export interface AdminArtwork {
+  id: string;
+  width: number;
+  height: number;
+  model: string;
+  createdAt: string;
+}
+export interface AdminArtworksPage {
+  artworks: AdminArtwork[];
+  hasMore: boolean;
+}

@@ -186,6 +186,11 @@ export class ImageOperations {
       return r.execution.dispatch(t, ordinal, retry);
     });
   }
+  recordUsage(id: string, usage: import("./model-usage.js").ModelUsage) {
+    return this.store.write({ owners: [], attemptId: id }, (r) =>
+      r.execution.recordUsage(id, usage),
+    );
+  }
   async attemptResult(
     id: string,
     state: "received" | "rejected" | "unknown",

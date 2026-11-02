@@ -43,3 +43,23 @@ export interface AdminSummary {
     createdAt: string;
   }[];
 }
+
+export interface TokenTotals {
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens: number;
+  unknownUsage: number;
+  unknownCachedUsage: number;
+  pricedCalls: number;
+  referenceUsd: number | null;
+}
+export interface ModelUsageReport {
+  day: string;
+  month: string;
+  today: TokenTotals;
+  thisMonth: TokenTotals;
+  allTime: TokenTotals;
+  users: (TokenTotals & { id: string; username: string })[];
+  hasMore: boolean;
+}

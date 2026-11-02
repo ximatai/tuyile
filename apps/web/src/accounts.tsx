@@ -1,3 +1,4 @@
+import { QuotaCount, UserActivity } from "./user-activity";
 import { DemoRetry, DemoTemplateManager } from "./demo";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useSessionState } from "./session-state";
@@ -31,6 +32,7 @@ export function AdminPage({
 }) {
   const [passwordResult, setPasswordResult] =
     useState<TemporaryPasswordResult | null>(null);
+  const [artworksOnly, setArtworksOnly] = useState(false);
   const [selectedId, setSelectedId] = useState("");
   const [selectedAccount, setSelectedAccount] = useState<UserView | null>(null);
   const [search, setSearch] = useState("");
@@ -42,6 +44,7 @@ export function AdminPage({
     );
     return () => clearTimeout(timer);
   }, [search]);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [policyBusy, setPolicyBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -69,6 +72,7 @@ export function AdminPage({
   const api = client(csrfToken);
   const query = useInfiniteQuery({
     queryKey: state.key("admin-users", searchTerm),
+    refetchInterval: 15000,
     initialPageParam: 0,
     queryFn: ({ signal, pageParam }) =>
       api<UsersPage>(
@@ -88,14 +92,24 @@ export function AdminPage({
   const selectedUser =
     users.find((u) => u.id === selectedId) ??
     (selectedAccount?.id === selectedId ? selectedAccount : undefined);
-  async function selectUser(id: string) {
-    if (id === selectedId || policyBusy || busy) return;
+  async function selectUser(id: string, onlyArtworks = false) {
+    if (
+      (id === selectedId && onlyArtworks === artworksOnly) ||
+      policyBusy ||
+      busy
+    )
+      return;
     if (dirty && !(await confirm("有未保存的用户配置，放弃修改？"))) return;
     setDirty(false);
     setError("");
     setPasswordResult(null);
     setCopied(false);
-    setSelectedAccount(users.find((user) => user.id === id) ?? null);
+    setSelectedAccount(
+      users.find((user) => user.id === id) ??
+        (selectedUser?.id === id ? selectedUser : null),
+    );
+    setPreviewOpen(false);
+    setArtworksOnly(onlyArtworks);
     setSelectedId(id);
   }
   async function action(run: () => Promise<unknown>, successText?: string) {
@@ -284,12 +298,27 @@ export function AdminPage({
                       : "待激活/设置密码",
             },
             {
+              title: "今日图片",
+              key: "images",
+              render: (_, u) => (
+                <QuotaCount
+                  quota={u.today?.images}
+                  onUsedClick={() => void selectUser(u.id, true)}
+                />
+              ),
+            },
+            {
+              title: "今日规划",
+              key: "planning",
+              render: (_, u) => <QuotaCount quota={u.today?.planning} />,
+            },
+            {
               title: "操作",
               key: "actions",
               render: (_, u) => (
                 <div className="actions">
                   <Button type="button" onClick={() => void selectUser(u.id)}>
-                    管理
+                    查看
                   </Button>
                 </div>
               ),
@@ -321,24 +350,35 @@ export function AdminPage({
           )
         }
         extra={
-          selectedUser && selectedUser.id !== ownId ? (
+          selectedUser ? (
             <Dropdown
               trigger={["click"]}
               menu={{
                 items: [
                   {
-                    key: "reset",
-                    label: "重置密码",
-                    disabled: busy || policyBusy || !selectedUser.enabled,
-                  },
-                  {
-                    key: "enabled",
-                    label: selectedUser.enabled ? "停用账号" : "启用账号",
-                    danger: selectedUser.enabled,
+                    key: artworksOnly ? "settings" : "artworks",
+                    label: artworksOnly ? "账号设置" : "今日作品",
                     disabled: busy || policyBusy,
                   },
+                  ...(selectedUser.id !== ownId
+                    ? [
+                        {
+                          key: "reset",
+                          label: "重置密码",
+                          disabled: busy || policyBusy || !selectedUser.enabled,
+                        },
+                        {
+                          key: "enabled",
+                          label: selectedUser.enabled ? "停用账号" : "启用账号",
+                          danger: selectedUser.enabled,
+                          disabled: busy || policyBusy,
+                        },
+                      ]
+                    : []),
                 ],
                 onClick: ({ key }) => {
+                  if (key === "artworks" || key === "settings")
+                    void selectUser(selectedUser.id, key === "artworks");
                   if (key === "reset")
                     void (async () => {
                       if (
@@ -382,6 +422,7 @@ export function AdminPage({
         }
         open={!!selectedUser}
         size={560}
+        keyboard={!previewOpen}
         onClose={() => void selectUser("")}
         destroyOnHidden
       >
@@ -389,14 +430,27 @@ export function AdminPage({
           <>
             {error && <Notice error>{error}</Notice>}
             {passwordResult?.user.id === selectedId && temporaryResult}
-            <DemoRetry key={selectedUser.id} userId={selectedUser.id} />
-            <UserPolicyEditor
-              key={selectedUser.id}
-              userId={selectedUser.id}
-              csrfToken={csrfToken}
-              onDirtyChange={setDirty}
-              onBusyChange={setPolicyBusy}
-            />
+            {artworksOnly ? (
+              <UserActivity
+                key={`activity-${selectedUser.id}`}
+                user={selectedUser}
+                onPreviewChange={setPreviewOpen}
+              />
+            ) : (
+              <>
+                <UserPolicyEditor
+                  key={selectedUser.id}
+                  userId={selectedUser.id}
+                  csrfToken={csrfToken}
+                  onDirtyChange={setDirty}
+                  onBusyChange={setPolicyBusy}
+                />
+                <DemoRetry
+                  key={`demo-${selectedUser.id}`}
+                  userId={selectedUser.id}
+                />
+              </>
+            )}
           </>
         )}
       </Drawer>

@@ -1,3 +1,5 @@
+import { referencePrice, type ModelUsage } from "@tuyile/core";
+import { recordModelUsage } from "../model-usage.js";
 import { checkImageCapability } from "@tuyile/core";
 import type { TaskRow, AssetRow } from "./rows.js";
 import {
@@ -207,8 +209,14 @@ export class PgExecutionRepository extends PgCreationContext {
       throw new AppError("ATTEMPT_LIMIT", 409);
     const row = (
       await c.query(
-        "INSERT INTO image_attempts(workspace_id,task_id,ordinal,retry,state) VALUES($1,$2,$3,$4,'dispatched') RETURNING id",
-        [t.workspaceId, t.id, ordinal, retry],
+        "INSERT INTO image_attempts(workspace_id,task_id,ordinal,retry,state,price_snapshot,created_at) VALUES($1,$2,$3,$4,'dispatched',$5,clock_timestamp()) RETURNING id",
+        [
+          t.workspaceId,
+          t.id,
+          ordinal,
+          retry,
+          referencePrice(t.input.model, "image"),
+        ],
       )
     ).rows[0];
     await c.query(
@@ -225,6 +233,9 @@ export class PgExecutionRepository extends PgCreationContext {
             apiKey: this.decrypt(provider.secret_cipher),
           }) satisfies ImageExecutionConfig,
     };
+  }
+  recordUsage(id: string, usage: ModelUsage) {
+    return recordModelUsage(this.c, "image", id, usage);
   }
   async attemptResult(
     id: string,

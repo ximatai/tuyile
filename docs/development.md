@@ -61,7 +61,7 @@ unset ADMIN_USERNAME ADMIN_PASSWORD
 
 ## 数据库与配置
 
-PostgreSQL初始化分别建立migrator和runtime角色：前者拥有tuyile schema，后者只有schema usage和业务表DML，不能改schema或迁移记录。迁移显式执行并校验checksum；API/Worker只检查schema兼容性和运行身份，发现缺失、不兼容或过度授权即拒绝启动。当前迁移1—25，实际版本以[migrations](../migrations)和启动校验为准。
+PostgreSQL初始化分别建立migrator和runtime角色：前者拥有tuyile schema，后者只有schema usage和业务表DML，不能改schema或迁移记录。迁移显式执行并校验checksum；API/Worker只检查schema兼容性和运行身份，发现缺失、不兼容或过度授权即拒绝启动。当前迁移1—29，实际版本以[migrations](../migrations)和启动校验为准。
 
 模型服务通过命名连接管理Base URL和加密Key，从GET /models取得候选，也可手动登记；对话/图片分别发布开放池并指定默认项。目录刷新不自动改动开放范围，能力由管理员声明，已接受任务绑定不可变版本。普通用户只收到允许模型与能力，不收到地址或Key；个人策略按池条目ID与全局开放池取交集。
 
@@ -178,3 +178,5 @@ CI复用这些合成验证，不执行公开部署。远程CI是否通过以其�
 工作流只在 PR 和主分支 push 触发，PR 新提交取消旧运行；固定的 foundation 检查始终存在，避免按路径跳过整个工作流导致门禁悬挂。CI 连续累计3项失败即停止，成功运行不减少该层已选套件覆盖；普通浏览器操作10秒超时、导航30秒，明确指定的长任务等待保持原限制。
 
 主分支执行完整端到端及容器冒烟。`test:docker` 仍包含真实API/Worker、配额、私有文件和双账号隔离，浏览器只验证构建版登录、图片预览、CSP/nonce、弹窗滚动锁/焦点与确认框。此前的广泛构建版业务回归保留为 `corepack pnpm test:docker:full`。UI共享组件、补丁、部署、构建配置等高风险变更在PR执行扩展容器验收；发布前通过 GitHub Actions 的 Verify → Run workflow 手动执行全量（含扩展容器回归）。此次分层接受少量普通界面边角回归到主分支全量时才发现的风险，不自动部署。
+
+迁移0028补齐token记录字段，不重置额度或任务。升级前历史生图未保存用量，无法从图片或提示词准确反推；历史规划只保留已记录token，不补造缓存和费用。用量/费用回归使用合成响应与Provider，不调用付费模型。

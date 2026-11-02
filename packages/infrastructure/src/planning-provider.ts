@@ -1,3 +1,4 @@
+import { parseModelUsage, type ModelUsage } from "@tuyile/core";
 import { composeCreativePrompt } from "@tuyile/contracts";
 import {
   PlanningCallError,
@@ -61,6 +62,7 @@ export class CompatiblePlanningProvider implements PlanningProvider {
     budget: number,
     signal: AbortSignal,
     images: readonly PlanningImage[] = [],
+    onUsage?: (usage: ModelUsage) => Promise<void>,
   ): Promise<PlanningReply> {
     if (
       !Number.isInteger(budget) ||
@@ -114,6 +116,16 @@ export class CompatiblePlanningProvider implements PlanningProvider {
       } catch {
         /* Protocol tests may send plain text instead of a creation request. */
       }
+      await onUsage?.(
+        parseModelUsage(
+          {
+            prompt_tokens: 1,
+            completion_tokens: 1,
+            prompt_tokens_details: { cached_tokens: 0 },
+          },
+          "planning",
+        ),
+      );
       return {
         text: JSON.stringify({ message: "合成规划服务已响应", steps }),
         inputTokens: 1,
@@ -198,6 +210,7 @@ export class CompatiblePlanningProvider implements PlanningProvider {
       }
       phase = "json";
       const json = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+      await onUsage?.(parseModelUsage(json?.usage, "planning"));
       const text = json?.choices?.[0]?.message?.content;
       if (
         typeof text !== "string" ||

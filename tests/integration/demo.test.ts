@@ -97,6 +97,10 @@ it("copies the approved snapshot privately with example prompts/lineage but no c
   const document = await canvas.load(a.principal, ready.projectId!);
   expect(document.document.nodes).toHaveLength(3);
   const meta = (await demo.project(a.principal, ready.projectId!))!;
+  const covers = (await f.service.projects(a.principal)).find(
+    (p) => p.id === ready.projectId,
+  )!.coverAssetIds!;
+  expect([...covers].sort()).toEqual(meta.images.map((i) => i.assetId).sort());
   expect(meta.images.map((i) => i.prompt).sort()).toEqual([
     "Synthetic example A · brand",
     "Synthetic example B · product",

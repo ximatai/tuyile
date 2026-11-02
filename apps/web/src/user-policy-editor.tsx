@@ -8,7 +8,6 @@ import {
   ChoiceField,
   Notice,
   Select,
-  Collapse,
   Radio,
   Checkbox,
   Input,
@@ -84,6 +83,9 @@ export function UserPolicyEditor({
         queryKey: state.key("image-policy", userId),
       });
       await state.queries.invalidateQueries({ queryKey: state.key("usage") });
+      await state.queries.invalidateQueries({
+        queryKey: state.key("admin-users"),
+      });
       setDraft(null);
       onDirtyChange(false);
       notifySuccess("已保存");
@@ -185,51 +187,31 @@ export function UserPolicyEditor({
               />
             </label>
           )}
-          <p className="hint">
-            {scope === "all"
-              ? "跟随模型服务中的开放范围。"
-              : "仅允许使用选中的模型。"}
-          </p>
-          <Collapse
-            ghost
-            items={[
-              {
-                key: "advanced",
-                label: "高级设置",
-                children: (
-                  <>
-                    <p className="hint">一般无需修改，保留现有设置即可。</p>
-                    <div className="parameter-grid">
-                      {advancedFields.map(({ key, label, min, max }) => (
-                        <Field
-                          key={key}
-                          label={label}
-                          type="number"
-                          min={min}
-                          max={max}
-                          required
-                          value={current[key]}
-                          onChange={(e) =>
-                            patch({ [key]: Number(e.target.value) })
-                          }
-                        />
-                      ))}
-                    </div>
-                    <ChoiceField
-                      label="图片质量上限"
-                      value={current.maxQuality}
-                      onValueChange={(v) =>
-                        patch({ maxQuality: v as ImagePolicy["maxQuality"] })
-                      }
-                      options={[
-                        { value: "low", label: "低" },
-                        { value: "medium", label: "中" },
-                        { value: "high", label: "高" },
-                      ]}
-                    />
-                  </>
-                ),
-              },
+          <h3>生成限制</h3>
+          <div className="parameter-grid">
+            {advancedFields.map(({ key, label, min, max }) => (
+              <Field
+                key={key}
+                label={label}
+                type="number"
+                min={min}
+                max={max}
+                required
+                value={current[key]}
+                onChange={(e) => patch({ [key]: Number(e.target.value) })}
+              />
+            ))}
+          </div>
+          <ChoiceField
+            label="图片质量上限"
+            value={current.maxQuality}
+            onValueChange={(v) =>
+              patch({ maxQuality: v as ImagePolicy["maxQuality"] })
+            }
+            options={[
+              { value: "low", label: "低" },
+              { value: "medium", label: "中" },
+              { value: "high", label: "高" },
             ]}
           />
           <div className="user-policy-save">

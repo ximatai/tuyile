@@ -81,7 +81,7 @@ export function AuthPage() {
         <p className="muted">
           {redeem
             ? "设置密码后，使用管理员提供的账号登录。"
-            : "使用管理员为你创建的账号继续。"}
+            : "管理员可查看生成作品及用量。"}
         </p>
         {done && <Notice>密码已设置，请登录。</Notice>}
         <form

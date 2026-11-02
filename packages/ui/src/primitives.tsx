@@ -93,6 +93,7 @@ export function Button({
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
   loading?: boolean;
+  variant?: ComponentProps<typeof AntButton>["variant"];
   ref?: ComponentProps<typeof AntButton>["ref"];
 }) {
   return (

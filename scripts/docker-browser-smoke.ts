@@ -50,10 +50,11 @@ try {
   await page.keyboard.press("Escape");
   await page.getByRole("link", { name: "项目", exact: true }).click();
   const deleteTrigger = page.getByRole("button", {
-    name: "删除项目 Docker synthetic acceptance",
+    name: "项目操作 Docker synthetic acceptance",
     exact: true,
   });
   await deleteTrigger.click();
+  await page.getByRole("menuitem", { name: "删除项目", exact: true }).click();
   const confirm = page.getByRole("dialog", { name: "请确认", exact: true });
   await expect(confirm).toBeVisible();
   await confirm.getByRole("button", { name: "取消", exact: true }).click();

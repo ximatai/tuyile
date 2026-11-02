@@ -4,12 +4,52 @@ import {
   executionSettingsInput,
   planningPolicyInput,
   id,
+  pageOffset,
+  z,
 } from "@tuyile/contracts";
 import type { ApiEnv } from "./app.js";
 export function administrationRoutes(
   app: Hono<ApiEnv>,
   service: AdministrationService,
 ) {
+  app.get("/api/admin/model-usage", async (c) =>
+    c.json(
+      await service.tokenUsage(
+        c.get("session").user,
+        z
+          .enum(["today", "month", "all"])
+          .default("month")
+          .parse(c.req.query("period")),
+        pageOffset.parse(c.req.query("offset")),
+      ),
+    ),
+  );
+  app.get("/api/admin/users/:id/artworks", async (c) => {
+    const artworks = await service.artworks(
+      c.get("session").user,
+      id.parse(c.req.param("id")),
+      pageOffset.parse(c.req.query("offset")),
+    );
+    return c.json({
+      artworks: artworks.slice(0, 5),
+      hasMore: artworks.length > 5,
+    });
+  });
+  app.get("/api/admin/users/:id/artworks/:assetId/:variant", async (c) => {
+    const variant = z
+      .enum(["preview", "original"])
+      .parse(c.req.param("variant"));
+    const result = await service.bytes(
+      c.get("session").user,
+      id.parse(c.req.param("id")),
+      id.parse(c.req.param("assetId")),
+      variant === "preview",
+    );
+    c.header("Content-Type", result.mime);
+    c.header("Cache-Control", "private, no-store");
+    c.header("X-Content-Type-Options", "nosniff");
+    return c.body(Buffer.from(result.bytes));
+  });
   app.get("/api/image-admin/execution-settings", async (c) =>
     c.json(await service.settings(c.get("session").user)),
   );

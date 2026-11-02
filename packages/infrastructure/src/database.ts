@@ -2,6 +2,7 @@ import pg from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import {
   AppError,
+  shanghaiDay,
   type Repository,
   type Store,
   type UserRecord,
@@ -36,6 +37,7 @@ const project = (row: any): Project => ({
   workspaceId: row.workspace_id,
   name: row.name,
   createdAt: row.created_at.toISOString(),
+  ...(row.cover_asset_ids ? { coverAssetIds: row.cover_asset_ids } : {}),
 });
 class PgRepository implements Repository {
   constructor(private c: pg.PoolClient) {}
@@ -110,8 +112,12 @@ class PgRepository implements Repository {
   async listUsers(offset = 0, search = ""): Promise<UserView[]> {
     return (
       await this.c.query(
-        `SELECT id,username,role,enabled,password_hash IS NOT NULL AS activated, must_change_password AS "mustChangePassword" FROM users WHERE ($2='' OR strpos(username,$2)>0) ORDER BY created_at DESC,id LIMIT 51 OFFSET $1`,
-        [offset, search],
+        `SELECT u.id,username,role,enabled,password_hash IS NOT NULL AS activated, must_change_password AS "mustChangePassword",
+jsonb_build_object('day',$3::text,'images',jsonb_build_object('used',coalesce(i.used,0),'held',coalesce(i.held,0),'limit',coalesce(ip.image_limit,CASE WHEN role='admin' THEN -1 ELSE 100 END),'earlierHeld',(SELECT coalesce(sum(held),0) FROM image_days WHERE user_id=u.id AND day<$3::date)),
+'planning',jsonb_build_object('used',coalesce(d.used,0),'held',coalesce(d.held,0),'limit',coalesce(pp.daily_limit,50),'earlierHeld',(SELECT coalesce(sum(held),0) FROM planning_days WHERE user_id=u.id AND day<$3::date))) AS today
+FROM users u LEFT JOIN image_policies ip ON ip.user_id=u.id LEFT JOIN planning_policies pp ON pp.user_id=u.id LEFT JOIN image_days i ON i.user_id=u.id AND i.day=$3::date LEFT JOIN planning_days d ON d.user_id=u.id AND d.day=$3::date
+WHERE ($2='' OR strpos(username,$2)>0) ORDER BY u.created_at DESC,u.id LIMIT 51 OFFSET $1`,
+        [offset, search, shanghaiDay(new Date())],
       )
     ).rows;
   }
@@ -185,7 +191,17 @@ class PgRepository implements Repository {
   async listProjects(ws: string, offset = 0, search = "") {
     return (
       await this.c.query(
-        "SELECT * FROM projects WHERE workspace_id=$1 AND deleted_at IS NULL AND ($3='' OR strpos(lower(name),lower($3))>0) ORDER BY created_at DESC,id LIMIT 51 OFFSET $2",
+        `WITH page AS (SELECT * FROM projects WHERE workspace_id=$1 AND deleted_at IS NULL AND ($3='' OR strpos(lower(name),lower($3))>0) ORDER BY created_at DESC,id LIMIT 51 OFFSET $2)
+        SELECT p.*, ARRAY(SELECT covers.id FROM (
+          SELECT a.id,o.created_at FROM image_tasks t JOIN image_outputs o ON o.task_id=t.id AND o.workspace_id=t.workspace_id
+          JOIN image_assets a ON a.id=o.asset_id AND a.workspace_id=o.workspace_id
+          WHERE t.project_id=p.id AND t.workspace_id=$1 AND a.state='ready'
+          UNION ALL
+          SELECT a.id,a.created_at FROM demo_projects d CROSS JOIN LATERAL jsonb_array_elements(d.images) i
+          JOIN image_assets a ON a.id=(i->>'assetId')::uuid AND a.workspace_id=d.workspace_id
+          WHERE d.project_id=p.id AND d.workspace_id=$1 AND a.state='ready'
+        ) covers ORDER BY covers.created_at DESC,covers.id DESC LIMIT 3) AS cover_asset_ids
+        FROM page p ORDER BY p.created_at DESC,p.id`,
         [ws, offset, search],
       )
     ).rows.map(project);
@@ -232,7 +248,7 @@ export async function assertSchema(pool: pg.Pool) {
     "SELECT version FROM schema_migrations ORDER BY version",
   );
   if (
-    result.rows.length !== 25 ||
+    result.rows.length !== 29 ||
     result.rows[0].version !== 1 ||
     result.rows[1].version !== 2 ||
     result.rows[2].version !== 3 ||
@@ -257,7 +273,11 @@ export async function assertSchema(pool: pg.Pool) {
     result.rows[21].version !== 22 ||
     result.rows[22].version !== 23 ||
     result.rows[23].version !== 24 ||
-    result.rows[24].version !== 25
+    result.rows[24].version !== 25 ||
+    result.rows[25].version !== 26 ||
+    result.rows[26].version !== 27 ||
+    result.rows[27].version !== 28 ||
+    result.rows[28].version !== 29
   )
     throw new Error("SCHEMA_VERSION_MISMATCH_RUN_MIGRATIONS");
   const r = await pool.query(
