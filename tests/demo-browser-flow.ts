@@ -332,8 +332,9 @@ export async function verifyDemoOnboarding(
     await user
       .locator(".project-card-shell")
       .filter({ hasText: source.name })
-      .getByRole("button", { name: `删除项目 ${source.name}`, exact: true })
+      .getByRole("button", { name: `项目操作 ${source.name}`, exact: true })
       .click();
+    await user.getByRole("menuitem", { name: "删除项目", exact: true }).click();
     await user
       .getByRole("dialog", { name: "请确认", exact: true })
       .getByRole("button", { name: "确认", exact: true })

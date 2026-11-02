@@ -49,9 +49,12 @@ test("desktop and mobile: persistent projects, initial password, account boundar
 }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await login(page);
+  await page.getByRole("button", { name: "新建项目", exact: true }).click();
   await page.getByLabel("项目名称").fill("品牌视觉方案");
   await page.getByRole("button", { name: "创建项目", exact: true }).click();
-  await expect(page.getByLabel("项目名称")).toHaveValue("");
+  await expect(
+    page.getByRole("dialog", { name: "新建项目", exact: true }),
+  ).toBeHidden();
   await page
     .locator(".project-card")
     .filter({ hasText: "品牌视觉方案" })
@@ -185,6 +188,7 @@ test("desktop and mobile: persistent projects, initial password, account boundar
     member.getByRole("link", { name: "用户管理", exact: true }),
   ).toHaveCount(0);
   await expect(member.getByText("从第一个项目开始")).toBeVisible();
+  await member.getByRole("button", { name: "新建项目", exact: true }).click();
   await member.getByLabel("项目名称").fill("我的插画");
   await member.getByRole("button", { name: "创建项目", exact: true }).click();
   await expect(member.getByRole("heading", { name: "我的插画" })).toBeVisible();
@@ -382,6 +386,7 @@ test("background creation survives refresh, page closure and ordinary logout, wi
 }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await login(page);
+  await page.getByRole("button", { name: "新建项目", exact: true }).click();
   await page.getByLabel("项目名称").fill("后台创作验证");
   await page.getByRole("button", { name: "创建项目", exact: true }).click();
   await page
@@ -1273,6 +1278,7 @@ test("desktop canvas saves geometry, handles conflicts and never replaces remove
   test.setTimeout(150000);
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page);
+  await page.getByRole("button", { name: "新建项目", exact: true }).click();
   await page.getByLabel("项目名称").fill("画布保存验证");
   await page.getByRole("button", { name: "创建项目", exact: true }).click();
   await page
@@ -1739,6 +1745,7 @@ test("Agent plans remain unexecuted until confirmation and edited sequential pla
     page.getByRole("heading", { name: "我的项目", exact: true }),
   ).toBeVisible();
   await page.getByRole("link", { name: "项目", exact: true }).click();
+  await page.getByRole("button", { name: "新建项目", exact: true }).click();
   await page.getByLabel("项目名称").fill("Agent 顺序创作");
   await page.getByRole("button", { name: "创建项目", exact: true }).click();
   await page
@@ -2053,6 +2060,7 @@ test("Gallery reuse, ZIP export, favorites, prompt application and project clean
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page);
+  await page.getByRole("button", { name: "新建项目", exact: true }).click();
   await page.getByLabel("项目名称").fill("素材复用目标");
   await page.getByRole("button", { name: "创建项目", exact: true }).click();
   const targetHref = await page
@@ -2240,8 +2248,9 @@ test("Gallery reuse, ZIP export, favorites, prompt application and project clean
   await expect(page.locator(".favorite-card")).toHaveCount(0);
   await page.getByRole("link", { name: "项目", exact: true }).click();
   await page
-    .getByRole("button", { name: "删除项目 素材复用目标", exact: true })
+    .getByRole("button", { name: "项目操作 素材复用目标", exact: true })
     .click();
+  await page.getByRole("menuitem", { name: "删除项目", exact: true }).click();
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "确认", exact: true })
@@ -2373,6 +2382,7 @@ test("administrators add a service and users select same-named models from the c
   );
   expect(entry.isDefault).toBe(false);
   await page.getByRole("link", { name: "项目", exact: true }).click();
+  await page.getByRole("button", { name: "新建项目", exact: true }).click();
   await page.getByLabel("项目名称", { exact: true }).fill("多服务选择验收");
   await page.getByRole("button", { name: "创建项目", exact: true }).click();
   await page
@@ -3587,6 +3597,7 @@ test("custom size expansion reveals both fields in the editor scroll area", asyn
       },
     });
   });
+  await page.getByRole("button", { name: "新建项目", exact: true }).click();
   await page.getByLabel("项目名称", { exact: true }).fill("自定义尺寸滚动验收");
   await page.getByRole("button", { name: "创建项目", exact: true }).click();
   await page
@@ -3673,6 +3684,7 @@ test("style library supports public maintenance and private saved copies without
   await page.screenshot({ path: ".codex-temp/style-management-tabs.png" });
 
   await page.getByRole("link", { name: "项目", exact: true }).click();
+  await page.getByRole("button", { name: "新建项目", exact: true }).click();
   await page.getByLabel("项目名称", { exact: true }).fill("风格库验收");
   await page.getByRole("button", { name: "创建项目", exact: true }).click();
   await page.locator(".project-card").filter({ hasText: "风格库验收" }).click();
@@ -4839,6 +4851,7 @@ test("shared creation controls respect parent locks and dismiss helpers across m
   page,
 }) => {
   await login(page);
+  await page.getByRole("button", { name: "新建项目", exact: true }).click();
   await page.getByLabel("项目名称", { exact: true }).fill("共享创作控件验收");
   await page.getByRole("button", { name: "创建项目", exact: true }).click();
   await page.getByRole("link", { name: /共享创作控件验收 .*创建/ }).click();
@@ -4935,6 +4948,7 @@ test("canvas keyboard shortcuts stay scoped and persist grouped node copies", as
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page);
+  await page.getByRole("button", { name: "新建项目", exact: true }).click();
   await page.getByLabel("项目名称").fill("快捷键合成验证");
   await page.getByRole("button", { name: "创建项目", exact: true }).click();
   await page
@@ -5046,6 +5060,7 @@ test("canvas uploads and reference uploads share private assets without generati
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page);
+  await page.getByRole("button", { name: "新建项目", exact: true }).click();
   await page.getByLabel("项目名称").fill("上传图片到画布验证");
   await page.getByRole("button", { name: "创建项目", exact: true }).click();
   await page
@@ -5175,6 +5190,7 @@ test("late canvas upload responses cannot write into another project and invalid
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page);
   for (const name of ["上传晚响应目标", "上传晚响应来源"]) {
+    await page.getByRole("button", { name: "新建项目", exact: true }).click();
     await page.getByLabel("项目名称").fill(name);
     await page.getByRole("button", { name: "创建项目", exact: true }).click();
     await expect(
@@ -5283,6 +5299,7 @@ test("canvas accepts local image drops and native screenshot paste without inter
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page);
+  await page.getByRole("button", { name: "新建项目", exact: true }).click();
   await page.getByLabel("项目名称").fill("拖放与截图验证");
   await page.getByRole("button", { name: "创建项目", exact: true }).click();
   await page
@@ -5412,6 +5429,7 @@ test("canvas batches multiple uploads and drops, packs around existing nodes and
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page);
+  await page.getByRole("button", { name: "新建项目", exact: true }).click();
   await page.getByLabel("项目名称").fill("批量导入排列验证");
   await page.getByRole("button", { name: "创建项目", exact: true }).click();
   await page
@@ -5538,6 +5556,7 @@ test("creation panel collapses into a rail without changing viewport or drafts a
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page);
+  await page.getByRole("button", { name: "新建项目", exact: true }).click();
   await page.getByLabel("项目名称").fill("创作面板折叠验证");
   await page.getByRole("button", { name: "创建项目", exact: true }).click();
   await page
@@ -5753,6 +5772,7 @@ test("collapsed creation panel retains unsaved Agent edits and closes its settin
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page);
+  await page.getByRole("button", { name: "新建项目", exact: true }).click();
   await page.getByLabel("项目名称").fill("折叠保留Agent方案");
   await page.getByRole("button", { name: "创建项目", exact: true }).click();
   await page
@@ -5869,6 +5889,7 @@ test("anchored creation panel previews on hover, pins durably and dismisses with
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page);
+  await page.getByRole("button", { name: "新建项目", exact: true }).click();
   await page.getByLabel("项目名称").fill("锚定面板交互验证");
   await page.getByRole("button", { name: "创建项目", exact: true }).click();
   await page
@@ -6014,6 +6035,7 @@ test("two tool-window rail icons switch independent drafts and hiding preserves 
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page);
+  await page.getByRole("button", { name: "新建项目", exact: true }).click();
   await page.getByLabel("项目名称").fill("双面板图标验证");
   await page.getByRole("button", { name: "创建项目", exact: true }).click();
   await page
@@ -6123,6 +6145,7 @@ test("creation header is a compact single row and mode switching stays on the to
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page);
+  await page.getByRole("button", { name: "新建项目", exact: true }).click();
   await page.getByLabel("项目名称").fill("紧凑标题栏验证");
   await page.getByRole("button", { name: "创建项目", exact: true }).click();
   await page
@@ -6247,6 +6270,7 @@ test("canvas image captions remain separate from group titles", async ({
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page);
+  await page.getByRole("button", { name: "新建项目", exact: true }).click();
   await page.getByLabel("项目名称").fill("图片标题与分组验收");
   await page.getByRole("button", { name: "创建项目", exact: true }).click();
   await page
@@ -6414,6 +6438,7 @@ test("historical review does not obscure a later successful generation", async (
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page);
+  await page.getByRole("button", { name: "新建项目", exact: true }).click();
   await page.getByLabel("项目名称").fill("历史核验提示验收");
   await page.getByRole("button", { name: "创建项目", exact: true }).click();
   await page

@@ -11,9 +11,10 @@ async function createProject(page: Page) {
   const apiUrl = (path: string) => new URL(path, origin).toString();
   await page.goto(new URL("/projects", page.url()).toString());
   const name = `文案验收-${randomUUID().slice(0, 8)}`;
+  await page.getByRole("button", { name: "新建项目", exact: true }).click();
   await page.getByRole("textbox", { name: "项目名称", exact: true }).fill(name);
   await page.getByRole("button", { name: "创建项目", exact: true }).click();
-  await page.getByRole("link", { name, exact: true }).click();
+  await page.locator(".project-card").filter({ hasText: name }).click();
 
   return { origin, apiUrl, name };
 }

@@ -910,3 +910,37 @@ it("rejects the combined prompt budget before reserving images", async () => {
   ).rejects.toMatchObject({ code: "PROMPT_TOO_LONG" });
   expect((await f.creation.usage(f.principal)).held).toBe(0);
 });
+
+it("lists at most three recent private generated covers per project and excludes uploads and deleted assets", async () => {
+  await f.creation.upload(f.principal, f.png);
+  expect((await f.service.projects(f.principal))[0].coverAssetIds).toEqual([]);
+  const task = await f.creation.submit(f.principal, f.input({ count: 4 }));
+  await f.worker();
+  const result = await f.done(task.id);
+  const expected = [...result.outputs]
+    .reverse()
+    .slice(0, 3)
+    .map((a) => a.id);
+  expect((await f.service.projects(f.principal))[0].coverAssetIds).toEqual(
+    expected,
+  );
+  await f.creation.delete(f.principal, expected[0]);
+  const covers = (await f.service.projects(f.principal))[0].coverAssetIds!;
+  expect(covers).toHaveLength(3);
+  expect(covers).not.toContain(expected[0]);
+  const issued = await f.service.createUser(
+    f.principal,
+    "project-covers-member",
+  );
+  await finishTemporaryPassword(f.service, issued, testPassword);
+  const session = await f.service.login(issued.user.username, testPassword);
+  const member = (await f.service.authenticate(session.token)).user;
+  const own = await f.service.createProject(member, "Member empty card");
+  expect(await f.service.projects(member)).toEqual([
+    expect.objectContaining({ id: own.id, coverAssetIds: [] }),
+  ]);
+  await expect(f.creation.bytes(member, covers[0], true)).rejects.toMatchObject(
+    { code: "NOT_FOUND" },
+  );
+  expect(await f.service.projects(f.principal, 0, "not-a-project")).toEqual([]);
+});

@@ -46,6 +46,7 @@ export interface SessionView {
   csrfToken: string;
 }
 export interface Project {
+  coverAssetIds?: string[];
   id: string;
   workspaceId: string;
   name: string;

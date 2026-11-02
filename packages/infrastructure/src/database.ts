@@ -37,6 +37,7 @@ const project = (row: any): Project => ({
   workspaceId: row.workspace_id,
   name: row.name,
   createdAt: row.created_at.toISOString(),
+  ...(row.cover_asset_ids ? { coverAssetIds: row.cover_asset_ids } : {}),
 });
 class PgRepository implements Repository {
   constructor(private c: pg.PoolClient) {}
@@ -190,7 +191,17 @@ WHERE ($2='' OR strpos(username,$2)>0) ORDER BY u.created_at DESC,u.id LIMIT 51 
   async listProjects(ws: string, offset = 0, search = "") {
     return (
       await this.c.query(
-        "SELECT * FROM projects WHERE workspace_id=$1 AND deleted_at IS NULL AND ($3='' OR strpos(lower(name),lower($3))>0) ORDER BY created_at DESC,id LIMIT 51 OFFSET $2",
+        `WITH page AS (SELECT * FROM projects WHERE workspace_id=$1 AND deleted_at IS NULL AND ($3='' OR strpos(lower(name),lower($3))>0) ORDER BY created_at DESC,id LIMIT 51 OFFSET $2)
+        SELECT p.*, ARRAY(SELECT covers.id FROM (
+          SELECT a.id,o.created_at FROM image_tasks t JOIN image_outputs o ON o.task_id=t.id AND o.workspace_id=t.workspace_id
+          JOIN image_assets a ON a.id=o.asset_id AND a.workspace_id=o.workspace_id
+          WHERE t.project_id=p.id AND t.workspace_id=$1 AND a.state='ready'
+          UNION ALL
+          SELECT a.id,a.created_at FROM demo_projects d CROSS JOIN LATERAL jsonb_array_elements(d.images) i
+          JOIN image_assets a ON a.id=(i->>'assetId')::uuid AND a.workspace_id=d.workspace_id
+          WHERE d.project_id=p.id AND d.workspace_id=$1 AND a.state='ready'
+        ) covers ORDER BY covers.created_at DESC,covers.id DESC LIMIT 3) AS cover_asset_ids
+        FROM page p ORDER BY p.created_at DESC,p.id`,
         [ws, offset, search],
       )
     ).rows.map(project);
@@ -237,7 +248,7 @@ export async function assertSchema(pool: pg.Pool) {
     "SELECT version FROM schema_migrations ORDER BY version",
   );
   if (
-    result.rows.length !== 26 ||
+    result.rows.length !== 27 ||
     result.rows[0].version !== 1 ||
     result.rows[1].version !== 2 ||
     result.rows[2].version !== 3 ||
@@ -263,7 +274,8 @@ export async function assertSchema(pool: pg.Pool) {
     result.rows[22].version !== 23 ||
     result.rows[23].version !== 24 ||
     result.rows[24].version !== 25 ||
-    result.rows[25].version !== 26
+    result.rows[25].version !== 26 ||
+    result.rows[26].version !== 27
   )
     throw new Error("SCHEMA_VERSION_MISMATCH_RUN_MIGRATIONS");
   const r = await pool.query(

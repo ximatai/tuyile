@@ -4209,3 +4209,19 @@ h3 {
 .user-policy-editor form > h3 { margin: 18px 0 10px; padding-top: 14px; border-top: 1px solid var(--ant-color-border-secondary, #edf0f4); }
 .user-policy-editor .parameter-grid { gap: 10px 12px; }
 .user-policy-editor .user-policy-save { margin-top: 14px; }
+
+.project-grid { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 20px; }
+.project-card-shell { position: relative; min-width: 0; }
+.project-card-shell > .project-card { display: block; padding: 0; overflow: hidden; border-radius: 10px; }
+.project-cover { position: relative; aspect-ratio: 16 / 10; display: grid; place-items: center; background: #edf3f9; overflow: hidden; }
+.project-cover > svg { color: #9aafc3; margin: 0; }
+.project-cover-layer { position: absolute; width: 72%; height: 74%; object-fit: contain; background: white; border: 5px solid white; border-radius: 5px; box-shadow: 0 3px 12px #29436024; }
+.project-cover-depth-0 { left: 11%; top: 19%; z-index: 3; transform: rotate(-4deg); }
+.project-cover-depth-1 { left: 17%; top: 14%; z-index: 2; transform: rotate(3deg); }
+.project-cover-depth-2 { left: 22%; top: 10%; z-index: 1; transform: rotate(9deg); }
+.project-cover-count-1 .project-cover-layer { left: 14%; top: 13%; transform: none; }
+.project-card-caption { padding: 14px 16px; }
+.project-card-caption h2 { margin: 0 0 5px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.project-card-menu.ant-btn { position: absolute; right: 10px; top: 10px; z-index: 4; width: 28px; height: 28px; padding: 0; border: 0; box-shadow: 0 1px 6px #29436012; }
+.create-project { display: grid; margin: 0; max-width: none; }
+.create-project > .button { justify-self: end; }
