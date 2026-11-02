@@ -1,3 +1,4 @@
+import { QuotaCount, UserActivity } from "./user-activity";
 import { DemoRetry, DemoTemplateManager } from "./demo";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useSessionState } from "./session-state";
@@ -18,6 +19,7 @@ import {
   Drawer,
   Dropdown,
   Input,
+  Collapse,
 } from "@tuyile/ui";
 import { client, notifySessionChange } from "./api";
 import { Ellipsis, Plus, Search } from "lucide-react";
@@ -42,6 +44,7 @@ export function AdminPage({
     );
     return () => clearTimeout(timer);
   }, [search]);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [policyBusy, setPolicyBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -69,6 +72,7 @@ export function AdminPage({
   const api = client(csrfToken);
   const query = useInfiniteQuery({
     queryKey: state.key("admin-users", searchTerm),
+    refetchInterval: 15000,
     initialPageParam: 0,
     queryFn: ({ signal, pageParam }) =>
       api<UsersPage>(
@@ -96,6 +100,7 @@ export function AdminPage({
     setPasswordResult(null);
     setCopied(false);
     setSelectedAccount(users.find((user) => user.id === id) ?? null);
+    setPreviewOpen(false);
     setSelectedId(id);
   }
   async function action(run: () => Promise<unknown>, successText?: string) {
@@ -284,12 +289,22 @@ export function AdminPage({
                       : "待激活/设置密码",
             },
             {
+              title: "今日图片",
+              key: "images",
+              render: (_, u) => <QuotaCount quota={u.today?.images} />,
+            },
+            {
+              title: "今日规划",
+              key: "planning",
+              render: (_, u) => <QuotaCount quota={u.today?.planning} />,
+            },
+            {
               title: "操作",
               key: "actions",
               render: (_, u) => (
                 <div className="actions">
                   <Button type="button" onClick={() => void selectUser(u.id)}>
-                    管理
+                    查看
                   </Button>
                 </div>
               ),
@@ -382,6 +397,7 @@ export function AdminPage({
         }
         open={!!selectedUser}
         size={560}
+        keyboard={!previewOpen}
         onClose={() => void selectUser("")}
         destroyOnHidden
       >
@@ -389,13 +405,32 @@ export function AdminPage({
           <>
             {error && <Notice error>{error}</Notice>}
             {passwordResult?.user.id === selectedId && temporaryResult}
-            <DemoRetry key={selectedUser.id} userId={selectedUser.id} />
-            <UserPolicyEditor
-              key={selectedUser.id}
+            <UserActivity
+              key={`activity-${selectedUser.id}`}
+              user={selectedUser}
+              onPreviewChange={setPreviewOpen}
+            />
+            <Collapse
+              items={[
+                {
+                  key: "policy",
+                  label: "额度设置",
+                  forceRender: true,
+                  children: (
+                    <UserPolicyEditor
+                      key={selectedUser.id}
+                      userId={selectedUser.id}
+                      csrfToken={csrfToken}
+                      onDirtyChange={setDirty}
+                      onBusyChange={setPolicyBusy}
+                    />
+                  ),
+                },
+              ]}
+            />
+            <DemoRetry
+              key={`demo-${selectedUser.id}`}
               userId={selectedUser.id}
-              csrfToken={csrfToken}
-              onDirtyChange={setDirty}
-              onBusyChange={setPolicyBusy}
             />
           </>
         )}

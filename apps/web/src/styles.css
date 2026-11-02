@@ -4153,3 +4153,53 @@ h3 {
 .canvas-tone-dot.tone-green {
   background: #edf8ef;
 }
+
+.admin-held {
+  margin-left: 8px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.admin-usage-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+}
+.admin-usage-title h3 {
+  margin: 8px 0;
+}
+.admin-user-quotas > div {
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  gap: 8px;
+  padding: 6px 0;
+}
+.admin-user-quotas small {
+  grid-column: 2 / -1;
+  color: var(--text-secondary);
+}
+.admin-artworks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 8px 0 16px;
+}
+.admin-artworks .ant-image {
+  width: 100%;
+  aspect-ratio: 1;
+}
+.admin-artworks .ant-image-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.admin-artwork-meta {
+  position: fixed;
+  left: 24px;
+  right: 24px;
+  bottom: 88px;
+  text-align: center;
+  color: white;
+  pointer-events: none;
+}

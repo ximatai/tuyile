@@ -2,6 +2,7 @@ import pg from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import {
   AppError,
+  shanghaiDay,
   type Repository,
   type Store,
   type UserRecord,
@@ -110,8 +111,12 @@ class PgRepository implements Repository {
   async listUsers(offset = 0, search = ""): Promise<UserView[]> {
     return (
       await this.c.query(
-        `SELECT id,username,role,enabled,password_hash IS NOT NULL AS activated, must_change_password AS "mustChangePassword" FROM users WHERE ($2='' OR strpos(username,$2)>0) ORDER BY created_at DESC,id LIMIT 51 OFFSET $1`,
-        [offset, search],
+        `SELECT u.id,username,role,enabled,password_hash IS NOT NULL AS activated, must_change_password AS "mustChangePassword",
+jsonb_build_object('day',$3::text,'images',jsonb_build_object('used',coalesce(i.used,0),'held',coalesce(i.held,0),'limit',coalesce(ip.image_limit,CASE WHEN role='admin' THEN -1 ELSE 100 END),'earlierHeld',(SELECT coalesce(sum(held),0) FROM image_days WHERE user_id=u.id AND day<$3::date)),
+'planning',jsonb_build_object('used',coalesce(d.used,0),'held',coalesce(d.held,0),'limit',coalesce(pp.daily_limit,50),'earlierHeld',(SELECT coalesce(sum(held),0) FROM planning_days WHERE user_id=u.id AND day<$3::date))) AS today
+FROM users u LEFT JOIN image_policies ip ON ip.user_id=u.id LEFT JOIN planning_policies pp ON pp.user_id=u.id LEFT JOIN image_days i ON i.user_id=u.id AND i.day=$3::date LEFT JOIN planning_days d ON d.user_id=u.id AND d.day=$3::date
+WHERE ($2='' OR strpos(username,$2)>0) ORDER BY u.created_at DESC,u.id LIMIT 51 OFFSET $1`,
+        [offset, search, shanghaiDay(new Date())],
       )
     ).rows;
   }
@@ -232,7 +237,7 @@ export async function assertSchema(pool: pg.Pool) {
     "SELECT version FROM schema_migrations ORDER BY version",
   );
   if (
-    result.rows.length !== 25 ||
+    result.rows.length !== 26 ||
     result.rows[0].version !== 1 ||
     result.rows[1].version !== 2 ||
     result.rows[2].version !== 3 ||
@@ -257,7 +262,8 @@ export async function assertSchema(pool: pg.Pool) {
     result.rows[21].version !== 22 ||
     result.rows[22].version !== 23 ||
     result.rows[23].version !== 24 ||
-    result.rows[24].version !== 25
+    result.rows[24].version !== 25 ||
+    result.rows[25].version !== 26
   )
     throw new Error("SCHEMA_VERSION_MISMATCH_RUN_MIGRATIONS");
   const r = await pool.query(

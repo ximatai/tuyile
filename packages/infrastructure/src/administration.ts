@@ -11,12 +11,51 @@ import type {
   PlanningPolicy,
   AdminSummary,
 } from "@tuyile/contracts";
+import { asset } from "./creation/context.js";
 import { PgCreationContext } from "./creation/context.js";
 import { PgTransactions } from "./transactions.js";
 class PgAdministrationRepository
   extends PgCreationContext
   implements AdministrationRepository
 {
+  async artworks(p: Principal, userId: string, offset: number) {
+    await this.target(p, userId);
+    const day = shanghaiDay(this.now());
+    const rows = (
+      await this.c.query(
+        `SELECT a.id,a.width,a.height,t.input->>'model' model,o.created_at
+      FROM image_outputs o JOIN image_assets a ON a.id=o.asset_id AND a.workspace_id=o.workspace_id
+      JOIN image_tasks t ON t.id=o.task_id AND t.workspace_id=o.workspace_id
+      WHERE a.user_id=$1 AND a.state='ready' AND o.created_at >= $2::date::timestamp AT TIME ZONE 'Asia/Shanghai'
+      AND o.created_at < ($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai'
+      ORDER BY o.created_at DESC,a.id DESC LIMIT 13 OFFSET $3`,
+        [userId, day, offset],
+      )
+    ).rows;
+    return rows.map((r) => ({
+      id: r.id,
+      width: r.width,
+      height: r.height,
+      model: r.model,
+      createdAt: r.created_at.toISOString(),
+    }));
+  }
+  async artwork(p: Principal, userId: string, assetId: string) {
+    await this.target(p, userId);
+    const row = (
+      await this.c.query(
+        `SELECT a.* FROM image_assets a JOIN image_outputs o ON o.asset_id=a.id AND o.workspace_id=a.workspace_id
+      WHERE a.id=$1 AND a.user_id=$2 AND a.state='ready'`,
+        [assetId, userId],
+      )
+    ).rows[0];
+    if (!row) throw new AppError("NOT_FOUND", 404);
+    await this.c.query(
+      "INSERT INTO administration_audit(actor_id,target_id,action,values) VALUES($1,$2,'artwork-view',$3)",
+      [p.id, userId, { assetId }],
+    );
+    return asset(row);
+  }
   async settings(p: Principal) {
     await this.auth(this.c, p, true, false);
     const images = (
@@ -197,11 +236,15 @@ export class PgAdministrationStore implements AdministrationStore {
       run(new PgAdministrationRepository(c, "")),
     );
   }
-  write<T>(owners: string[], run: (r: AdministrationRepository) => Promise<T>) {
+  write<T>(
+    owners: string[],
+    run: (r: AdministrationRepository) => Promise<T>,
+    queue = true,
+  ) {
     return this.transactions.write(
       (c) => run(new PgAdministrationRepository(c, "")),
       owners,
-      true,
+      queue,
     );
   }
 }

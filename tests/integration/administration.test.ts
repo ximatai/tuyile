@@ -19,7 +19,7 @@ let f: Awaited<ReturnType<typeof imageFixture>>,
   agent: AgentService;
 beforeEach(async () => {
   f = await imageFixture();
-  admin = new AdministrationService(new PgAdministrationStore(f.pool));
+  admin = new AdministrationService(new PgAdministrationStore(f.pool), f.files);
   agent = new AgentService(f.creationStore, f.files);
   await new ExtensionService(f.creationStore).savePlanning(
     f.principal,
@@ -170,4 +170,88 @@ it("clears only ended planning content, releases its pins and retains planning q
   expect((await admin.summary(f.principal)).reconciliation.planningDays).toBe(
     0,
   );
+});
+
+it("tracks daily quota and exposes only generated artwork with scoped audited access", async () => {
+  const upload = await f.creation.upload(f.principal, f.png);
+  const created = await f.service.createUser(f.principal, "artwork-member");
+  await finishTemporaryPassword(f.service, created, testPassword);
+  const login = await f.service.login(created.user.username, testPassword);
+  const member = (await f.service.authenticate(login.token)).user;
+  const project = await f.service.createProject(member, "Synthetic member art");
+  const task = await f.creation.submit(
+    member,
+    f.input({ projectId: project.id }),
+  );
+  let users = await f.service.users(f.principal);
+  expect(users.find((u) => u.id === member.id)?.today?.images).toMatchObject({
+    used: 0,
+    held: 1,
+    limit: 100,
+  });
+  await f.worker();
+  await expect
+    .poll(async () => (await f.creation.task(member, task.id)).state)
+    .toBe("succeeded");
+  const result = await f.creation.task(member, task.id);
+  const output = result.outputs[0];
+  expect(output).toBeDefined();
+  expect(await admin.artworks(f.principal, member.id, 0)).toEqual([
+    expect.objectContaining({ id: output.id, model: "test-image" }),
+  ]);
+  expect(
+    (await admin.bytes(f.principal, member.id, output.id, true)).bytes.length,
+  ).toBeGreaterThan(0);
+  expect(
+    (
+      await f.pool.query(
+        "SELECT values FROM administration_audit WHERE action='artwork-view' AND target_id=$1",
+        [member.id],
+      )
+    ).rows,
+  ).toHaveLength(1);
+  await expect(
+    admin.bytes(f.principal, f.principal.id, output.id, true),
+  ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  await expect(
+    admin.bytes(f.principal, f.principal.id, upload.id, true),
+  ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  await expect(admin.artworks(member, member.id, 0)).rejects.toMatchObject({
+    code: "FORBIDDEN",
+  });
+  await expect(
+    admin.bytes(member, member.id, output.id, true),
+  ).rejects.toMatchObject({ code: "FORBIDDEN" });
+  await expect(f.creation.bytes(f.principal, output.id)).rejects.toMatchObject({
+    code: "NOT_FOUND",
+  });
+  users = await f.service.users(f.principal);
+  expect(users.find((u) => u.id === member.id)?.today?.images).toMatchObject({
+    used: 1,
+    held: 0,
+  });
+  expect(
+    JSON.stringify(await admin.artworks(f.principal, member.id, 0)),
+  ).not.toContain("prompt");
+  await f.pool.query(
+    "UPDATE image_outputs SET created_at=now()-interval '2 days' WHERE asset_id=$1",
+    [output.id],
+  );
+  expect(await admin.artworks(f.principal, member.id, 0)).toEqual([]);
+  // Shanghai midnight is 16:00 UTC on the previous calendar day.
+  await f.pool.query(
+    `UPDATE image_outputs SET created_at=(now() AT TIME ZONE 'Asia/Shanghai')::date::timestamp AT TIME ZONE 'Asia/Shanghai' WHERE asset_id=$1`,
+    [output.id],
+  );
+  expect(await admin.artworks(f.principal, member.id, 0)).toHaveLength(1);
+  await f.pool.query(
+    "UPDATE image_outputs SET created_at=created_at-interval '1 microsecond' WHERE asset_id=$1",
+    [output.id],
+  );
+  expect(await admin.artworks(f.principal, member.id, 0)).toHaveLength(0);
+  await f.pool.query(
+    `UPDATE image_outputs SET created_at=((now() AT TIME ZONE 'Asia/Shanghai')::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai' WHERE asset_id=$1`,
+    [output.id],
+  );
+  expect(await admin.artworks(f.principal, member.id, 0)).toHaveLength(0);
 });

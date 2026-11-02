@@ -1,3 +1,6 @@
+import { AppError } from "./index.js";
+import type { ImageFiles, StoredAsset } from "./creation.js";
+import type { AdminArtwork } from "@tuyile/contracts";
 import {
   executionSettingsInput,
   planningPolicyInput,
@@ -7,6 +10,12 @@ import {
   type AdminSummary,
 } from "@tuyile/contracts";
 export interface AdministrationRepository {
+  artworks(
+    p: Principal,
+    userId: string,
+    offset: number,
+  ): Promise<AdminArtwork[]>;
+  artwork(p: Principal, userId: string, assetId: string): Promise<StoredAsset>;
   settings(p: Principal): Promise<ExecutionSettings>;
   saveSettings(p: Principal, input: ExecutionSettings): Promise<void>;
   policy(p: Principal, userId: string): Promise<PlanningPolicy>;
@@ -22,10 +31,29 @@ export interface AdministrationStore {
   write<T>(
     owners: string[],
     run: (r: AdministrationRepository) => Promise<T>,
+    queue?: boolean,
   ): Promise<T>;
 }
 export class AdministrationService {
-  constructor(private readonly store: AdministrationStore) {}
+  constructor(
+    private readonly store: AdministrationStore,
+    private readonly files?: ImageFiles,
+  ) {}
+  artworks(p: Principal, userId: string, offset: number) {
+    return this.store.read((r) => r.artworks(p, userId, offset));
+  }
+  async bytes(p: Principal, userId: string, assetId: string, preview: boolean) {
+    const asset = await this.store.write(
+      [p.id],
+      (r) => r.artwork(p, userId, assetId),
+      false,
+    );
+    if (!this.files || !asset.mime) throw new AppError("NOT_FOUND", 404);
+    return {
+      mime: preview ? "image/webp" : asset.mime,
+      bytes: await this.files.read(asset, preview),
+    };
+  }
   settings(p: Principal) {
     return this.store.read((r) => r.settings(p));
   }
