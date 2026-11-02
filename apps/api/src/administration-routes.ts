@@ -17,12 +17,9 @@ export function administrationRoutes(
       await service.tokenUsage(
         c.get("session").user,
         z
-          .enum(["today", "month"])
+          .enum(["today", "month", "all"])
           .default("month")
           .parse(c.req.query("period")),
-        c.req.query("projectId")
-          ? id.parse(c.req.query("projectId"))
-          : undefined,
         pageOffset.parse(c.req.query("offset")),
       ),
     ),

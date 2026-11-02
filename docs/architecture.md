@@ -295,6 +295,6 @@ CanvasDocument v1新增text节点，正文与底色为该种类专属字段；�
 
 ### 模型token统计
 
-0028在图片和规划attempt上保留有界数值model_usage、调用时的price_snapshot及reference_usd；上游有界JSON解析后、正文/图片验证前记录，失败但返回用量的调用仍可计入，按attempt开始时间的上海日/月聚合。attempt行锁与首写保护阻止重复记录；每次重试/修复有独立attempt。价格仅明确匹配已核对的官方模型标识，版本openai-standard-2026-11-02，参考源为OpenAI API pricing；价格升级不重算旧行。Image 2/2.5的Images端点不应用Responses专属缓存优惠，文字/图片输入分别计价，推理token已含在输出中。未知分项或价格不估算。历史规划保留已知总量但缓存和价格缺失，历史生图用量不补造。统计只返回聚合及必要账号/项目名，不返回提示词、文件路径、密钥或服务地址。
+0028在图片和规划attempt上保留有界数值model_usage、调用时的price_snapshot及reference_usd；上游有界JSON解析后、正文/图片验证前记录，失败但返回用量的调用仍可计入，按attempt开始时间的上海日/月及全部历史聚合。attempt行锁与首写保护阻止重复记录；每次重试/修复有独立attempt。价格仅明确匹配已核对的官方模型标识，版本openai-standard-2026-11-02，参考源为OpenAI API pricing；价格升级不重算旧行。Image 2/2.5的Images端点不应用Responses专属缓存优惠，文字/图片输入分别计价，推理token已含在输出中。未知分项或价格不估算。历史规划保留已知总量但缓存和价格缺失，历史生图用量不补造。统计只返回全平台聚合及必要用户名，不返回提示词、文件路径、密钥或服务地址。
 
 0029为reference_usd补充有限金额约束；非有限旧值清为空，不能进入费用SUM。缓存字段缺失单独统计，不能把未采集缓存量呈现为真实零。

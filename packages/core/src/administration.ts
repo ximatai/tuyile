@@ -18,8 +18,7 @@ export interface AdministrationRepository {
   artwork(p: Principal, userId: string, assetId: string): Promise<StoredAsset>;
   tokenUsage(
     p: Principal,
-    period: "today" | "month",
-    projectId?: string,
+    period: "today" | "month" | "all",
     offset?: number,
   ): Promise<import("@tuyile/contracts").ModelUsageReport>;
   settings(p: Principal): Promise<ExecutionSettings>;
@@ -60,13 +59,8 @@ export class AdministrationService {
       bytes: await this.files.read(asset, preview),
     };
   }
-  tokenUsage(
-    p: Principal,
-    period: "today" | "month",
-    projectId?: string,
-    offset = 0,
-  ) {
-    return this.store.read((r) => r.tokenUsage(p, period, projectId, offset));
+  tokenUsage(p: Principal, period: "today" | "month" | "all", offset = 0) {
+    return this.store.read((r) => r.tokenUsage(p, period, offset));
   }
   settings(p: Principal) {
     return this.store.read((r) => r.settings(p));

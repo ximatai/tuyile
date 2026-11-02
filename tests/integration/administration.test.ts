@@ -282,10 +282,10 @@ it("aggregates dispatch-day tokens across projects and preserves missing usage a
     "UPDATE image_attempts SET price_snapshot=$2,reference_usd=$3 WHERE id=$1",
     [row.id, price, referenceCost(row.model_usage, price)],
   );
-  report = await admin.tokenUsage(f.principal, "today", f.project.id);
+  report = await admin.tokenUsage(f.principal, "today");
   expect(report.today.referenceUsd).toBeCloseTo(0.00818);
-  expect(report.projects[0]).toMatchObject({
-    id: f.project.id,
+  expect(report.users.find((u) => u.id === f.principal.id)!).toMatchObject({
+    id: f.principal.id,
     calls: 1,
     inputTokens: 100,
   });
@@ -399,4 +399,72 @@ it("pins the official reference price at dispatch and records image usage withou
   expect(
     (await admin.tokenUsage(f.principal, "month")).today.referenceUsd,
   ).toBeCloseTo(0.00818);
+});
+it("groups all projects by account, retains inactive users and separates today/month/all-time without counting empty accounts as calls", async () => {
+  const second = await f.service.createProject(f.principal, "Second project");
+  const issued = await f.service.createUser(f.principal, "usage-second-user");
+  await finishTemporaryPassword(f.service, issued, testPassword);
+  const login = await f.service.login(issued.user.username, testPassword);
+  const member = (await f.service.authenticate(login.token)).user;
+  const personal = await f.service.createProject(member, "Member project");
+  const empty = await f.service.createUser(f.principal, "usage-zero-user");
+  const tasks = [
+    await f.creation.submit(f.principal, f.input()),
+    await f.creation.submit(
+      f.principal,
+      f.input({ projectId: second.id, count: 2 }),
+    ),
+    await f.creation.submit(member, f.input({ projectId: personal.id })),
+  ];
+  await f.worker();
+  for (const task of tasks)
+    await expect
+      .poll(
+        async () =>
+          (
+            await f.creation.task(
+              task.projectId === personal.id ? member : f.principal,
+              task.id,
+            )
+          ).state,
+      )
+      .toBe("succeeded");
+  await f.service.enable(f.principal, member.id, false);
+  let report = await admin.tokenUsage(f.principal, "all");
+  expect(report.allTime).toMatchObject({
+    calls: 4,
+    inputTokens: 400,
+    outputTokens: 1024,
+  });
+  expect(report.users.find((u) => u.id === f.principal.id)).toMatchObject({
+    calls: 3,
+    inputTokens: 300,
+  });
+  expect(report.users.find((u) => u.id === member.id)).toMatchObject({
+    calls: 1,
+    inputTokens: 100,
+  });
+  expect(report.users.find((u) => u.id === empty.user.id)).toMatchObject({
+    calls: 0,
+    unknownUsage: 0,
+    unknownCachedUsage: 0,
+    referenceUsd: 0,
+  });
+  expect(report.users.reduce((n, u) => n + u.calls, 0)).toBe(
+    report.allTime.calls,
+  );
+  await f.pool.query(
+    "UPDATE image_attempts SET created_at=(date_trunc('month',now() AT TIME ZONE 'Asia/Shanghai') AT TIME ZONE 'Asia/Shanghai')-interval '1 microsecond' WHERE task_id=$1",
+    [tasks[0].id],
+  );
+  report = await admin.tokenUsage(f.principal, "month");
+  expect(report.today.calls).toBe(3);
+  expect(report.thisMonth.calls).toBe(3);
+  expect(report.allTime.calls).toBe(4);
+  expect(report.users.find((u) => u.id === f.principal.id)?.calls).toBe(2);
+  expect(
+    (await admin.tokenUsage(f.principal, "all")).users.find(
+      (u) => u.id === f.principal.id,
+    )?.calls,
+  ).toBe(3);
 });

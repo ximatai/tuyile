@@ -59,7 +59,7 @@ export interface ModelUsageReport {
   month: string;
   today: TokenTotals;
   thisMonth: TokenTotals;
-  projects: (TokenTotals & { id: string; name: string; username: string })[];
-  models: (TokenTotals & { model: string; kind: "image" | "planning" })[];
+  allTime: TokenTotals;
+  users: (TokenTotals & { id: string; username: string })[];
   hasMore: boolean;
 }
