@@ -115,6 +115,10 @@ export interface ProvidersRepository {
   revokeProvider(p: Principal, id: string): Promise<void>;
 }
 export interface ExecutionRepository {
+  recordUsage(
+    id: string,
+    usage: import("./model-usage.js").ModelUsage,
+  ): Promise<void>;
   startWorker(): Promise<void>;
   claim(activeUserIds: string[], activeCount: number): Promise<WorkItem | null>;
   stopRequested(task: WorkItem): Promise<boolean>;

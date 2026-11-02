@@ -31,6 +31,8 @@ export class PlanningExecutor {
             dispatch.budget,
             signal,
             images,
+            (usage) =>
+              this.service.recordUsage(work, dispatch.attemptId, usage),
           );
         } catch (error) {
           const call =

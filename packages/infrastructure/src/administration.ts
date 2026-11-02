@@ -56,6 +56,87 @@ class PgAdministrationRepository
     );
     return asset(row);
   }
+  async tokenUsage(
+    p: Principal,
+    period: "today" | "month",
+    projectId?: string,
+    offset = 0,
+  ): Promise<import("@tuyile/contracts").ModelUsageReport> {
+    await this.auth(this.c, p, true, false);
+    if (
+      projectId &&
+      !(await this.c.query("SELECT 1 FROM projects WHERE id=$1", [projectId]))
+        .rowCount
+    )
+      throw new AppError("NOT_FOUND", 404);
+    const day = shanghaiDay(this.now()),
+      month = day.slice(0, 7);
+    const union = `WITH calls AS (
+      SELECT a.created_at,t.project_id,t.user_id,t.input->>'model' model,'image' kind,a.model_usage,a.reference_usd FROM image_attempts a JOIN image_tasks t ON t.id=a.task_id AND t.workspace_id=a.workspace_id
+      UNION ALL
+      SELECT a.created_at,j.project_id,j.user_id,v.model,'planning',a.model_usage,a.reference_usd FROM planning_attempts a JOIN planning_jobs j ON j.id=a.job_id JOIN planning_provider_versions v ON v.id=j.provider_id
+    ), scoped AS (SELECT * FROM calls WHERE created_at >= $1::date::timestamp AT TIME ZONE 'Asia/Shanghai' AND created_at < ($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai' AND ($3::uuid IS NULL OR project_id=$3))`;
+    const totals = `count(*) calls,coalesce(sum((model_usage->>'inputTokens')::bigint),0) input,coalesce(sum((model_usage->>'outputTokens')::bigint),0) output,coalesce(sum((model_usage->>'cachedInputTokens')::bigint),0) cached,
+      count(*) FILTER(WHERE model_usage->>'inputTokens' IS NULL OR model_usage->>'outputTokens' IS NULL) unknown,
+      count(*) FILTER(WHERE model_usage->>'cachedInputTokens' IS NULL) unknown_cached,
+      count(reference_usd) priced,sum(reference_usd) usd`;
+    const dto = (r: any) => ({
+      calls: Number(r.calls),
+      inputTokens: Number(r.input),
+      outputTokens: Number(r.output),
+      cachedInputTokens: Number(r.cached),
+      unknownUsage: Number(r.unknown),
+      unknownCachedUsage: Number(r.unknown_cached),
+      pricedCalls: Number(r.priced),
+      referenceUsd: r.usd === null ? null : Number(r.usd),
+    });
+    const params = [month + "-01", day, projectId ?? null];
+    const summary = (
+      await this.c.query(`${union} SELECT ${totals} FROM scoped`, params)
+    ).rows[0];
+    const today = (
+      await this.c.query(`${union} SELECT ${totals} FROM scoped`, [
+        day,
+        day,
+        projectId ?? null,
+      ])
+    ).rows[0];
+    const periodParams = [
+      period === "today" ? day : month + "-01",
+      day,
+      projectId ?? null,
+    ];
+    const projects = (
+      await this.c.query(
+        `${union} SELECT s.project_id id,CASE WHEN p.deleted_at IS NULL THEN p.name ELSE '已删除项目' END name,u.username,${totals} FROM scoped s JOIN projects p ON p.id=s.project_id JOIN users u ON u.id=s.user_id GROUP BY s.project_id,p.name,p.deleted_at,u.username ORDER BY count(*) DESC,s.project_id LIMIT 51 OFFSET $4`,
+        [...periodParams, offset],
+      )
+    ).rows;
+    const models = (
+      await this.c.query(
+        `${union} SELECT model,kind,${totals} FROM scoped GROUP BY model,kind ORDER BY count(*) DESC,model LIMIT 100`,
+        periodParams,
+      )
+    ).rows;
+    return {
+      day,
+      month,
+      today: dto(today),
+      thisMonth: dto(summary),
+      projects: projects.slice(0, 50).map((r) => ({
+        ...dto(r),
+        id: r.id,
+        name: r.name,
+        username: r.username,
+      })),
+      models: models.map((r) => ({
+        ...dto(r),
+        model: r.model ?? "未知模型",
+        kind: r.kind,
+      })),
+      hasMore: projects.length > 50,
+    };
+  }
   async settings(p: Principal) {
     await this.auth(this.c, p, true, false);
     const images = (

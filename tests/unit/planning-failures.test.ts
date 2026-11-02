@@ -142,3 +142,39 @@ it("rejects oversized responses without retaining their content", async () => {
     code: "PLANNING_RESPONSE_LIMIT",
   });
 });
+it("retains token evidence before rejecting invalid planning content", async () => {
+  const usage: import("@tuyile/core").ModelUsage[] = [];
+  const provider = new CompatiblePlanningProvider(
+    false,
+    async () =>
+      new Response(
+        JSON.stringify({
+          usage: {
+            prompt_tokens: 10,
+            completion_tokens: 20,
+            prompt_tokens_details: { cached_tokens: 2 },
+          },
+          choices: [],
+        }),
+      ),
+  );
+  await expect(
+    provider.complete(
+      config,
+      [{ role: "user", content: "synthetic" }],
+      256,
+      new AbortController().signal,
+      [],
+      async (u) => {
+        usage.push(u);
+      },
+    ),
+  ).rejects.toMatchObject({ code: "PLANNING_RESPONSE_INVALID" });
+  expect(usage).toEqual([
+    expect.objectContaining({
+      inputTokens: 10,
+      outputTokens: 20,
+      cachedInputTokens: 2,
+    }),
+  ]);
+});

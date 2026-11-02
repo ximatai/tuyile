@@ -20,6 +20,7 @@ import {
   Database,
   ImagePlus,
   Users,
+  ChartNoAxesCombined,
   LogOut,
   PanelLeftClose,
   PanelLeftOpen,
@@ -54,6 +55,9 @@ const ProjectNavigation = lazy(() =>
 );
 const UsagePage = lazy(() =>
   import("./usage-page").then((m) => ({ default: m.UsagePage })),
+);
+const TokenUsageAdmin = lazy(() =>
+  import("./token-usage-admin").then((m) => ({ default: m.TokenUsageAdmin })),
 );
 const ImageAdminPage = lazy(() =>
   import("./image-admin").then((m) => ({ default: m.ImageAdminPage })),
@@ -244,6 +248,11 @@ function Shell() {
           {session.user.role === "admin" && (
             <>
               {nav("/admin/users", "用户管理", <Users size={20} />)}
+              {nav(
+                "/admin/model-usage",
+                "用量与费用",
+                <ChartNoAxesCombined size={20} />,
+              )}
               {nav("/admin/images", "模型服务", <ImagePlus size={20} />)}
             </>
           )}
@@ -298,6 +307,7 @@ function Shell() {
                   "/favorites": "收藏",
                   "/usage": "额度",
                   "/admin/users": "用户管理",
+                  "/admin/model-usage": "用量与费用",
                   "/admin/images": "模型服务",
                 } as Record<string, string>
               )[path] ?? "项目空间"}
@@ -407,6 +417,16 @@ function Shell() {
                 element={
                   session.user.role === "admin" ? (
                     <ImageAdminPage csrfToken={session.csrfToken} />
+                  ) : (
+                    <Notice error>你没有执行此操作的权限。</Notice>
+                  )
+                }
+              />
+              <Route
+                path="/admin/model-usage"
+                element={
+                  session.user.role === "admin" ? (
+                    <TokenUsageAdmin />
                   ) : (
                     <Notice error>你没有执行此操作的权限。</Notice>
                   )

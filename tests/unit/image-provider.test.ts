@@ -92,3 +92,29 @@ it("uses Shanghai day boundaries and validates all-order model/spec limits", () 
     "MODEL_NOT_ALLOWED",
   );
 });
+it("retains usage evidence even when the returned image payload is invalid", async () => {
+  const usage: import("@tuyile/core").ModelUsage[] = [];
+  const p = new CompatibleImageProvider(
+    false,
+    0,
+    async () =>
+      new Response(
+        JSON.stringify({
+          usage: {
+            input_tokens: 10,
+            output_tokens: 20,
+            input_tokens_details: { text_tokens: 10, image_tokens: 0 },
+          },
+          data: [{ url: "https://synthetic.invalid/image" }],
+        }),
+      ),
+  );
+  await expect(
+    p.generate(config, input, [], new AbortController().signal, async (u) => {
+      usage.push(u);
+    }),
+  ).rejects.toMatchObject({ code: "UNSUPPORTED_RESPONSE" });
+  expect(usage).toEqual([
+    expect.objectContaining({ inputTokens: 10, outputTokens: 20 }),
+  ]);
+});

@@ -12,6 +12,21 @@ export function administrationRoutes(
   app: Hono<ApiEnv>,
   service: AdministrationService,
 ) {
+  app.get("/api/admin/model-usage", async (c) =>
+    c.json(
+      await service.tokenUsage(
+        c.get("session").user,
+        z
+          .enum(["today", "month"])
+          .default("month")
+          .parse(c.req.query("period")),
+        c.req.query("projectId")
+          ? id.parse(c.req.query("projectId"))
+          : undefined,
+        pageOffset.parse(c.req.query("offset")),
+      ),
+    ),
+  );
   app.get("/api/admin/users/:id/artworks", async (c) => {
     const artworks = await service.artworks(
       c.get("session").user,

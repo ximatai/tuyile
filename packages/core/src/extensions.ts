@@ -38,6 +38,7 @@ export interface PlanningProvider {
     budget: number,
     signal: AbortSignal,
     images?: readonly PlanningImage[],
+    onUsage?: (usage: import("./model-usage.js").ModelUsage) => Promise<void>,
   ): Promise<PlanningReply>;
 }
 export interface ExtensionsRepository {

@@ -163,6 +163,7 @@ export interface ImageProvider {
     input: ImageInput,
     references: Uint8Array[],
     signal: AbortSignal,
+    onUsage?: (usage: import("./model-usage.js").ModelUsage) => Promise<void>,
   ): Promise<Uint8Array>;
 }
 export class ImageExecutor {
@@ -208,6 +209,8 @@ export class ImageExecutor {
                     },
                     bytes,
                     signal,
+                    (usage) =>
+                      this.repo.recordUsage(dispatched.attemptId, usage),
                   ),
               },
             );

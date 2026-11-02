@@ -1,3 +1,4 @@
+import { parseModelUsage, type ModelUsage } from "@tuyile/core";
 import { composeCreativePrompt } from "@tuyile/contracts";
 import sharp from "sharp";
 import {
@@ -38,6 +39,7 @@ export class CompatibleImageProvider implements ImageProvider {
     input: ImageInput,
     references: Uint8Array[],
     signal: AbortSignal,
+    onUsage?: (usage: ModelUsage) => Promise<void>,
   ): Promise<Uint8Array> {
     if (config.mode === "fake") {
       if (!this.fakeAllowed)
@@ -57,6 +59,20 @@ export class CompatibleImageProvider implements ImageProvider {
         signal.addEventListener("abort", abort, { once: true });
         if (signal.aborted) abort();
       });
+      await onUsage?.(
+        parseModelUsage(
+          {
+            input_tokens: 100,
+            output_tokens: 256,
+            input_tokens_details: {
+              text_tokens: 100,
+              image_tokens: 0,
+              cached_tokens: 0,
+            },
+          },
+          "image",
+        ),
+      );
       return sharp({
         create: {
           width: input.width,
@@ -118,6 +134,7 @@ export class CompatibleImageProvider implements ImageProvider {
       }
       let json = JSON.parse(await bounded(response));
       if (typeof json === "string") json = JSON.parse(json);
+      await onUsage?.(parseModelUsage(json?.usage, "image"));
       const value = json?.data?.[0]?.b64_json;
       if (
         !Array.isArray(json?.data) ||

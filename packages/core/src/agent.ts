@@ -38,6 +38,10 @@ export interface PlanningMessages {
   content: string;
 }
 export interface AgentRepository {
+  recordUsage(
+    id: string,
+    usage: import("./model-usage.js").ModelUsage,
+  ): Promise<void>;
   references(work: PlanningWork): Promise<StoredAsset[]>;
   context(
     p: Principal,
@@ -268,6 +272,15 @@ export class AgentService {
       }
       return { ...(await r.agent.dispatch(work, requested)), config };
     });
+  }
+  recordUsage(
+    work: PlanningWork,
+    id: string,
+    usage: import("./model-usage.js").ModelUsage,
+  ) {
+    return this.store.write({ owners: [work.userId] }, (r) =>
+      r.agent.recordUsage(id, usage),
+    );
   }
   attemptResult(
     work: PlanningWork,

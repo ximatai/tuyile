@@ -255,3 +255,148 @@ it("tracks daily quota and exposes only generated artwork with scoped audited ac
   );
   expect(await admin.artworks(f.principal, member.id, 0)).toHaveLength(0);
 });
+
+it("aggregates dispatch-day tokens across projects and preserves missing usage and immutable prices", async () => {
+  const task = await f.creation.submit(f.principal, f.input());
+  await f.worker();
+  await f.done(task.id);
+  let report = await admin.tokenUsage(f.principal, "month");
+  expect(report.today).toMatchObject({
+    calls: 1,
+    inputTokens: 100,
+    outputTokens: 256,
+    pricedCalls: 0,
+    referenceUsd: null,
+    unknownUsage: 0,
+  });
+  const row = (
+    await f.pool.query(
+      "SELECT id,model_usage FROM image_attempts WHERE task_id=$1",
+      [task.id],
+    )
+  ).rows[0];
+  // Controlled response evidence for an official-priced image call, independent of real network access.
+  const { referencePrice, referenceCost } = await import("@tuyile/core");
+  const price = referencePrice("gpt-image-2.5-sunburst", "image");
+  await f.pool.query(
+    "UPDATE image_attempts SET price_snapshot=$2,reference_usd=$3 WHERE id=$1",
+    [row.id, price, referenceCost(row.model_usage, price)],
+  );
+  report = await admin.tokenUsage(f.principal, "today", f.project.id);
+  expect(report.today.referenceUsd).toBeCloseTo(0.00818);
+  expect(report.projects[0]).toMatchObject({
+    id: f.project.id,
+    calls: 1,
+    inputTokens: 100,
+  });
+  await f.creation.recordUsage(row.id, {
+    inputTokens: 900,
+    outputTokens: 900,
+    cachedInputTokens: 0,
+    textInputTokens: 900,
+    imageInputTokens: 0,
+  });
+  expect(
+    (await admin.tokenUsage(f.principal, "today")).today.referenceUsd,
+  ).toBe(report.today.referenceUsd);
+  await f.pool.query(
+    "UPDATE image_attempts SET model_usage=jsonb_set(model_usage,'{cachedInputTokens}','null'::jsonb) WHERE id=$1",
+    [row.id],
+  );
+  expect(
+    (await admin.tokenUsage(f.principal, "month")).thisMonth.unknownCachedUsage,
+  ).toBeGreaterThanOrEqual(1);
+
+  await f.pool.query(
+    "UPDATE image_attempts SET created_at=date_trunc('month',now() AT TIME ZONE 'Asia/Shanghai') AT TIME ZONE 'Asia/Shanghai' - interval '1 microsecond' WHERE id=$1",
+    [row.id],
+  );
+  expect((await admin.tokenUsage(f.principal, "month")).thisMonth.calls).toBe(
+    0,
+  );
+  await f.pool.query("UPDATE image_attempts SET created_at=now() WHERE id=$1", [
+    row.id,
+  ]);
+  // Yesterday's completed call belongs to its dispatch date, not quota reservation/output day.
+  await f.pool.query(
+    "UPDATE image_attempts SET created_at=(now() AT TIME ZONE 'Asia/Shanghai')::date::timestamp AT TIME ZONE 'Asia/Shanghai' - interval '1 microsecond' WHERE id=$1",
+    [row.id],
+  );
+  expect((await admin.tokenUsage(f.principal, "today")).today.calls).toBe(0);
+
+  const unknown = await f.creation.submit(f.principal, f.input());
+  // Worker will record bounded fake usage; explicitly remove only this synthetic call's evidence.
+  await f.done(unknown.id);
+  await f.pool.query(
+    "UPDATE image_attempts SET model_usage=NULL,reference_usd=NULL WHERE task_id=$1",
+    [unknown.id],
+  );
+  expect((await admin.tokenUsage(f.principal, "today")).today).toMatchObject({
+    calls: 1,
+    unknownUsage: 1,
+    referenceUsd: null,
+  });
+  const issued = await f.service.createUser(f.principal, "token-stats-member");
+  await finishTemporaryPassword(f.service, issued, testPassword);
+  const login = await f.service.login(issued.user.username, testPassword);
+  const member = (await f.service.authenticate(login.token)).user;
+  await expect(admin.tokenUsage(member, "month")).rejects.toMatchObject({
+    code: "FORBIDDEN",
+  });
+});
+it("pins the official reference price at dispatch and records image usage without a real model call", async () => {
+  const model = "gpt-image-2.5-sunburst";
+  await f.creation.saveProvider(f.principal, {
+    mode: "fake",
+    baseUrl: "",
+    models: [model],
+    preserveKey: false,
+    capabilities: [
+      {
+        model,
+        generation: true,
+        editing: true,
+        maxReferences: 4,
+        maxEdge: 3840,
+        maxPixels: 8294400,
+        sizes: [],
+        qualities: ["low", "medium", "high"],
+        formats: ["png", "jpeg", "webp"],
+      },
+    ],
+  });
+  const task = await f.creation.submit(
+    f.principal,
+    f.input({ model, width: 1024, height: 1024 }),
+  );
+  await f.worker();
+  await f.done(task.id);
+  const row = (
+    await f.pool.query(
+      "SELECT price_snapshot,reference_usd FROM image_attempts WHERE task_id=$1",
+      [task.id],
+    )
+  ).rows[0];
+  expect(row.price_snapshot).toMatchObject({
+    version: "openai-standard-2026-11-02",
+    input: 5,
+    imageInput: 8,
+    output: 30,
+  });
+  expect(Number(row.reference_usd)).toBeCloseTo(0.00818);
+  await expect(
+    f.pool.query(
+      "UPDATE image_attempts SET reference_usd='NaN'::numeric WHERE task_id=$1",
+      [task.id],
+    ),
+  ).rejects.toMatchObject({ code: "23514" });
+  await f.creation.saveProvider(f.principal, {
+    mode: "fake",
+    baseUrl: "",
+    models: ["test-image"],
+    preserveKey: false,
+  });
+  expect(
+    (await admin.tokenUsage(f.principal, "month")).today.referenceUsd,
+  ).toBeCloseTo(0.00818);
+});

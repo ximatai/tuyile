@@ -16,6 +16,12 @@ export interface AdministrationRepository {
     offset: number,
   ): Promise<AdminArtwork[]>;
   artwork(p: Principal, userId: string, assetId: string): Promise<StoredAsset>;
+  tokenUsage(
+    p: Principal,
+    period: "today" | "month",
+    projectId?: string,
+    offset?: number,
+  ): Promise<import("@tuyile/contracts").ModelUsageReport>;
   settings(p: Principal): Promise<ExecutionSettings>;
   saveSettings(p: Principal, input: ExecutionSettings): Promise<void>;
   policy(p: Principal, userId: string): Promise<PlanningPolicy>;
@@ -53,6 +59,14 @@ export class AdministrationService {
       mime: preview ? "image/webp" : asset.mime,
       bytes: await this.files.read(asset, preview),
     };
+  }
+  tokenUsage(
+    p: Principal,
+    period: "today" | "month",
+    projectId?: string,
+    offset = 0,
+  ) {
+    return this.store.read((r) => r.tokenUsage(p, period, projectId, offset));
   }
   settings(p: Principal) {
     return this.store.read((r) => r.settings(p));
