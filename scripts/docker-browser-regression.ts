@@ -549,17 +549,25 @@ try {
     .filter({
       has: page.getByRole("cell", { name: auth.username, exact: true }),
     })
-    .getByRole("button", { name: "管理", exact: true })
+    .getByRole("button", { name: "查看", exact: true })
     .click();
   const ownDrawer = page.getByRole("dialog", {
     name: new RegExp(auth.username),
   });
+  await ownDrawer
+    .getByRole("button", { name: "更多账号操作", exact: true })
+    .click();
+  await page.getByRole("menuitem", { name: "今日作品", exact: true }).waitFor();
   assert.equal(
-    await ownDrawer
-      .getByRole("button", { name: "更多账号操作", exact: true })
-      .count(),
+    await page.getByRole("menuitem", { name: "重置密码", exact: true }).count(),
     0,
   );
+  assert.equal(
+    await page.getByRole("menuitem", { name: "停用账号", exact: true }).count(),
+    0,
+  );
+  await page.keyboard.press("Escape");
+  await page.getByRole("menu").waitFor({ state: "hidden" });
   const quotaInput = ownDrawer.getByLabel("每日图片额度", { exact: true });
   const originalQuota = await quotaInput.inputValue();
   await quotaInput.fill(String(Number(originalQuota) + 1));
