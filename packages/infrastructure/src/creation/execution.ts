@@ -209,7 +209,7 @@ export class PgExecutionRepository extends PgCreationContext {
       throw new AppError("ATTEMPT_LIMIT", 409);
     const row = (
       await c.query(
-        "INSERT INTO image_attempts(workspace_id,task_id,ordinal,retry,state,price_snapshot) VALUES($1,$2,$3,$4,'dispatched',$5) RETURNING id",
+        "INSERT INTO image_attempts(workspace_id,task_id,ordinal,retry,state,price_snapshot,created_at) VALUES($1,$2,$3,$4,'dispatched',$5,clock_timestamp()) RETURNING id",
         [
           t.workspaceId,
           t.id,

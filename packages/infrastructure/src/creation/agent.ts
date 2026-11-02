@@ -258,7 +258,7 @@ export class PgAgentRepository
     );
     const attempt = (
       await this.c.query(
-        "INSERT INTO planning_attempts(job_id,ordinal,requested_tokens,state,price_snapshot) VALUES($1,$2,$3,'dispatched',$4) RETURNING id",
+        "INSERT INTO planning_attempts(job_id,ordinal,requested_tokens,state,price_snapshot,created_at) VALUES($1,$2,$3,'dispatched',$4,clock_timestamp()) RETURNING id",
         [
           work.id,
           row.calls + 1,

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import type {
   AdminArtworksPage,
@@ -46,6 +46,8 @@ export function UserActivity({
   onPreviewChange: (open: boolean) => void;
 }) {
   const state = useSessionState();
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewAssetId, setPreviewAssetId] = useState<string | null>(null);
   const query = useInfiniteQuery({
     queryKey: state.key("admin-artworks", user.id),
     initialPageParam: 0,
@@ -67,9 +69,15 @@ export function UserActivity({
       ]),
     ).values(),
   ];
+  const previewIndex = artworks.findIndex((a) => a.id === previewAssetId);
+  const previewArtwork = previewIndex >= 0 ? artworks[previewIndex] : undefined;
   useEffect(() => {
-    if (!artworks.length) onPreviewChange(false);
-  }, [artworks.length, onPreviewChange]);
+    if (previewAssetId && previewIndex < 0) {
+      setPreviewAssetId(null);
+      setIsPreviewOpen(false);
+      onPreviewChange(false);
+    }
+  }, [previewAssetId, previewIndex, onPreviewChange]);
   useEffect(() => () => onPreviewChange(false), [onPreviewChange]);
   return (
     <>
@@ -91,14 +99,24 @@ export function UserActivity({
       ) : (
         <div className="admin-artworks">
           <Image.PreviewGroup
+            items={artworks.map((a) => ({
+              src: `/api/admin/users/${user.id}/artworks/${a.id}/original`,
+            }))}
             preview={{
-              onOpenChange: onPreviewChange,
-              imageRender: (node, { current }) => (
+              open: isPreviewOpen && !!previewArtwork,
+              current: Math.max(0, previewIndex),
+              onOpenChange: (open) => {
+                setIsPreviewOpen(open);
+                onPreviewChange(open);
+              },
+              onChange: (current) =>
+                setPreviewAssetId(artworks[current]?.id ?? null),
+              imageRender: (node) => (
                 <>
                   {node}
                   <div className="admin-artwork-meta">
-                    {artworks[current] &&
-                      `${artworks[current].model} · ${artworks[current].width} × ${artworks[current].height} · ${new Date(artworks[current].createdAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}`}
+                    {previewArtwork &&
+                      `${previewArtwork.model} · ${previewArtwork.width} × ${previewArtwork.height} · ${new Date(previewArtwork.createdAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}`}
                   </div>
                 </>
               ),
@@ -107,6 +125,11 @@ export function UserActivity({
             {artworks.map((a) => (
               <Image
                 key={a.id}
+                onClick={() => {
+                  setPreviewAssetId(a.id);
+                  setIsPreviewOpen(true);
+                  onPreviewChange(true);
+                }}
                 alt={`${a.model} · ${a.width} × ${a.height} · ${new Date(a.createdAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}`}
                 src={`/api/admin/users/${user.id}/artworks/${a.id}/preview`}
                 preview={{

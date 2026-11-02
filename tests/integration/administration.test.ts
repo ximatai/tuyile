@@ -468,3 +468,56 @@ it("groups all projects by account, retains inactive users and separates today/m
     )?.calls,
   ).toBe(3);
 });
+it("timestamps image and planning dispatches after ownership locks rather than at transaction begin", async () => {
+  await f.creation.submit(f.principal, f.input());
+  const imageWork = (await f.repo.claim([], 0))!;
+  await agent.request(f.principal, request());
+  const planningWork = (await agent.claim([]))!;
+  const blocker = await f.pool.connect();
+  const pending: Promise<unknown>[] = [];
+  let held = true;
+  try {
+    await blocker.query("BEGIN");
+    await blocker.query("SELECT id FROM users WHERE id=$1 FOR UPDATE", [
+      f.principal.id,
+    ]);
+    const image = f.creation.dispatch(imageWork, 0, 0);
+    const planning = agent.dispatch(planningWork, 0);
+    pending.push(image, planning);
+    await expect
+      .poll(async () =>
+        Number(
+          (
+            await f.pool.query(
+              "SELECT count(*) n FROM pg_stat_activity WHERE datname=current_database() AND usename=current_user AND wait_event_type='Lock' AND query LIKE 'SELECT id FROM users WHERE id=ANY%'",
+            )
+          ).rows[0].n,
+        ),
+      )
+      .toBe(2);
+    await blocker.query("SELECT pg_sleep(0.03)");
+    const releasedAt = (await blocker.query("SELECT clock_timestamp() at"))
+      .rows[0].at;
+    await blocker.query("COMMIT");
+    held = false;
+    const [i, p] = await Promise.all([image, planning]);
+    expect(i).not.toBeNull();
+    for (const [table, id] of [
+      ["image_attempts", i!.attemptId],
+      ["planning_attempts", p.attemptId],
+    ]) {
+      expect(
+        (
+          await f.pool.query(
+            `SELECT created_at >= $2::timestamptz AS after_release FROM ${table} WHERE id=$1`,
+            [id, releasedAt],
+          )
+        ).rows[0].after_release,
+      ).toBe(true);
+    }
+  } finally {
+    if (held) await blocker.query("ROLLBACK");
+    blocker.release();
+    await Promise.allSettled(pending);
+  }
+});
