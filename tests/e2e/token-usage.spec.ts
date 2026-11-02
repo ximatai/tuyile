@@ -124,11 +124,20 @@ test("administrator sees platform and per-user token totals with incomplete refe
   await page.screenshot({ path: ".codex-temp/token-usage-1440.png" });
   await page.setViewportSize({ width: 1920, height: 1080 });
   await page.screenshot({ path: ".codex-temp/token-usage-1920.png" });
+  let largeCounts = false;
   await page.route("**/api/admin/model-usage?**", async (route) => {
     const response = await route.fetch();
     const body = await response.json();
     for (const row of [body.today, body.thisMonth, body.allTime, ...body.users])
-      row.unknownCachedUsage = row.calls;
+      if (largeCounts)
+        Object.assign(row, {
+          inputTokens: 123456789,
+          outputTokens: 1234567890123,
+          cachedInputTokens: 12345,
+          unknownCachedUsage: 0,
+          unknownUsage: 0,
+        });
+      else row.unknownCachedUsage = row.calls;
     await route.fulfill({ response, json: body });
   });
   await page.reload();
@@ -136,6 +145,34 @@ test("administrator sees platform and per-user token totals with incomplete refe
   await expect(
     page.getByRole("cell", { name: "—", exact: true }).first(),
   ).toBeVisible();
+  largeCounts = true;
+  await page.reload();
+  const largeInput = page.getByText("1.23 亿", { exact: true }).first();
+  await expect(largeInput).toBeVisible();
+  await expect(
+    page.getByText("1.23 万亿", { exact: true }).first(),
+  ).toBeVisible();
+  await expect(
+    page.getByText("1.23 万", { exact: true }).first(),
+  ).toBeVisible();
+  await largeInput.hover();
+  await expect(
+    page.getByRole("tooltip", { name: "123,456,789 token", exact: true }),
+  ).toBeVisible();
+  await page.mouse.move(0, 0);
+  await page
+    .getByLabel("1,234,567,890,123 token", { exact: true })
+    .first()
+    .focus();
+  await expect(
+    page.getByRole("tooltip", { name: "1,234,567,890,123 token", exact: true }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({ path: ".codex-temp/token-large-counts-1920.png" });
   const anonymous = await playwright.request.newContext({
     baseURL: "http://127.0.0.1:5180",
   });

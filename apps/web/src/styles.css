@@ -4225,3 +4225,5 @@ h3 {
 .project-card-menu.ant-btn { position: absolute; right: 10px; top: 10px; z-index: 4; width: 28px; height: 28px; padding: 0; border: 0; box-shadow: 0 1px 6px #29436012; }
 .create-project { display: grid; margin: 0; max-width: none; }
 .create-project > .button { justify-self: end; }
+
+.token-count { white-space: nowrap; font-variant-numeric: tabular-nums; cursor: help; }

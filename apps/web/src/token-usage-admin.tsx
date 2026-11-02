@@ -1,32 +1,49 @@
+import { formatTokens, exactTokens } from "./token-metrics";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ModelUsageReport, TokenTotals } from "@tuyile/contracts";
-import { Button, Notice, Table, Tabs } from "@tuyile/ui";
+import { Button, Notice, Table, Tabs, Tooltip } from "@tuyile/ui";
 import { HelpPopover } from "./interface-help";
 import { useSessionState } from "./session-state";
 import { client } from "./api";
 const number = (n: number) => n.toLocaleString("zh-CN");
+const token = (value: number) =>
+  value < 10000 ? (
+    exactTokens(value)
+  ) : (
+    <Tooltip title={`${exactTokens(value)} token`} trigger={["hover", "focus"]}>
+      <span
+        className="token-count"
+        tabIndex={0}
+        aria-label={`${exactTokens(value)} token`}
+      >
+        {formatTokens(value)}
+      </span>
+    </Tooltip>
+  );
 const usd = (n: number | null) =>
   n === null ? "—" : n > 0 && n < 0.000001 ? "<$0.000001" : `$${n.toFixed(6)}`;
 const columns = [
   { title: "调用", dataIndex: "calls", render: number },
-  { title: "输入 token", dataIndex: "inputTokens", render: number },
-  { title: "输出 token", dataIndex: "outputTokens", render: number },
+  { title: "输入 token", dataIndex: "inputTokens", render: token },
+  { title: "输出 token", dataIndex: "outputTokens", render: token },
   {
     title: "合计 token",
     key: "total",
     render: (_: unknown, r: TokenTotals) =>
-      number(r.inputTokens + r.outputTokens),
+      token(r.inputTokens + r.outputTokens),
   },
   {
     title: "缓存输入",
     key: "cached",
     render: (_: unknown, r: TokenTotals) =>
-      r.unknownCachedUsage === 0
-        ? number(r.cachedInputTokens)
-        : r.cachedInputTokens > 0
-          ? `${number(r.cachedInputTokens)}（部分）`
-          : "—",
+      r.unknownCachedUsage === 0 ? (
+        token(r.cachedInputTokens)
+      ) : r.cachedInputTokens > 0 ? (
+        <>{token(r.cachedInputTokens)}（部分）</>
+      ) : (
+        "—"
+      ),
   },
   {
     title: "参考费用 USD",
