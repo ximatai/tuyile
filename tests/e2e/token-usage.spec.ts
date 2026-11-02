@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { loginAdmin } from "./admin-session";
+import { initialSettings } from "../../apps/web/src/image-settings";
 test("administrator sees platform and per-user token totals with incomplete reference pricing", async ({
   page,
   playwright,
@@ -54,24 +55,27 @@ test("administrator sees platform and per-user token totals with incomplete refe
       await member.post("/api/projects", { headers, data: { name } })
     ).json();
     const usage = await (await member.get("/api/images/usage")).json();
-    const choice = usage.modelOptions?.[0];
+    const settings = initialSettings(usage);
+    const choice = usage.modelOptions?.find(
+      (model: { id: string }) => model.id === settings.modelKey,
+    );
     const response = await member.post("/api/images/tasks", {
       headers,
       data: {
         projectId: project.id,
         requestKey: randomUUID(),
         prompt: "Synthetic token evidence",
-        model: choice?.modelId ?? usage.models[0],
+        model: choice?.modelId ?? settings.modelKey,
         ...(choice ? { modelSelectionId: choice.id } : {}),
-        width: 256,
-        height: 256,
-        quality: "medium",
-        format: "png",
+        width: settings.width,
+        height: settings.height,
+        quality: settings.quality,
+        format: settings.format,
         count: 1,
         referenceIds: [],
       },
     });
-    expect(response.ok()).toBe(true);
+    expect(response.ok(), await response.text()).toBe(true);
     const task = await response.json();
     await expect
       .poll(

@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { loginAdmin } from "./admin-session";
+import { initialSettings } from "../../apps/web/src/image-settings";
 test("user management shows mock generation quota and artwork previews", async ({
   page,
   playwright,
@@ -69,7 +70,10 @@ test("user management shows mock generation quota and artwork previews", async (
       })
     ).json();
     const usage = await (await member.get("/api/images/usage")).json();
-    const choice = usage.modelOptions?.[0];
+    const settings = initialSettings(usage);
+    const choice = usage.modelOptions?.find(
+      (model: { id: string }) => model.id === settings.modelKey,
+    );
     for (const count of [4, 2]) {
       const submitted = await member.post("/api/images/tasks", {
         headers,
@@ -77,17 +81,17 @@ test("user management shows mock generation quota and artwork previews", async (
           projectId: project.id,
           requestKey: randomUUID(),
           prompt: "Synthetic blue artwork",
-          model: choice?.modelId ?? usage.models[0],
+          model: choice?.modelId ?? settings.modelKey,
           ...(choice ? { modelSelectionId: choice.id } : {}),
-          width: 256,
-          height: 256,
-          quality: "medium",
-          format: "png",
+          width: settings.width,
+          height: settings.height,
+          quality: settings.quality,
+          format: settings.format,
           count,
           referenceIds: [],
         },
       });
-      expect(submitted.ok()).toBe(true);
+      expect(submitted.ok(), await submitted.text()).toBe(true);
       const task = await submitted.json();
       await expect
         .poll(

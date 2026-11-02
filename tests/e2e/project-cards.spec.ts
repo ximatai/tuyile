@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { loginAdmin } from "./admin-session";
+import { initialSettings } from "../../apps/web/src/image-settings";
 test("project cards show zero, one, two and stacked generated covers with create and delete controls", async ({
   page,
 }) => {
@@ -52,7 +53,10 @@ test("project cards show zero, one, two and stacked generated covers with create
   await modal.getByRole("button", { name: "创建项目", exact: true }).click();
   await expect(modal).toBeHidden();
   const usage = await (await page.request.get("/api/images/usage")).json();
-  const choice = usage.modelOptions?.[0];
+  const settings = initialSettings(usage);
+  const choice = usage.modelOptions?.find(
+    (model: { id: string }) => model.id === settings.modelKey,
+  );
   const projects: { id: string; name: string; count: number }[] = [];
   for (const [count, name] of [
     [1, "山间咖啡"],
@@ -70,17 +74,17 @@ test("project cards show zero, one, two and stacked generated covers with create
         projectId: project.id,
         requestKey: randomUUID(),
         prompt: "Synthetic project card",
-        model: choice?.modelId ?? usage.models[0],
+        model: choice?.modelId ?? settings.modelKey,
         ...(choice ? { modelSelectionId: choice.id } : {}),
-        width: 256,
-        height: 256,
-        quality: "medium",
-        format: "png",
+        width: settings.width,
+        height: settings.height,
+        quality: settings.quality,
+        format: settings.format,
         count,
         referenceIds: [],
       },
     });
-    expect(response.ok()).toBe(true);
+    expect(response.ok(), await response.text()).toBe(true);
     const task = await response.json();
     await expect
       .poll(
