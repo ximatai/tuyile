@@ -2614,7 +2614,20 @@ test("user quota inputs align in finite and unlimited modes on desktop", async (
   ).toBeVisible();
   await expect(
     drawer.getByRole("button", { name: "更多账号操作", exact: true }),
+  ).toHaveCount(1);
+  await drawer
+    .getByRole("button", { name: "更多账号操作", exact: true })
+    .click();
+  await expect(
+    page.getByRole("menuitem", { name: "今日作品", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "重置密码", exact: true }),
   ).toHaveCount(0);
+  await expect(
+    page.getByRole("menuitem", { name: "停用账号", exact: true }),
+  ).toHaveCount(0);
+  await page.keyboard.press("Escape");
   for (const width of [1280, 1920]) {
     await page.setViewportSize({ width, height: 900 });
     for (const checked of [false, true]) {

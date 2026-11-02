@@ -104,7 +104,10 @@ export function AdminPage({
     setError("");
     setPasswordResult(null);
     setCopied(false);
-    setSelectedAccount(users.find((user) => user.id === id) ?? null);
+    setSelectedAccount(
+      users.find((user) => user.id === id) ??
+        (selectedUser?.id === id ? selectedUser : null),
+    );
     setPreviewOpen(false);
     setArtworksOnly(onlyArtworks);
     setSelectedId(id);
@@ -347,24 +350,35 @@ export function AdminPage({
           )
         }
         extra={
-          selectedUser && selectedUser.id !== ownId ? (
+          selectedUser ? (
             <Dropdown
               trigger={["click"]}
               menu={{
                 items: [
                   {
-                    key: "reset",
-                    label: "重置密码",
-                    disabled: busy || policyBusy || !selectedUser.enabled,
-                  },
-                  {
-                    key: "enabled",
-                    label: selectedUser.enabled ? "停用账号" : "启用账号",
-                    danger: selectedUser.enabled,
+                    key: artworksOnly ? "settings" : "artworks",
+                    label: artworksOnly ? "账号设置" : "今日作品",
                     disabled: busy || policyBusy,
                   },
+                  ...(selectedUser.id !== ownId
+                    ? [
+                        {
+                          key: "reset",
+                          label: "重置密码",
+                          disabled: busy || policyBusy || !selectedUser.enabled,
+                        },
+                        {
+                          key: "enabled",
+                          label: selectedUser.enabled ? "停用账号" : "启用账号",
+                          danger: selectedUser.enabled,
+                          disabled: busy || policyBusy,
+                        },
+                      ]
+                    : []),
                 ],
                 onClick: ({ key }) => {
+                  if (key === "artworks" || key === "settings")
+                    void selectUser(selectedUser.id, key === "artworks");
                   if (key === "reset")
                     void (async () => {
                       if (
