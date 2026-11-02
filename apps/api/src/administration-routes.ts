@@ -19,8 +19,8 @@ export function administrationRoutes(
       pageOffset.parse(c.req.query("offset")),
     );
     return c.json({
-      artworks: artworks.slice(0, 12),
-      hasMore: artworks.length > 12,
+      artworks: artworks.slice(0, 5),
+      hasMore: artworks.length > 5,
     });
   });
   app.get("/api/admin/users/:id/artworks/:assetId/:variant", async (c) => {

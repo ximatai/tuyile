@@ -33,6 +33,7 @@ export function AdminPage({
 }) {
   const [passwordResult, setPasswordResult] =
     useState<TemporaryPasswordResult | null>(null);
+  const [artworksOnly, setArtworksOnly] = useState(false);
   const [selectedId, setSelectedId] = useState("");
   const [selectedAccount, setSelectedAccount] = useState<UserView | null>(null);
   const [search, setSearch] = useState("");
@@ -92,8 +93,13 @@ export function AdminPage({
   const selectedUser =
     users.find((u) => u.id === selectedId) ??
     (selectedAccount?.id === selectedId ? selectedAccount : undefined);
-  async function selectUser(id: string) {
-    if (id === selectedId || policyBusy || busy) return;
+  async function selectUser(id: string, onlyArtworks = false) {
+    if (
+      (id === selectedId && onlyArtworks === artworksOnly) ||
+      policyBusy ||
+      busy
+    )
+      return;
     if (dirty && !(await confirm("有未保存的用户配置，放弃修改？"))) return;
     setDirty(false);
     setError("");
@@ -101,6 +107,7 @@ export function AdminPage({
     setCopied(false);
     setSelectedAccount(users.find((user) => user.id === id) ?? null);
     setPreviewOpen(false);
+    setArtworksOnly(onlyArtworks);
     setSelectedId(id);
   }
   async function action(run: () => Promise<unknown>, successText?: string) {
@@ -291,7 +298,12 @@ export function AdminPage({
             {
               title: "今日图片",
               key: "images",
-              render: (_, u) => <QuotaCount quota={u.today?.images} />,
+              render: (_, u) => (
+                <QuotaCount
+                  quota={u.today?.images}
+                  onUsedClick={() => void selectUser(u.id, true)}
+                />
+              ),
             },
             {
               title: "今日规划",
@@ -409,29 +421,34 @@ export function AdminPage({
               key={`activity-${selectedUser.id}`}
               user={selectedUser}
               onPreviewChange={setPreviewOpen}
+              artworksOnly={artworksOnly}
             />
-            <Collapse
-              items={[
-                {
-                  key: "policy",
-                  label: "额度设置",
-                  forceRender: true,
-                  children: (
-                    <UserPolicyEditor
-                      key={selectedUser.id}
-                      userId={selectedUser.id}
-                      csrfToken={csrfToken}
-                      onDirtyChange={setDirty}
-                      onBusyChange={setPolicyBusy}
-                    />
-                  ),
-                },
-              ]}
-            />
-            <DemoRetry
-              key={`demo-${selectedUser.id}`}
-              userId={selectedUser.id}
-            />
+            {!artworksOnly && (
+              <>
+                <Collapse
+                  items={[
+                    {
+                      key: "policy",
+                      label: "额度设置",
+                      forceRender: true,
+                      children: (
+                        <UserPolicyEditor
+                          key={selectedUser.id}
+                          userId={selectedUser.id}
+                          csrfToken={csrfToken}
+                          onDirtyChange={setDirty}
+                          onBusyChange={setPolicyBusy}
+                        />
+                      ),
+                    },
+                  ]}
+                />
+                <DemoRetry
+                  key={`demo-${selectedUser.id}`}
+                  userId={selectedUser.id}
+                />
+              </>
+            )}
           </>
         )}
       </Drawer>

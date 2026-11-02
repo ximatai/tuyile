@@ -8,6 +8,13 @@ test("user management shows mock generation quota and artwork previews", async (
   await page.setViewportSize({ width: 1440, height: 900 });
   await loginAdmin(page);
   const session = await (await page.request.get("/api/auth/me")).json();
+  await page.goto("/admin/users");
+  await expect(
+    page.getByRole("columnheader", { name: "今日图片", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /查看今日 \d+ 张图片/ }),
+  ).toHaveCount(0);
   const headers = {
     Origin: "http://127.0.0.1:5180",
     "X-CSRF-Token": session.csrfToken,
@@ -20,31 +27,37 @@ test("user management shows mock generation quota and artwork previews", async (
   ).json();
   const usage = await (await page.request.get("/api/images/usage")).json();
   const choice = usage.modelOptions?.[0];
-  const submitted = await page.request.post("/api/images/tasks", {
-    headers,
-    data: {
-      projectId: project.id,
-      requestKey: randomUUID(),
-      prompt: "Synthetic blue artwork",
-      model: choice?.modelId ?? usage.models[0],
-      ...(choice ? { modelSelectionId: choice.id } : {}),
-      width: 256,
-      height: 256,
-      quality: "medium",
-      format: "png",
-      count: 1,
-      referenceIds: [],
-    },
-  });
-  expect(submitted.ok()).toBe(true);
-  const task = await submitted.json();
-  await expect
-    .poll(
-      async () =>
-        (await (await page.request.get(`/api/images/tasks/${task.id}`)).json())
-          .state,
-    )
-    .toBe("succeeded");
+  for (const count of [4, 2]) {
+    const submitted = await page.request.post("/api/images/tasks", {
+      headers,
+      data: {
+        projectId: project.id,
+        requestKey: randomUUID(),
+        prompt: "Synthetic blue artwork",
+        model: choice?.modelId ?? usage.models[0],
+        ...(choice ? { modelSelectionId: choice.id } : {}),
+        width: 256,
+        height: 256,
+        quality: "medium",
+        format: "png",
+        count,
+        referenceIds: [],
+      },
+    });
+    expect(submitted.ok()).toBe(true);
+    const task = await submitted.json();
+    await expect
+      .poll(
+        async () =>
+          (
+            await (
+              await page.request.get(`/api/images/tasks/${task.id}`)
+            ).json()
+          ).state,
+        { timeout: 20000 },
+      )
+      .toBe("succeeded");
+  }
   await page.goto("/admin/users");
   await expect(
     page.getByRole("columnheader", { name: "今日图片", exact: true }),
@@ -52,11 +65,35 @@ test("user management shows mock generation quota and artwork previews", async (
   const row = page.getByRole("row").filter({
     has: page.getByRole("cell", { name: session.user.username, exact: true }),
   });
-  await row.getByRole("button", { name: "查看", exact: true }).click();
+  await row
+    .getByRole("button", { name: "查看今日 6 张图片", exact: true })
+    .click();
   const drawer = page.locator(".user-settings-drawer");
   await expect(
     drawer.getByRole("heading", { name: "今日作品", exact: true }),
   ).toBeVisible();
+  await expect(
+    drawer.getByRole("heading", { name: "今日额度", exact: true }),
+  ).toHaveCount(0);
+  await expect(drawer.locator(".admin-artworks .ant-image-img")).toHaveCount(5);
+  const firstPage = await (
+    await page.request.get(`/api/admin/users/${session.user.id}/artworks`)
+  ).json();
+  expect(firstPage.artworks).toHaveLength(5);
+  expect(firstPage.hasMore).toBe(true);
+  expect(
+    firstPage.artworks.map((a: { createdAt: string }) => a.createdAt),
+  ).toEqual(
+    [...firstPage.artworks]
+      .map((a: { createdAt: string }) => a.createdAt)
+      .sort()
+      .reverse(),
+  );
+  await drawer.getByRole("button", { name: "加载更多", exact: true }).click();
+  await expect(drawer.locator(".admin-artworks .ant-image-img")).toHaveCount(6);
+  await expect(
+    drawer.getByRole("button", { name: "加载更多", exact: true }),
+  ).toHaveCount(0);
   const image = drawer.locator(".admin-artworks .ant-image-img").first();
   await expect(image).toBeVisible();
   await expect
@@ -71,6 +108,12 @@ test("user management shows mock generation quota and artwork previews", async (
   await page.setViewportSize({ width: 1920, height: 1080 });
   await expect(drawer).toBeVisible();
   await page.screenshot({ path: ".codex-temp/admin-user-activity-1920.png" });
+  await page.keyboard.press("Escape");
+  await expect(drawer).toBeHidden();
+  await row.getByRole("button", { name: "查看", exact: true }).click();
+  await expect(
+    drawer.getByRole("heading", { name: "今日额度", exact: true }),
+  ).toBeVisible();
   const art = await (
     await page.request.get(`/api/admin/users/${session.user.id}/artworks`)
   ).json();

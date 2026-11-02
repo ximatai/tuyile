@@ -28,7 +28,7 @@ class PgAdministrationRepository
       JOIN image_tasks t ON t.id=o.task_id AND t.workspace_id=o.workspace_id
       WHERE a.user_id=$1 AND a.state='ready' AND o.created_at >= $2::date::timestamp AT TIME ZONE 'Asia/Shanghai'
       AND o.created_at < ($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai'
-      ORDER BY o.created_at DESC,a.id DESC LIMIT 13 OFFSET $3`,
+      ORDER BY o.created_at DESC,a.id DESC LIMIT 6 OFFSET $3`,
         [userId, day, offset],
       )
     ).rows;

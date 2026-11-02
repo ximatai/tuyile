@@ -9,11 +9,30 @@ import { Button, Image, Notice } from "@tuyile/ui";
 import { HelpPopover } from "./interface-help";
 import { client } from "./api";
 import { useSessionState } from "./session-state";
-export function QuotaCount({ quota }: { quota?: AdminQuota }) {
+export function QuotaCount({
+  quota,
+  onUsedClick,
+}: {
+  quota?: AdminQuota;
+  onUsedClick?: () => void;
+}) {
   if (!quota) return <>—</>;
   return (
     <>
-      {quota.used} / {quota.limit === -1 ? "不限额" : quota.limit}
+      {quota.used > 0 && onUsedClick ? (
+        <Button
+          type="button"
+          variant="link"
+          onClick={onUsedClick}
+          aria-label={`查看今日 ${quota.used} 张图片`}
+          className="admin-quota-link"
+        >
+          {quota.used}
+        </Button>
+      ) : (
+        quota.used
+      )}{" "}
+      / {quota.limit === -1 ? "不限额" : quota.limit}
       {quota.held > 0 && (
         <small className="admin-held">预留 {quota.held}</small>
       )}
@@ -23,8 +42,10 @@ export function QuotaCount({ quota }: { quota?: AdminQuota }) {
 export function UserActivity({
   user,
   onPreviewChange,
+  artworksOnly = false,
 }: {
   user: UserView;
+  artworksOnly?: boolean;
   onPreviewChange: (open: boolean) => void;
 }) {
   const state = useSessionState();
@@ -38,7 +59,7 @@ export function UserActivity({
         signal,
       ),
     getNextPageParam: (page, pages) =>
-      page.hasMore ? pages.length * 12 : undefined,
+      page.hasMore ? pages.length * 5 : undefined,
     refetchInterval: 15000,
   });
   const artworks = [
@@ -55,35 +76,39 @@ export function UserActivity({
   useEffect(() => () => onPreviewChange(false), [onPreviewChange]);
   return (
     <>
-      <div className="admin-usage-title">
-        <h3>今日额度</h3>
-        <HelpPopover title="统计口径">
-          上海时间每日 00:00
-          切换。额度按预留所属日结算，作品按成功保存时间展示。跨日完成可能使两者数量不同；删除作品不返还次数。
-        </HelpPopover>
-      </div>
-      {user.today && (
-        <div className="admin-user-quotas">
-          {(
-            [
-              ["图片", user.today.images],
-              ["规划", user.today.planning],
-            ] as const
-          ).map(([label, q]) => (
-            <div key={label}>
-              <span>{label}</span>
-              <span>
-                <QuotaCount quota={q} />
-              </span>
-              <span>
-                {q.limit === -1
-                  ? ""
-                  : `剩余 ${Math.max(0, q.limit - q.used - q.held)}`}
-              </span>
-              {q.earlierHeld > 0 && <small>历史预留 {q.earlierHeld}</small>}
+      {!artworksOnly && (
+        <>
+          <div className="admin-usage-title">
+            <h3>今日额度</h3>
+            <HelpPopover title="统计口径">
+              上海时间每日 00:00
+              切换。额度按预留所属日结算，作品按成功保存时间展示。跨日完成可能使两者数量不同；删除作品不返还次数。
+            </HelpPopover>
+          </div>
+          {user.today && (
+            <div className="admin-user-quotas">
+              {(
+                [
+                  ["图片", user.today.images],
+                  ["规划", user.today.planning],
+                ] as const
+              ).map(([label, q]) => (
+                <div key={label}>
+                  <span>{label}</span>
+                  <span>
+                    <QuotaCount quota={q} />
+                  </span>
+                  <span>
+                    {q.limit === -1
+                      ? ""
+                      : `剩余 ${Math.max(0, q.limit - q.used - q.held)}`}
+                  </span>
+                  {q.earlierHeld > 0 && <small>历史预留 {q.earlierHeld}</small>}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+          )}
+        </>
       )}
       <div className="admin-usage-title">
         <h3>今日作品</h3>
