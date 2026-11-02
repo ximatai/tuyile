@@ -83,7 +83,7 @@ test("desktop and mobile: persistent projects, initial password, account boundar
   await page
     .getByRole("row")
     .filter({ hasText: "designer01" })
-    .getByRole("button", { name: "管理", exact: true })
+    .getByRole("button", { name: "查看", exact: true })
     .click();
   const drawer = page.getByRole("dialog", { name: "designer01" });
   const quota = drawer.getByLabel("每日图片额度", { exact: true });
@@ -94,12 +94,7 @@ test("desktop and mobile: persistent projects, initial password, account boundar
   const originalStorage = await storage.inputValue();
   await expect(
     drawer.getByLabel("图片最大边长（px）", { exact: true }),
-  ).toBeHidden();
-  await drawer.getByText("高级设置", { exact: true }).click();
-  await expect(
-    drawer.getByLabel("图片最大边长（px）", { exact: true }),
   ).toBeVisible();
-  await drawer.getByText("高级设置", { exact: true }).click();
   await storage.fill("1.5");
 
   await quota.fill("7");
@@ -118,7 +113,7 @@ test("desktop and mobile: persistent projects, initial password, account boundar
   await page
     .getByRole("row")
     .filter({ hasText: "designer01" })
-    .getByRole("button", { name: "管理", exact: true })
+    .getByRole("button", { name: "查看", exact: true })
     .click();
   await expect(quota).toHaveValue("7");
   await expect(storage).toHaveValue("1.5");
@@ -133,7 +128,7 @@ test("desktop and mobile: persistent projects, initial password, account boundar
   await page
     .getByRole("row")
     .filter({ hasText: "designer01" })
-    .getByRole("button", { name: "管理", exact: true })
+    .getByRole("button", { name: "查看", exact: true })
     .click();
   await expect(
     drawer.getByRole("checkbox", { name: "不限额", exact: true }),
@@ -342,7 +337,7 @@ test("administrator resets a password and user must replace the temporary passwo
   await page
     .getByRole("row")
     .filter({ hasText: "hashuser02" })
-    .getByRole("button", { name: "管理", exact: true })
+    .getByRole("button", { name: "查看", exact: true })
     .click();
   await page.getByRole("button", { name: "更多账号操作", exact: true }).click();
   await page.getByRole("menuitem", { name: "重置密码", exact: true }).click();
@@ -2594,7 +2589,7 @@ test("user quota inputs align in finite and unlimited modes on desktop", async (
   await page
     .getByRole("row")
     .filter({ has: page.getByRole("cell", { name: "admin", exact: true }) })
-    .getByRole("button", { name: "管理", exact: true })
+    .getByRole("button", { name: "查看", exact: true })
     .click();
   const drawer = page.getByRole("dialog", { name: /^admin/, exact: false });
   const quota = drawer.getByLabel("每日图片额度", { exact: true });
@@ -2656,7 +2651,7 @@ test("user policy draft survives a pending search", async ({ page }) => {
   await page
     .getByRole("row")
     .filter({ has: page.getByRole("cell", { name: "admin", exact: true }) })
-    .getByRole("button", { name: "管理", exact: true })
+    .getByRole("button", { name: "查看", exact: true })
     .click();
   const drawer = page.getByRole("dialog", { name: /^admin/ });
   await drawer.getByRole("checkbox", { name: "不限额", exact: true }).uncheck();
@@ -2718,7 +2713,7 @@ test("user search reaches older pages and unsaved policies block history and rel
   await page
     .getByRole("row")
     .filter({ has: page.getByRole("cell", { name: "admin", exact: true }) })
-    .getByRole("button", { name: "管理", exact: true })
+    .getByRole("button", { name: "查看", exact: true })
     .click();
   const drawer = page.getByRole("dialog", { name: /^admin/ });
   await drawer.getByRole("checkbox", { name: "不限额", exact: true }).uncheck();

@@ -19,7 +19,6 @@ import {
   Drawer,
   Dropdown,
   Input,
-  Collapse,
 } from "@tuyile/ui";
 import { client, notifySessionChange } from "./api";
 import { Ellipsis, Plus, Search } from "lucide-react";
@@ -417,31 +416,20 @@ export function AdminPage({
           <>
             {error && <Notice error>{error}</Notice>}
             {passwordResult?.user.id === selectedId && temporaryResult}
-            <UserActivity
-              key={`activity-${selectedUser.id}`}
-              user={selectedUser}
-              onPreviewChange={setPreviewOpen}
-              artworksOnly={artworksOnly}
-            />
-            {!artworksOnly && (
+            {artworksOnly ? (
+              <UserActivity
+                key={`activity-${selectedUser.id}`}
+                user={selectedUser}
+                onPreviewChange={setPreviewOpen}
+              />
+            ) : (
               <>
-                <Collapse
-                  items={[
-                    {
-                      key: "policy",
-                      label: "额度设置",
-                      forceRender: true,
-                      children: (
-                        <UserPolicyEditor
-                          key={selectedUser.id}
-                          userId={selectedUser.id}
-                          csrfToken={csrfToken}
-                          onDirtyChange={setDirty}
-                          onBusyChange={setPolicyBusy}
-                        />
-                      ),
-                    },
-                  ]}
+                <UserPolicyEditor
+                  key={selectedUser.id}
+                  userId={selectedUser.id}
+                  csrfToken={csrfToken}
+                  onDirtyChange={setDirty}
+                  onBusyChange={setPolicyBusy}
                 />
                 <DemoRetry
                   key={`demo-${selectedUser.id}`}

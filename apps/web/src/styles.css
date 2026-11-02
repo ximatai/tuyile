@@ -4205,3 +4205,7 @@ h3 {
 }
 
 .admin-quota-link { color: var(--brand-blue); padding: 0 !important; height: auto !important; min-width: 0; vertical-align: baseline; font: inherit; }
+
+.user-policy-editor form > h3 { margin: 18px 0 10px; padding-top: 14px; border-top: 1px solid var(--ant-color-border-secondary, #edf0f4); }
+.user-policy-editor .parameter-grid { gap: 10px 12px; }
+.user-policy-editor .user-policy-save { margin-top: 14px; }

@@ -9,6 +9,12 @@ test("user management shows mock generation quota and artwork previews", async (
   await loginAdmin(page);
   const session = await (await page.request.get("/api/auth/me")).json();
   await page.goto("/admin/users");
+  await page
+    .getByRole("textbox", { name: "搜索用户", exact: true })
+    .fill(session.user.username);
+  await expect(
+    page.getByRole("cell", { name: session.user.username, exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByRole("columnheader", { name: "今日图片", exact: true }),
   ).toBeVisible();
@@ -59,6 +65,12 @@ test("user management shows mock generation quota and artwork previews", async (
       .toBe("succeeded");
   }
   await page.goto("/admin/users");
+  await page
+    .getByRole("textbox", { name: "搜索用户", exact: true })
+    .fill(session.user.username);
+  await expect(
+    page.getByRole("cell", { name: session.user.username, exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByRole("columnheader", { name: "今日图片", exact: true }),
   ).toBeVisible();
@@ -112,8 +124,24 @@ test("user management shows mock generation quota and artwork previews", async (
   await expect(drawer).toBeHidden();
   await row.getByRole("button", { name: "查看", exact: true }).click();
   await expect(
-    drawer.getByRole("heading", { name: "今日额度", exact: true }),
+    drawer.getByRole("heading", { name: "使用额度", exact: true }),
   ).toBeVisible();
+  await expect(
+    drawer.getByRole("heading", { name: "今日作品", exact: true }),
+  ).toHaveCount(0);
+  await expect(drawer.locator(".ant-collapse")).toHaveCount(0);
+  await expect(
+    drawer.getByLabel("图片最大边长（px）", { exact: true }),
+  ).toBeVisible();
+  await expect
+    .poll(async () => {
+      const box = await drawer.boundingBox();
+      return box
+        ? Math.abs(box.x + box.width - page.viewportSize()!.width)
+        : Infinity;
+    })
+    .toBeLessThan(1);
+  await page.screenshot({ path: ".codex-temp/user-settings-flat.png" });
   const art = await (
     await page.request.get(`/api/admin/users/${session.user.id}/artworks`)
   ).json();
