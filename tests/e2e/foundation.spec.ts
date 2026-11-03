@@ -1077,7 +1077,7 @@ test("desktop administration publishes service model pools and preserves version
     .getByRole("button", { name: "关闭", exact: true })
     .click();
   // A long administration page must scroll underneath the shared navigation.
-  await page.getByRole("tab", { name: "运行与核验", exact: true }).click();
+  await page.getByRole("tab", { name: "运行", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "保存规划策略" }),
   ).toBeAttached();
@@ -2274,6 +2274,7 @@ test("review cards show task age, call evidence and release action together", as
     finishedAt = new Date(now - 3_650_000).toISOString(),
     id = "7624bf90-44fb-4f46-a2c0-8b131bf6d039";
   let resolution: unknown;
+  const secondId = "79edcc7c-ffdf-4b14-b516-432c32012da0";
   await page.route(`**/api/image-admin/review/${id}`, async (route) => {
     resolution = route.request().postDataJSON();
     await route.fulfill({ json: { ok: true } });
@@ -2308,13 +2309,29 @@ test("review cards show task age, call evidence and release action together", as
                   },
                 ],
               },
+              {
+                id: secondId,
+                userId: secondId,
+                username: "another-account",
+                state: "failed",
+                pendingReview: true,
+                model: "test-image",
+                count: 1,
+                used: 0,
+                held: 1,
+                createdAt,
+                finishedAt,
+                attempts: [],
+              },
             ],
       },
     }),
   );
   await page.goto("/admin/images");
-  await page.getByRole("tab", { name: "运行与核验", exact: true }).click();
-  const card = page.getByRole("form", { name: "核验任务" });
+  await page.getByRole("tab", { name: "核验", exact: true }).click();
+  const cards = page.getByRole("form", { name: "核验任务" });
+  await expect(cards).toHaveCount(2);
+  const card = cards.first();
   await expect(card).toContainText("review-account");
   await expect(card).toContainText("进入待核验 1小时前");
   await expect(card.locator("time").nth(1)).toHaveAttribute(
@@ -2330,10 +2347,11 @@ test("review cards show task age, call evidence and release action together", as
     release = card.getByRole("button", { name: "确认无法取得图片并释放预留" });
   for (const width of [1440, 1920]) {
     await page.setViewportSize({ width, height: 900 });
-    const inputBox = (await reason.boundingBox())!,
-      buttonBox = (await release.boundingBox())!;
-    expect(buttonBox.x).toBeGreaterThan(inputBox.x + inputBox.width);
-    expect(Math.abs(buttonBox.y - inputBox.y)).toBeLessThan(2);
+    const first = (await card.boundingBox())!,
+      second = (await cards.nth(1).boundingBox())!;
+    expect(second.x).toBeGreaterThan(first.x + first.width);
+    expect(Math.abs(second.y - first.y)).toBeLessThan(2);
+    expect(first.width).toBeLessThanOrEqual(460);
   }
   await reason.fill("已确认上游无可取回的图片");
   await release.click();
@@ -2350,7 +2368,7 @@ test("administration saves bounded execution policies and clearing ended Agent h
   await page.setViewportSize({ width: 1440, height: 900 });
   await login(page);
   await page.goto("/admin/images");
-  await page.getByRole("tab", { name: "运行与核验", exact: true }).click();
+  await page.getByRole("tab", { name: "运行", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "运行概览与规划策略", exact: true }),
   ).toBeVisible();

@@ -43,7 +43,7 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
     [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
-    if (section !== "operations") return;
+    if (section !== "review") return;
     setNow(Date.now());
     const timer = window.setInterval(() => setNow(Date.now()), 30_000);
     return () => window.clearInterval(timer);
@@ -76,7 +76,6 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
   return (
     <section className="image-admin">
       <h1>模型服务</h1>
-      {review.error && <Notice error>{review.error.message}</Notice>}
       <Tabs
         activeKey={section}
         onChange={setSection}
@@ -95,17 +94,23 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
           },
           {
             key: "operations",
-            label: "运行与核验",
+            label: "运行",
             forceRender: true,
+            children: <OperationsAdmin />,
+          },
+          {
+            key: "review",
+            label: "核验",
             children: (
-              <>
-                <OperationsAdmin />
-                <section className="settings-section">
-                  <h2>结果待核验</h2>
-                  <p className="hint">
-                    确认无法取得图片后释放预留，不增加图片消费次数，也不返还上游尝试。
-                  </p>
-                  {review.data?.tasks.length === 0 && <p>暂无待核验任务。</p>}
+              <section className="settings-section review-section">
+                {review.error && <Notice error>{review.error.message}</Notice>}
+                {review.isPending && <p role="status">正在加载待核验任务…</p>}
+                <h2>结果待核验</h2>
+                <p className="hint">
+                  确认无法取得图片后释放预留，不增加图片消费次数，也不返还上游尝试。
+                </p>
+                {review.data?.tasks.length === 0 && <p>暂无待核验任务。</p>}
+                <div className="review-grid">
                   {review.data?.tasks.map((t) => (
                     <form
                       key={t.id}
@@ -200,8 +205,8 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
                       </div>
                     </form>
                   ))}
-                </section>
-              </>
+                </div>
+              </section>
             ),
           },
         ]}
