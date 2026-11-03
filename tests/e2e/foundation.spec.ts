@@ -2510,6 +2510,19 @@ test("administrators add a service and users select same-named models from the c
     .locator(".ant-select-dropdown:visible")
     .getByText("test-planner · 备用测试服务", { exact: true })
     .click();
+  const conversationEntry = catalog.entries.find(
+    (e: any) => e.serviceId === service.id && e.kind === "conversation",
+  );
+  // The compact selected label omits the service name. Verify the actual draft
+  // selection before closing the popover, not merely that an option was clicked.
+  await expect
+    .poll(async () => {
+      const response = await page.request.get(
+        `/api/projects/${page.url().split("/").at(-1)}/draft`,
+      );
+      return (await response.json()).document.agent.conversationModel;
+    })
+    .toBe(conversationEntry.id);
   await page.getByRole("button", { name: "创作设置", exact: true }).click();
   await page
     .getByLabel("告诉 Agent 你的想法", { exact: true })
