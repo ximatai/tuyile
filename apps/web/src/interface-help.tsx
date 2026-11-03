@@ -13,22 +13,21 @@ export function HelpPopover({
   title,
   children,
   visible = true,
-  focusContent = false,
-  triggerLabel,
+  actionLabel,
 }: {
   title: string;
   children: ReactNode;
   visible?: boolean;
-  focusContent?: boolean;
-  triggerLabel?: string;
+  actionLabel?: string;
 }) {
+  const interactive = actionLabel !== undefined;
   const [open, setOpen] = useState(false);
   const trigger = useRef<ComponentRef<typeof Button>>(null);
   const contentRef = useCallback(
     (node: HTMLDivElement | null) => {
-      if (open && focusContent) node?.focus({ preventScroll: true });
+      if (open && interactive) node?.focus({ preventScroll: true });
     },
-    [open, focusContent],
+    [open, interactive],
   );
   useEffect(() => {
     if (!visible) setOpen(false);
@@ -48,10 +47,10 @@ export function HelpPopover({
         <div
           ref={contentRef}
           className={
-            focusContent ? "help-content help-content-scroll" : "help-content"
+            interactive ? "help-content help-content-scroll" : "help-content"
           }
-          role={triggerLabel ? "dialog" : undefined}
-          aria-label={triggerLabel ? title : undefined}
+          role={interactive ? "dialog" : undefined}
+          aria-label={interactive ? title : undefined}
           tabIndex={0}
           onKeyDown={escape}
         >
@@ -66,13 +65,13 @@ export function HelpPopover({
       <Button
         ref={trigger}
         type="button"
-        className={triggerLabel ? undefined : "help-trigger"}
-        aria-label={triggerLabel ? undefined : title}
-        aria-haspopup={triggerLabel ? "dialog" : undefined}
+        className={interactive ? undefined : "help-trigger"}
+        aria-label={interactive ? undefined : title}
+        aria-haspopup={interactive ? "dialog" : undefined}
         aria-expanded={open}
         onKeyDown={escape}
       >
-        {triggerLabel ?? <Info size={16} aria-hidden="true" />}
+        {actionLabel ?? <Info size={16} aria-hidden="true" />}
       </Button>
     </Popover>
   );
