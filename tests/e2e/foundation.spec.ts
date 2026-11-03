@@ -2265,6 +2265,85 @@ test("Gallery reuse, ZIP export, favorites, prompt application and project clean
   await expect(page.locator(".gallery-card").first()).toBeVisible();
 });
 
+test("review cards show task age, call evidence and release action together", async ({
+  page,
+}) => {
+  await login(page);
+  const now = Date.now(),
+    createdAt = new Date(now - 3_700_000).toISOString(),
+    finishedAt = new Date(now - 3_650_000).toISOString(),
+    id = "7624bf90-44fb-4f46-a2c0-8b131bf6d039";
+  let resolution: unknown;
+  await page.route(`**/api/image-admin/review/${id}`, async (route) => {
+    resolution = route.request().postDataJSON();
+    await route.fulfill({ json: { ok: true } });
+  });
+  await page.route("**/api/image-admin/review", (route) =>
+    route.fulfill({
+      json: {
+        tasks: resolution
+          ? []
+          : [
+              {
+                id,
+                userId: id,
+                username: "review-account",
+                state: "partial",
+                pendingReview: true,
+                model: "test-image",
+                count: 2,
+                used: 1,
+                held: 1,
+                createdAt,
+                finishedAt,
+                attempts: [
+                  {
+                    id: "b98007bc-1182-4a26-b283-1179f57d0de04",
+                    state: "unknown",
+                    createdAt,
+                    ordinal: 1,
+                    retry: 1,
+                    httpStatus: 504,
+                    errorCode: "RESULT_UNKNOWN",
+                  },
+                ],
+              },
+            ],
+      },
+    }),
+  );
+  await page.goto("/admin/images");
+  await page.getByRole("tab", { name: "运行与核验", exact: true }).click();
+  const card = page.getByRole("form", { name: "核验任务" });
+  await expect(card).toContainText("review-account");
+  await expect(card).toContainText("进入待核验 1小时前");
+  await expect(card.locator("time").nth(1)).toHaveAttribute(
+    "datetime",
+    finishedAt,
+  );
+  await expect(card).toContainText("已保存 1 / 2 张");
+  await expect(card).toContainText("预留 1 张");
+  await expect(card.getByRole("listitem")).toContainText("第 2 张（重试）");
+  await expect(card.getByRole("listitem")).toContainText("HTTP 504");
+  await expect(card.getByRole("listitem")).toContainText("RESULT_UNKNOWN");
+  const reason = card.getByLabel("核验原因"),
+    release = card.getByRole("button", { name: "确认无法取得图片并释放预留" });
+  for (const width of [1440, 1920]) {
+    await page.setViewportSize({ width, height: 900 });
+    const inputBox = (await reason.boundingBox())!,
+      buttonBox = (await release.boundingBox())!;
+    expect(buttonBox.x).toBeGreaterThan(inputBox.x + inputBox.width);
+    expect(Math.abs(buttonBox.y - inputBox.y)).toBeLessThan(2);
+  }
+  await reason.fill("已确认上游无可取回的图片");
+  await release.click();
+  await expect(card).toHaveCount(0);
+  expect(resolution).toEqual({
+    confirmed: 0,
+    reason: "已确认上游无可取回的图片",
+  });
+});
+
 test("administration saves bounded execution policies and clearing ended Agent history preserves images and charges", async ({
   page,
 }) => {

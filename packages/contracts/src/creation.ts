@@ -150,14 +150,21 @@ export interface ProviderView {
 export interface ReviewTask {
   id: string;
   userId: string;
-  state: string;
+  username: string;
+  state: ImageTask["state"];
+  model: string;
+  count: number;
   pendingReview: boolean;
   used: number;
   held: number;
   createdAt: string;
+  finishedAt: string | null;
   attempts: {
     id: string;
     state: string;
+    createdAt: string;
+    ordinal: number;
+    retry: number;
     httpStatus: number | null;
     errorCode: string | null;
   }[];

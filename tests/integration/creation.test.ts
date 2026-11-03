@@ -205,6 +205,18 @@ it("keeps partial success and unknown holds; metadata-only manual resolution is 
   expect(result.pendingReview).toBe(true);
   expect(calls).toBe(2);
   const review = await f.repo.review(f.principal);
+  expect(review.find((task) => task.id === t.id)).toMatchObject({
+    model: f.input().model,
+    count: 3,
+    state: "partial",
+    used: 1,
+    held: 1,
+    finishedAt: expect.any(String),
+    attempts: [
+      { ordinal: 0, state: "succeeded", createdAt: expect.any(String) },
+      { ordinal: 1, state: "unknown", errorCode: "RESULT_UNKNOWN" },
+    ],
+  });
   expect(JSON.stringify(review)).not.toContain("Synthetic private prompt");
   expect(JSON.stringify(review)).not.toContain("secret");
   await expect(

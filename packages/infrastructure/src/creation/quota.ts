@@ -225,29 +225,42 @@ export class PgQuotaRepository extends PgCreationContext {
     await this.auth(c, p, true, false);
     const rows = (
       await c.query(
-        "SELECT id,user_id,state,pending_review,used,held,created_at FROM image_tasks WHERE pending_review ORDER BY created_at LIMIT 100",
+        `SELECT t.id,t.user_id,u.username,t.state,t.pending_review,t.used,t.held,
+                t.created_at,t.finished_at,t.input->>'model' AS model,
+                (t.input->>'count')::int AS count
+         FROM image_tasks t JOIN users u ON u.id=t.user_id
+         WHERE t.pending_review ORDER BY t.created_at,t.id LIMIT 100`,
       )
     ).rows;
     const attempts = (
-      await c.query<ReviewTask["attempts"][number] & { task_id: string }>(
-        'SELECT task_id,id,state,http_status AS "httpStatus",error_code AS "errorCode" FROM image_attempts WHERE task_id=ANY($1::uuid[]) ORDER BY created_at',
+      await c.query<
+        Omit<ReviewTask["attempts"][number], "createdAt"> & {
+          task_id: string;
+          created_at: Date;
+        }
+      >(
+        'SELECT task_id,id,state,created_at,ordinal,retry,http_status AS "httpStatus",error_code AS "errorCode" FROM image_attempts WHERE task_id=ANY($1::uuid[]) ORDER BY created_at,ordinal,retry',
         [rows.map((r) => r.id)],
       )
     ).rows;
     const byTask = new Map<string, ReviewTask["attempts"]>();
-    for (const { task_id, ...attempt } of attempts) {
+    for (const { task_id, created_at, ...attempt } of attempts) {
       const group = byTask.get(task_id) ?? [];
-      group.push(attempt);
+      group.push({ ...attempt, createdAt: created_at.toISOString() });
       byTask.set(task_id, group);
     }
     const results: ReviewTask[] = rows.map((r) => ({
       id: r.id,
       userId: r.user_id,
+      username: r.username,
+      model: r.model,
+      count: r.count,
       state: r.state,
       pendingReview: r.pending_review,
       used: r.used,
       held: r.held,
       createdAt: r.created_at.toISOString(),
+      finishedAt: r.finished_at?.toISOString() ?? null,
       attempts: byTask.get(r.id) ?? [],
     }));
     return results;
