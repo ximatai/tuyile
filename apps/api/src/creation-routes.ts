@@ -149,7 +149,7 @@ export function creationRoutes(app: Hono<ApiEnv>, service: CreationService) {
     const input = z
       .object({
         confirmed: z.literal(0),
-        reason: z.string().trim().min(3).max(500),
+        reason: z.string().trim().max(500).default(""),
       })
       .parse(await c.req.json());
     await service.resolve(

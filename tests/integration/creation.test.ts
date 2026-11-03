@@ -222,8 +222,28 @@ it("keeps partial success and unknown holds; metadata-only manual resolution is 
   await expect(
     f.creation.delete(f.principal, reference.id),
   ).rejects.toMatchObject({ code: "ASSET_REFERENCED" });
-  await f.repo.resolve(f.principal, t.id, 0, "Verified upstream no image");
-  await f.repo.resolve(f.principal, t.id, 0, "Verified upstream no image");
+  const origin = "http://127.0.0.1:5180";
+  const app = createApp(
+    f.service,
+    f.store,
+    { origin, production: false },
+    async () => {},
+    undefined,
+    f.creation,
+  );
+  const session = await f.service.authenticate(f.login.token);
+  const release = await app.request(`/api/image-admin/review/${t.id}`, {
+    method: "POST",
+    headers: {
+      Cookie: `tuyile_session=${f.login.token}`,
+      Origin: origin,
+      "Content-Type": "application/json",
+      "X-CSRF-Token": session.csrfToken,
+    },
+    body: JSON.stringify({ confirmed: 0 }),
+  });
+  expect(release.status).toBe(200);
+  await f.repo.resolve(f.principal, t.id, 0, "");
   await expect(
     f.repo.resolve(f.principal, t.id, 1, "other reason"),
   ).rejects.toMatchObject({ code: "RESOLUTION_CONFLICT" });

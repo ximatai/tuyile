@@ -18,16 +18,25 @@ import {
 } from "@tuyile/ui";
 import { useSessionState } from "./session-state";
 import { client } from "./api";
-export function OperationsAdmin() {
+export function useAdminSummary() {
   const state = useSessionState(),
-    api = client(state.session.csrfToken),
-    [selected, setSelected] = useState("");
-  const summary = useQuery({
+    api = client(state.session.csrfToken);
+  return useQuery({
     queryKey: state.key("admin-summary"),
     queryFn: ({ signal }) =>
       api<AdminSummary>("/image-admin/summary", undefined, signal),
     refetchInterval: 5000,
   });
+}
+
+export function OperationsAdmin({
+  summary,
+}: {
+  summary: ReturnType<typeof useAdminSummary>;
+}) {
+  const state = useSessionState(),
+    api = client(state.session.csrfToken),
+    [selected, setSelected] = useState("");
   const settings = useQuery({
     queryKey: state.key("execution-settings"),
     queryFn: ({ signal }) =>
