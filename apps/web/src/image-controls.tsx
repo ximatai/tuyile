@@ -1,6 +1,6 @@
 import { modelDisplayName } from "./model-presentation";
 import { X, Upload as UploadIcon } from "lucide-react";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
 import type { ImageUsage } from "@tuyile/contracts";
 import {
   Button,
@@ -20,6 +20,7 @@ import {
   sizeOptionLabel,
   initialSettings,
   validSize,
+  imageSizeIssue,
   type ImageSettings,
 } from "./image-settings";
 export function ImageControls({
@@ -90,6 +91,26 @@ export function ImageControls({
   const sameRatioSizes = sizes.filter(
     (size) => !currentSize || size.ratio === currentSize.ratio,
   );
+  const sizeHintId = useId();
+  const sizeIssue = usage && cap && imageSizeIssue(usage, cap, value);
+  const maxEdge =
+    cap && usage ? Math.min(cap.maxEdge, usage.policy.maxEdge) : 256;
+  const nearby = (n: number) => [
+    ...new Set([Math.floor(n / 16) * 16, Math.ceil(n / 16) * 16]),
+  ];
+  const corrections =
+    sizeIssue && usage && cap && !cap.sizes.length
+      ? nearby(value.width).flatMap((width) =>
+          nearby(value.height).flatMap((height) =>
+            validSize(usage, cap, width, height) ? [{ width, height }] : [],
+          ),
+        )
+      : [];
+  const suggestions = corrections.length
+    ? corrections
+    : sizeIssue
+      ? sizes.slice(0, 2)
+      : [];
   const patch = (v: Partial<ImageSettings>) => {
     if (disabled) return;
     if (v.modelKey && usage && v.modelKey !== value.modelKey) {
@@ -103,16 +124,11 @@ export function ImageControls({
       };
       const defaults = initialSettings(nextUsage);
       const next = selectedCapability(usage, v.modelKey);
-      const sizeAllowed =
-        next &&
-        validSize(usage, next, value.width, value.height) &&
-        (!next.sizes.length ||
-          next.sizes.includes(`${value.width}x${value.height}`));
+      if (next && !next.sizes.length && imageSizeIssue(usage, next, value))
+        setAdvancedOpen(true);
       onChange({
         ...value,
         modelKey: v.modelKey,
-        width: sizeAllowed ? value.width : defaults.width,
-        height: sizeAllowed ? value.height : defaults.height,
         quality:
           next && allowedQualities(usage, next).includes(value.quality)
             ? value.quality
@@ -322,39 +338,45 @@ export function ImageControls({
                 label: "自定义尺寸",
                 forceRender: true,
                 children: (
-                  <div className="parameter-grid">
-                    <Field
-                      label={label("宽度")}
-                      disabled={disabled}
-                      name="width"
-                      type="number"
-                      value={value.width}
-                      onChange={(e) => patch({ width: Number(e.target.value) })}
-                      min={256}
-                      max={Math.min(
-                        cap?.maxEdge ?? 8192,
-                        usage?.policy.maxEdge ?? 8192,
-                      )}
-                      step={16}
-                      required
-                    />
-                    <Field
-                      label={label("高度")}
-                      disabled={disabled}
-                      name="height"
-                      type="number"
-                      value={value.height}
-                      onChange={(e) =>
-                        patch({ height: Number(e.target.value) })
-                      }
-                      min={256}
-                      max={Math.min(
-                        cap?.maxEdge ?? 8192,
-                        usage?.policy.maxEdge ?? 8192,
-                      )}
-                      step={16}
-                      required
-                    />
+                  <div>
+                    <div className="parameter-grid">
+                      {(["width", "height"] as const).map((axis) => (
+                        <Field
+                          key={axis}
+                          label={label(axis === "width" ? "宽度" : "高度")}
+                          disabled={disabled}
+                          name={axis}
+                          type="number"
+                          value={value[axis] || ""}
+                          onChange={(e) =>
+                            patch({ [axis]: Number(e.target.value) })
+                          }
+                          aria-describedby={sizeHintId}
+                          min={256}
+                          max={maxEdge}
+                          step={16}
+                          required
+                        />
+                      ))}
+                    </div>
+                    <p id={sizeHintId} className="hint">
+                      宽和高须为 16 的倍数，每边 256–{maxEdge} 像素。
+                    </p>
+                    {sizeIssue && (
+                      <div aria-live="polite">
+                        <p>{sizeIssue}</p>
+                        {suggestions.map(({ width, height }) => (
+                          <Button
+                            key={`${width}x${height}`}
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => patch({ width, height })}
+                          >
+                            改为 {width} × {height}
+                          </Button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ),
               },

@@ -1,6 +1,7 @@
 import {
   effectiveImageCapability,
   imageSizeWithinKnownLimits,
+  imageModelKnowledge,
 } from "@tuyile/contracts";
 import { standardSizes, type SizePreset } from "./creation-presets";
 import type {
@@ -118,6 +119,36 @@ export function initialSettings(usage: ImageUsage): ImageSettings {
     count: 1,
   };
 }
+export function imageSizeIssue(
+  usage: ImageUsage,
+  cap: ImageCapability,
+  { width, height }: Pick<ImageSettings, "width" | "height">,
+) {
+  if (cap.sizes.length)
+    return validSize(usage, cap, width, height) &&
+      cap.sizes.includes(`${width}x${height}`)
+      ? undefined
+      : "当前模型仅支持指定尺寸，请选择画面规格。";
+  const maxEdge = Math.min(cap.maxEdge, usage.policy.maxEdge);
+  for (const [label, value] of [
+    ["宽度", width],
+    ["高度", height],
+  ] as const) {
+    if (value < 256 || value > maxEdge)
+      return `${label}须在 256–${maxEdge} 像素之间。`;
+    if (!Number.isInteger(value) || value % 16 !== 0)
+      return `${label}须为 16 的倍数。`;
+  }
+  const maxPixels = Math.min(cap.maxPixels, usage.policy.maxPixels);
+  if (width * height > maxPixels)
+    return `总像素不能超过 ${maxPixels.toLocaleString()}。`;
+  const known = imageModelKnowledge(cap.model);
+  if (known && width * height < known.minPixels)
+    return `总像素至少为 ${known.minPixels.toLocaleString()}。`;
+  if (known && Math.max(width / height, height / width) > known.maxAspectRatio)
+    return `长边不能超过短边的 ${known.maxAspectRatio} 倍。`;
+}
+
 export function settingsIssues(
   usage: ImageUsage,
   settings: ImageSettings,
@@ -126,12 +157,8 @@ export function settingsIssues(
   const cap = selectedCapability(usage, settings.modelKey);
   if (!cap) return ["原模型已不可用，请重新选择图片模型及服务。"];
   const errors: string[] = [];
-  if (
-    !validSize(usage, cap, settings.width, settings.height) ||
-    (cap.sizes.length > 0 &&
-      !cap.sizes.includes(`${settings.width}x${settings.height}`))
-  )
-    errors.push("当前尺寸不受支持，请选择画面规格。");
+  const sizeIssue = imageSizeIssue(usage, cap, settings);
+  if (sizeIssue) errors.push(sizeIssue);
   if (!allowedQualities(usage, cap).includes(settings.quality))
     errors.push("当前质量不受支持，请重新选择。");
   if (!cap.formats.includes(settings.format))

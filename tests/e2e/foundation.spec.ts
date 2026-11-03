@@ -3641,7 +3641,21 @@ test("custom size expansion reveals both fields in the editor scroll area", asyn
   await expect(
     page.getByRole("button", { name: "提交图片任务", exact: true }),
   ).toBeVisible();
+  await height.fill("1536");
+  await width.fill("1000");
+  await height.focus();
+  await expect(page.getByText("宽度须为 16 的倍数。").first()).toBeVisible();
+  const lower = page.getByRole("button", { name: "改为 992 × 1536" });
+  const upper = page.getByRole("button", { name: "改为 1008 × 1536" });
+  await expect(lower).toBeVisible();
+  await expect(upper).toBeVisible();
+  await upper.scrollIntoViewIfNeeded();
   await page.screenshot({ path: ".codex-temp/custom-size-expanded.png" });
+  await upper.click();
+  await expect(width).toHaveValue("1008");
+  await width.press("ArrowUp");
+  await expect(width).toHaveValue("1024");
+  await expect(upper).toBeHidden();
   await page.getByRole("button", { name: "自定义尺寸", exact: true }).click();
   await expect(height).toBeHidden();
   // Drain polling callbacks before Playwright tears down this page.
