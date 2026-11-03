@@ -2340,9 +2340,9 @@ test("review cards show task age, call evidence and release action together", as
   await expect(cards).toHaveCount(2);
   const card = cards.first();
   await expect(card).toContainText("review-account");
-  await expect(card).toContainText("进入待核验 1小时前");
+  await expect(card).toContainText("待核验 1小时前");
   const reason = card.getByLabel("核验原因"),
-    release = card.getByRole("button", { name: "确认无法取得图片并释放预留" });
+    release = card.getByRole("button", { name: "确认无图并释放" });
   for (const width of [1440, 1920]) {
     await page.setViewportSize({ width, height: 900 });
     const first = (await card.boundingBox())!,
@@ -2354,22 +2354,28 @@ test("review cards show task age, call evidence and release action together", as
     const secondAction = (await cards
       .nth(1)
       .getByRole("button", {
-        name: "确认无法取得图片并释放预留",
+        name: "确认无图并释放",
       })
       .boundingBox())!;
     expect(Math.abs(firstAction.y - secondAction.y)).toBeLessThan(2);
   }
   await expect(card.getByText("RESULT_UNKNOWN")).toBeHidden();
-  await card.getByText("核验详情 · 1 次调用").click();
-  await expect(card.locator("time").nth(1)).toHaveAttribute(
+  const details = card.getByRole("button", { name: "核验详情" });
+  await details.click();
+  const evidence = page.locator(".help-content").filter({ hasText: id });
+  await expect(evidence.locator("time").nth(1)).toHaveAttribute(
     "datetime",
     finishedAt,
   );
   await expect(card).toContainText("已保存 1 / 2 张");
   await expect(card).toContainText("预留 1 张");
-  await expect(card.getByRole("listitem")).toContainText("第 2 张（重试）");
-  await expect(card.getByRole("listitem")).toContainText("HTTP 504");
-  await expect(card.getByRole("listitem")).toContainText("RESULT_UNKNOWN");
+  await expect(evidence.getByRole("listitem")).toContainText("第 2 张（重试）");
+  await expect(evidence.getByRole("listitem")).toContainText("HTTP 504");
+  await expect(evidence.getByRole("listitem")).toContainText("RESULT_UNKNOWN");
+  await expect(evidence).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(evidence).toBeHidden();
+  await expect(details).toBeFocused();
   await expect(reason).toHaveValue("");
   await release.click();
   await expect(cards).toHaveCount(1);

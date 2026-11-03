@@ -710,7 +710,9 @@ form {
 }
 .review-task-heading {
   display: grid;
-  gap: 4px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 6px;
 }
 .review-task-summary > strong:first-child {
   font-size: 14px;
@@ -727,6 +729,11 @@ form {
 .review-task-age {
   font-variant-numeric: tabular-nums;
 }
+.help-content-scroll {
+  max-height: min(55vh, 420px);
+  overflow: auto;
+  overflow-wrap: anywhere;
+}
 .review-attempts {
   display: grid;
   gap: 4px;
@@ -741,10 +748,8 @@ form {
 .review-task-action {
   margin-top: auto;
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
-}
-.review-task-action > button {
-  justify-self: end;
 }
 .checkbox {
   display: flex;

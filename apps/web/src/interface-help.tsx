@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -12,13 +13,21 @@ export function HelpPopover({
   title,
   children,
   visible = true,
+  focusContent = false,
 }: {
   title: string;
   children: ReactNode;
   visible?: boolean;
+  focusContent?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<ComponentRef<typeof Button>>(null);
+  const contentRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      if (open && focusContent) node?.focus({ preventScroll: true });
+    },
+    [open, focusContent],
+  );
   useEffect(() => {
     if (!visible) setOpen(false);
   }, [visible]);
@@ -34,7 +43,14 @@ export function HelpPopover({
       title={title}
       classNames={{ root: "creation-popover help-popover" }}
       content={
-        <div className="help-content" tabIndex={0} onKeyDown={escape}>
+        <div
+          ref={contentRef}
+          className={
+            focusContent ? "help-content help-content-scroll" : "help-content"
+          }
+          tabIndex={0}
+          onKeyDown={escape}
+        >
           {children}
         </div>
       }
