@@ -2284,6 +2284,7 @@ test("review cards show task age, call evidence and release action together", as
   let artworkRequests = 0;
   await page.route(`**${artworkUrl}`, (route) => {
     artworkRequests++;
+    if (artworkRequests === 1) return route.fulfill({ status: 503 });
     return route.fulfill({ contentType: "image/png", body: artwork });
   });
   let resolution: unknown;
@@ -2381,7 +2382,7 @@ test("review cards show task age, call evidence and release action together", as
   await details.click();
   const evidence = page.getByRole("dialog", { name: "核验详情" });
   const reason = evidence.getByLabel("核验原因"),
-    release = evidence.getByRole("button", { name: "确认无图并释放" });
+    release = evidence.getByRole("button", { name: "释放剩余预留" });
   await expect(evidence.locator("time").nth(1)).toHaveAttribute(
     "datetime",
     finishedAt,
@@ -2402,12 +2403,15 @@ test("review cards show task age, call evidence and release action together", as
     .getByRole("button", { name: "预览已保存图片" });
   expect(artworkRequests).toBe(0);
   await preview.click();
+  await expect(evidence.getByRole("status")).toHaveText("图片加载失败");
+  await evidence.getByRole("button", { name: "重试", exact: true }).click();
+  await expect(preview).toBeFocused();
   const image = evidence.getByRole("img", { name: "已保存图片" });
   await expect(image).toBeVisible();
   await expect
     .poll(() => image.evaluate((img) => (img as HTMLImageElement).naturalWidth))
     .toBe(32);
-  expect(artworkRequests).toBe(1);
+  expect(artworkRequests).toBe(2);
   await preview.click();
   await expect(image).toHaveCount(0);
   await page.keyboard.press("Escape");

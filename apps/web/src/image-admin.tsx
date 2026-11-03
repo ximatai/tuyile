@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type ComponentRef, useEffect, useRef, useState } from "react";
 import { ImageIcon } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { type ReviewTask } from "@tuyile/contracts";
@@ -49,11 +49,14 @@ function ReviewTime({ value }: { value: string }) {
 
 function ReviewImage({ userId, assetId }: { userId: string; assetId: string }) {
   const [open, setOpen] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const trigger = useRef<ComponentRef<typeof Button>>(null);
   return (
     <>
       <Tooltip title="预览已保存图片">
         <Button
           type="button"
+          ref={trigger}
           className="help-trigger"
           aria-label="预览已保存图片"
           aria-expanded={open}
@@ -64,11 +67,27 @@ function ReviewImage({ userId, assetId }: { userId: string; assetId: string }) {
       </Tooltip>
       {open && (
         <div className="review-attempt-image">
-          <Image
-            alt="已保存图片"
-            preview={false}
-            src={`/api/admin/users/${userId}/artworks/${assetId}/preview`}
-          />
+          {failed ? (
+            <>
+              <span role="status">图片加载失败</span>{" "}
+              <Button
+                type="button"
+                onClick={() => {
+                  trigger.current?.focus();
+                  setFailed(false);
+                }}
+              >
+                重试
+              </Button>
+            </>
+          ) : (
+            <Image
+              alt="已保存图片"
+              preview={false}
+              src={`/api/admin/users/${userId}/artworks/${assetId}/preview`}
+              onError={() => setFailed(true)}
+            />
+          )}
         </div>
       )}
     </>
@@ -242,7 +261,11 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
                               ))}
                             </ul>
                           )}
-                          <p className="hint">释放预留不返还上游尝试。</p>
+                          <p className="hint">
+                            确认剩余结果无法取得后再释放。
+                            {t.used > 0 && "已保存的图片会保留。"}
+                            释放预留不返还上游尝试。
+                          </p>
                           <form
                             className="review-task-action"
                             onSubmit={(e) => {
@@ -265,7 +288,7 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
                               placeholder="核验原因（选填）"
                               maxLength={500}
                             />
-                            <Button disabled={busy}>确认无图并释放</Button>
+                            <Button disabled={busy}>释放剩余预留</Button>
                           </form>
                         </HelpPopover>
                         <span className="review-task-hold">
