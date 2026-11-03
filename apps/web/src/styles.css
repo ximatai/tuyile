@@ -683,24 +683,26 @@ form {
 .review-tab-label .ant-tag {
   margin-inline-end: 0;
 }
+.review-section {
+  margin-block: 16px;
+}
 .review-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 350px), 1fr));
   gap: 12px;
 }
-.image-admin .settings-section .review-task {
+.review-task {
   min-width: 0;
   max-width: 460px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
   padding: 12px 16px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 8px;
   overflow-wrap: anywhere;
 }
-.review-task-summary,
 .review-task-meta,
 .review-attempts li {
   display: flex;
@@ -708,17 +710,24 @@ form {
   align-items: baseline;
   gap: 4px 12px;
 }
-.review-task-heading {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 6px;
+.review-task-summary,
+.review-task-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
-.review-task-summary > strong:first-child {
+.review-task-summary > strong {
   font-size: 14px;
+}
+.review-task-controls {
+  align-items: flex-end;
+  justify-content: space-between;
 }
 .review-task-hold {
   color: var(--brand-blue);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 .review-task-age,
 .review-task-meta,

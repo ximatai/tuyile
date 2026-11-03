@@ -118,10 +118,7 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
               </span>
             ),
             children: (
-              <section
-                className="settings-section review-section"
-                aria-label="结果待核验"
-              >
+              <section className="review-section" aria-label="结果待核验">
                 {review.error && <Notice error>{review.error.message}</Notice>}
                 {review.isPending && <p role="status">正在加载待核验任务…</p>}
                 {review.data?.tasks.length === 0 && <p>暂无待核验任务。</p>}
@@ -132,13 +129,21 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
                       aria-label="核验任务"
                       className="review-task"
                     >
-                      <div className="review-task-heading">
-                        <div className="review-task-summary">
-                          <strong title={t.userId}>{t.username}</strong>
-                          <strong className="review-task-hold">
-                            预留 {t.held} 张
-                          </strong>
+                      <div className="review-task-summary">
+                        <strong title={t.userId}>{t.username}</strong>
+                        <div>
+                          {taskStates[t.state]} · {t.used}/{t.count} 张
                         </div>
+                        <div className="review-task-meta">
+                          <span>{t.model}</span>
+                          <span aria-hidden="true">·</span>
+                          <span className="review-task-age">
+                            {!t.finishedAt && "提交于 "}
+                            {reviewAge(t.finishedAt ?? t.createdAt, now)}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="review-task-controls">
                         <HelpPopover
                           title="核验详情"
                           triggerLabel="核验"
@@ -218,16 +223,8 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
                             <Button disabled={busy}>确认无图并释放</Button>
                           </form>
                         </HelpPopover>
-                      </div>
-                      <div>
-                        {taskStates[t.state]} · {t.used}/{t.count} 张
-                      </div>
-                      <div className="review-task-meta">
-                        <span>{t.model}</span>
-                        <span aria-hidden="true">·</span>
-                        <span className="review-task-age">
-                          {!t.finishedAt && "提交于 "}
-                          {reviewAge(t.finishedAt ?? t.createdAt, now)}
+                        <span className="review-task-hold">
+                          预留 {t.held} 张
                         </span>
                       </div>
                     </article>
