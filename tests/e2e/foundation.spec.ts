@@ -4724,10 +4724,14 @@ test("prompt bookmarks connect public browsing, private editing and protected cr
   ).toBeVisible();
   await page.keyboard.press("Escape");
   await page.getByRole("link", { name: "收藏", exact: true }).click();
-  await page
+  const favoritesPage = page.locator(".favorite-library");
+  await expect(
+    favoritesPage.getByRole("heading", { name: "我的收藏", exact: true }),
+  ).toBeVisible();
+  await favoritesPage
     .getByRole("textbox", { name: "搜索提示词", exact: true })
     .fill(suffix);
-  await expect(page.locator(".favorite-prompt-card")).toHaveCount(2);
+  await expect(favoritesPage.locator(".favorite-prompt-card")).toHaveCount(2);
   const personal = page
     .locator(".favorite-prompt-card")
     .filter({ hasText: `我的版本${suffix}` });
