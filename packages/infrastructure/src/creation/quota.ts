@@ -227,14 +227,7 @@ export class PgQuotaRepository extends PgCreationContext {
       await c.query(
         `SELECT t.id,t.user_id,u.username,t.state,t.pending_review,t.used,t.held,
                 t.created_at,t.finished_at,t.input->>'model' AS model,
-                (t.input->>'count')::int AS count,
-                ARRAY(
-                  SELECT a.id FROM image_outputs o
-                  JOIN image_assets a ON a.id=o.asset_id AND a.workspace_id=o.workspace_id
-                  WHERE o.task_id=t.id AND o.workspace_id=t.workspace_id
-                    AND a.user_id=t.user_id AND a.state='ready'
-                  ORDER BY o.ordinal
-                ) AS preview_asset_ids
+                (t.input->>'count')::int AS count
          FROM image_tasks t JOIN users u ON u.id=t.user_id
          WHERE t.pending_review ORDER BY t.created_at,t.id LIMIT 100`,
       )
@@ -246,7 +239,16 @@ export class PgQuotaRepository extends PgCreationContext {
           created_at: Date;
         }
       >(
-        'SELECT task_id,id,state,created_at,ordinal,retry,http_status AS "httpStatus",error_code AS "errorCode" FROM image_attempts WHERE task_id=ANY($1::uuid[]) ORDER BY created_at,ordinal,retry',
+        `SELECT i.task_id,i.id,i.state,i.created_at,i.ordinal,i.retry,
+                i.http_status AS "httpStatus",i.error_code AS "errorCode",
+                a.id AS "previewAssetId"
+         FROM image_attempts i
+         JOIN image_tasks t ON t.id=i.task_id AND t.workspace_id=i.workspace_id
+         LEFT JOIN image_outputs o ON i.state='succeeded' AND o.task_id=i.task_id
+           AND o.workspace_id=i.workspace_id AND o.ordinal=i.ordinal
+         LEFT JOIN image_assets a ON a.id=o.asset_id AND a.workspace_id=o.workspace_id
+           AND a.user_id=t.user_id AND a.state='ready'
+         WHERE i.task_id=ANY($1::uuid[]) ORDER BY i.created_at,i.ordinal,i.retry`,
         [rows.map((r) => r.id)],
       )
     ).rows;
@@ -268,7 +270,6 @@ export class PgQuotaRepository extends PgCreationContext {
       held: r.held,
       createdAt: r.created_at.toISOString(),
       finishedAt: r.finished_at?.toISOString() ?? null,
-      previewAssetIds: r.preview_asset_ids,
       attempts: byTask.get(r.id) ?? [],
     }));
     return results;

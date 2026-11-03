@@ -159,13 +159,13 @@ export interface ReviewTask {
   held: number;
   createdAt: string;
   finishedAt: string | null;
-  previewAssetIds: string[];
   attempts: {
     id: string;
     state: string;
     createdAt: string;
     ordinal: number;
     retry: number;
+    previewAssetId: string | null;
     httpStatus: number | null;
     errorCode: string | null;
   }[];

@@ -2275,7 +2275,7 @@ test("review cards show task age, call evidence and release action together", as
     finishedAt = new Date(now - 3_650_000).toISOString(),
     id = "7624bf90-44fb-4f46-a2c0-8b131bf6d039";
   const assetId = "8a98ad35-14f5-4599-b9bc-a5b757253974";
-  const artworkUrl = `/api/admin/users/${id}/artworks/${assetId}/original`;
+  const artworkUrl = `/api/admin/users/${id}/artworks/${assetId}/preview`;
   const artwork = await sharp({
     create: { width: 32, height: 32, channels: 3, background: "#0062b0" },
   })
@@ -2312,17 +2312,27 @@ test("review cards show task age, call evidence and release action together", as
             model: "test-image",
             count: 2,
             used: 1,
-            previewAssetIds: [assetId],
             held: 1,
             createdAt,
             finishedAt,
             attempts: [
+              {
+                id: "4b3aaaf6-3805-44fa-8410-1e97ed0d27f3",
+                state: "succeeded",
+                createdAt,
+                ordinal: 0,
+                retry: 0,
+                previewAssetId: assetId,
+                httpStatus: null,
+                errorCode: null,
+              },
               {
                 id: "b98007bc-1182-4a26-b283-1179f57d0de04",
                 state: "unknown",
                 createdAt,
                 ordinal: 1,
                 retry: 1,
+                previewAssetId: null,
                 httpStatus: 504,
                 errorCode: "RESULT_UNKNOWN",
               },
@@ -2337,7 +2347,6 @@ test("review cards show task age, call evidence and release action together", as
             model: "test-image",
             count: 1,
             used: 0,
-            previewAssetIds: [],
             held: 1,
             createdAt,
             finishedAt,
@@ -2364,24 +2373,9 @@ test("review cards show task age, call evidence and release action together", as
     expect(Math.abs(second.y - first.y)).toBeLessThan(2);
     expect(first.width).toBeLessThanOrEqual(460);
   }
-  const preview = card.getByRole("button", { name: "预览已保存图片" });
   await expect(
-    cards.nth(1).getByRole("button", { name: "预览已保存图片" }),
+    card.getByRole("button", { name: "预览已保存图片" }),
   ).toHaveCount(0);
-  expect(artworkRequests).toBe(0);
-  await preview.click();
-  await expect(page.locator(".ant-image-preview")).toBeVisible();
-  await expect.poll(() => artworkRequests).toBe(1);
-  await expect
-    .poll(() =>
-      page
-        .locator(".ant-image-preview img")
-        .evaluate((img) => (img as HTMLImageElement).naturalWidth),
-    )
-    .toBe(32);
-  await page.keyboard.press("Escape");
-  await expect(page.locator(".ant-image-preview")).toBeHidden();
-  await expect(preview).toBeFocused();
   await expect(card.getByLabel("核验原因")).toHaveCount(0);
   const details = card.getByRole("button", { name: "核验", exact: true });
   await details.click();
@@ -2394,10 +2388,28 @@ test("review cards show task age, call evidence and release action together", as
   );
   await expect(card).toContainText("部分完成 · 1/2 张");
   await expect(card).toContainText("预留 1 张");
-  await expect(evidence.getByRole("listitem")).toContainText("第 2 张（重试）");
-  await expect(evidence.getByRole("listitem")).toContainText("HTTP 504");
-  await expect(evidence.getByRole("listitem")).toContainText("RESULT_UNKNOWN");
+  const unknown = evidence
+    .getByRole("listitem")
+    .filter({ hasText: "结果未知" });
+  await expect(unknown).toContainText("第 2 张（重试）");
+  await expect(unknown).toContainText("HTTP 504");
+  await expect(unknown).toContainText("RESULT_UNKNOWN");
+  await expect(unknown.getByRole("button")).toHaveCount(0);
   await expect(evidence).toBeFocused();
+  const preview = evidence
+    .getByRole("listitem")
+    .filter({ hasText: "成功" })
+    .getByRole("button", { name: "预览已保存图片" });
+  expect(artworkRequests).toBe(0);
+  await preview.click();
+  const image = evidence.getByRole("img", { name: "已保存图片" });
+  await expect(image).toBeVisible();
+  await expect
+    .poll(() => image.evaluate((img) => (img as HTMLImageElement).naturalWidth))
+    .toBe(32);
+  expect(artworkRequests).toBe(1);
+  await preview.click();
+  await expect(image).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(evidence).toBeHidden();
   await expect(details).toBeFocused();

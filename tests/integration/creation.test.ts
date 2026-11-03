@@ -212,10 +212,19 @@ it("keeps partial success and unknown holds; metadata-only manual resolution is 
     used: 1,
     held: 1,
     finishedAt: expect.any(String),
-    previewAssetIds: [result.outputs[0].id],
     attempts: [
-      { ordinal: 0, state: "succeeded", createdAt: expect.any(String) },
-      { ordinal: 1, state: "unknown", errorCode: "RESULT_UNKNOWN" },
+      {
+        ordinal: 0,
+        state: "succeeded",
+        createdAt: expect.any(String),
+        previewAssetId: result.outputs[0].id,
+      },
+      {
+        ordinal: 1,
+        state: "unknown",
+        errorCode: "RESULT_UNKNOWN",
+        previewAssetId: null,
+      },
     ],
   });
   expect(JSON.stringify(review)).not.toContain("Synthetic private prompt");

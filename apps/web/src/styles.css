@@ -723,11 +723,6 @@ form {
   align-items: flex-end;
   justify-content: space-between;
 }
-.review-task-buttons {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
 .review-task-hold {
   color: var(--brand-blue);
   font-size: 12px;
@@ -755,6 +750,14 @@ form {
   padding: 6px 0;
   border-block: 1px solid var(--line);
   list-style: none;
+}
+.review-attempt-image {
+  flex-basis: 100%;
+}
+.review-attempt-image img {
+  max-width: 100%;
+  max-height: 200px;
+  object-fit: contain;
 }
 .review-attempt-unknown {
   color: var(--brand-blue-dark);
