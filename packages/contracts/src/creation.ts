@@ -159,6 +159,7 @@ export interface ReviewTask {
   held: number;
   createdAt: string;
   finishedAt: string | null;
+  previewAssetIds: string[];
   attempts: {
     id: string;
     state: string;

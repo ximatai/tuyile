@@ -227,7 +227,14 @@ export class PgQuotaRepository extends PgCreationContext {
       await c.query(
         `SELECT t.id,t.user_id,u.username,t.state,t.pending_review,t.used,t.held,
                 t.created_at,t.finished_at,t.input->>'model' AS model,
-                (t.input->>'count')::int AS count
+                (t.input->>'count')::int AS count,
+                ARRAY(
+                  SELECT a.id FROM image_outputs o
+                  JOIN image_assets a ON a.id=o.asset_id AND a.workspace_id=o.workspace_id
+                  WHERE o.task_id=t.id AND o.workspace_id=t.workspace_id
+                    AND a.user_id=t.user_id AND a.state='ready'
+                  ORDER BY o.ordinal
+                ) AS preview_asset_ids
          FROM image_tasks t JOIN users u ON u.id=t.user_id
          WHERE t.pending_review ORDER BY t.created_at,t.id LIMIT 100`,
       )
@@ -261,6 +268,7 @@ export class PgQuotaRepository extends PgCreationContext {
       held: r.held,
       createdAt: r.created_at.toISOString(),
       finishedAt: r.finished_at?.toISOString() ?? null,
+      previewAssetIds: r.preview_asset_ids,
       attempts: byTask.get(r.id) ?? [],
     }));
     return results;

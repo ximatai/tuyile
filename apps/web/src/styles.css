@@ -723,6 +723,11 @@ form {
   align-items: flex-end;
   justify-content: space-between;
 }
+.review-task-buttons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 .review-task-hold {
   color: var(--brand-blue);
   font-size: 12px;

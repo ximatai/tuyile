@@ -1,7 +1,17 @@
 import { useEffect, useState } from "react";
+import { ImageIcon } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { type ReviewTask } from "@tuyile/contracts";
-import { useFeedback, Button, Input, Notice, Tabs, Tag } from "@tuyile/ui";
+import {
+  useFeedback,
+  Button,
+  Image,
+  Input,
+  Notice,
+  Tabs,
+  Tag,
+  Tooltip,
+} from "@tuyile/ui";
 import { useSessionState } from "./session-state";
 import { client } from "./api";
 import { ModelServicesAdmin } from "./model-services-admin";
@@ -35,6 +45,39 @@ function reviewAge(value: string, now: number) {
 
 function ReviewTime({ value }: { value: string }) {
   return <time dateTime={value}>{dateTime.format(new Date(value))}</time>;
+}
+
+function ReviewImages({
+  userId,
+  assetIds,
+}: {
+  userId: string;
+  assetIds: string[];
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Tooltip title="预览已保存图片">
+        <Button
+          type="button"
+          className="help-trigger"
+          aria-label="预览已保存图片"
+          onClick={(event) => {
+            event.currentTarget.focus();
+            setOpen(true);
+          }}
+        >
+          <ImageIcon size={16} aria-hidden="true" />
+        </Button>
+      </Tooltip>
+      <Image.PreviewGroup
+        items={assetIds.map((id) => ({
+          src: `/api/admin/users/${userId}/artworks/${id}/original`,
+        }))}
+        preview={{ open, onOpenChange: setOpen }}
+      />
+    </>
+  );
 }
 
 export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
@@ -144,85 +187,93 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
                         </div>
                       </div>
                       <div className="review-task-controls">
-                        <HelpPopover
-                          title="核验详情"
-                          triggerLabel="核验"
-                          visible={section === "review"}
-                          focusContent
-                        >
-                          <div className="review-task-meta">
-                            <span>
-                              任务 <code>{t.id}</code>
-                            </span>
-                            <span>
-                              提交 <ReviewTime value={t.createdAt} />
-                            </span>
-                            {t.finishedAt && (
-                              <span>
-                                结束 <ReviewTime value={t.finishedAt} />
-                              </span>
-                            )}
-                          </div>
-                          {t.attempts.length > 0 && (
-                            <ul
-                              className="review-attempts"
-                              aria-label="模型调用"
-                            >
-                              {t.attempts.map((a) => (
-                                <li key={a.id}>
-                                  <span>
-                                    第 {a.ordinal + 1} 张
-                                    {a.retry > 0 ? "（重试）" : ""}
-                                  </span>
-                                  <strong
-                                    className={
-                                      a.state === "unknown"
-                                        ? "review-attempt-unknown"
-                                        : undefined
-                                    }
-                                  >
-                                    {attemptStates[a.state] ?? a.state}
-                                  </strong>
-                                  <span>
-                                    发出 <ReviewTime value={a.createdAt} />
-                                  </span>
-                                  {a.httpStatus != null && (
-                                    <span>HTTP {a.httpStatus}</span>
-                                  )}
-                                  {a.errorCode && <code>{a.errorCode}</code>}
-                                  <span>
-                                    调用 <code>{a.id}</code>
-                                  </span>
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                          <p className="hint">释放预留不返还上游尝试。</p>
-                          <form
-                            className="review-task-action"
-                            onSubmit={(e) => {
-                              e.preventDefault();
-                              const reason = String(
-                                new FormData(e.currentTarget).get("reason") ??
-                                  "",
-                              ).trim();
-                              void run(async () => {
-                                await api(`/image-admin/review/${t.id}`, {
-                                  confirmed: 0,
-                                  ...(reason && { reason }),
-                                });
-                              });
-                            }}
-                          >
-                            <Input
-                              aria-label="核验原因（选填）"
-                              name="reason"
-                              placeholder="核验原因（选填）"
-                              maxLength={500}
+                        <div className="review-task-buttons">
+                          {t.previewAssetIds?.length > 0 && (
+                            <ReviewImages
+                              userId={t.userId}
+                              assetIds={t.previewAssetIds}
                             />
-                            <Button disabled={busy}>确认无图并释放</Button>
-                          </form>
-                        </HelpPopover>
+                          )}
+                          <HelpPopover
+                            title="核验详情"
+                            triggerLabel="核验"
+                            visible={section === "review"}
+                            focusContent
+                          >
+                            <div className="review-task-meta">
+                              <span>
+                                任务 <code>{t.id}</code>
+                              </span>
+                              <span>
+                                提交 <ReviewTime value={t.createdAt} />
+                              </span>
+                              {t.finishedAt && (
+                                <span>
+                                  结束 <ReviewTime value={t.finishedAt} />
+                                </span>
+                              )}
+                            </div>
+                            {t.attempts.length > 0 && (
+                              <ul
+                                className="review-attempts"
+                                aria-label="模型调用"
+                              >
+                                {t.attempts.map((a) => (
+                                  <li key={a.id}>
+                                    <span>
+                                      第 {a.ordinal + 1} 张
+                                      {a.retry > 0 ? "（重试）" : ""}
+                                    </span>
+                                    <strong
+                                      className={
+                                        a.state === "unknown"
+                                          ? "review-attempt-unknown"
+                                          : undefined
+                                      }
+                                    >
+                                      {attemptStates[a.state] ?? a.state}
+                                    </strong>
+                                    <span>
+                                      发出 <ReviewTime value={a.createdAt} />
+                                    </span>
+                                    {a.httpStatus != null && (
+                                      <span>HTTP {a.httpStatus}</span>
+                                    )}
+                                    {a.errorCode && <code>{a.errorCode}</code>}
+                                    <span>
+                                      调用 <code>{a.id}</code>
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                            <p className="hint">释放预留不返还上游尝试。</p>
+                            <form
+                              className="review-task-action"
+                              onSubmit={(e) => {
+                                e.preventDefault();
+                                const reason = String(
+                                  new FormData(e.currentTarget).get("reason") ??
+                                    "",
+                                ).trim();
+                                void run(async () => {
+                                  await api(`/image-admin/review/${t.id}`, {
+                                    confirmed: 0,
+                                    ...(reason && { reason }),
+                                  });
+                                });
+                              }}
+                            >
+                              <Input
+                                aria-label="核验原因（选填）"
+                                name="reason"
+                                placeholder="核验原因（选填）"
+                                maxLength={500}
+                              />
+                              <Button disabled={busy}>确认无图并释放</Button>
+                            </form>
+                          </HelpPopover>
+                        </div>
                         <span className="review-task-hold">
                           预留 {t.held} 张
                         </span>

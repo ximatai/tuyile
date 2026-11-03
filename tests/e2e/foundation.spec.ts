@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { readFile } from "node:fs/promises";
+import sharp from "sharp";
 import { loginAdmin } from "./admin-session";
 import type { Favorite, PromptTemplatesPage } from "@tuyile/contracts";
 import { ensureTestPlanner } from "../planner-fixture";
@@ -2273,6 +2274,18 @@ test("review cards show task age, call evidence and release action together", as
     createdAt = new Date(now - 3_700_000).toISOString(),
     finishedAt = new Date(now - 3_650_000).toISOString(),
     id = "7624bf90-44fb-4f46-a2c0-8b131bf6d039";
+  const assetId = "8a98ad35-14f5-4599-b9bc-a5b757253974";
+  const artworkUrl = `/api/admin/users/${id}/artworks/${assetId}/original`;
+  const artwork = await sharp({
+    create: { width: 32, height: 32, channels: 3, background: "#0062b0" },
+  })
+    .png()
+    .toBuffer();
+  let artworkRequests = 0;
+  await page.route(`**${artworkUrl}`, (route) => {
+    artworkRequests++;
+    return route.fulfill({ contentType: "image/png", body: artwork });
+  });
   let resolution: unknown;
   const secondId = "79edcc7c-ffdf-4b14-b516-432c32012da0";
   await page.route(`**/api/image-admin/review/${id}`, async (route) => {
@@ -2299,6 +2312,7 @@ test("review cards show task age, call evidence and release action together", as
             model: "test-image",
             count: 2,
             used: 1,
+            previewAssetIds: [assetId],
             held: 1,
             createdAt,
             finishedAt,
@@ -2323,6 +2337,7 @@ test("review cards show task age, call evidence and release action together", as
             model: "test-image",
             count: 1,
             used: 0,
+            previewAssetIds: [],
             held: 1,
             createdAt,
             finishedAt,
@@ -2349,6 +2364,24 @@ test("review cards show task age, call evidence and release action together", as
     expect(Math.abs(second.y - first.y)).toBeLessThan(2);
     expect(first.width).toBeLessThanOrEqual(460);
   }
+  const preview = card.getByRole("button", { name: "预览已保存图片" });
+  await expect(
+    cards.nth(1).getByRole("button", { name: "预览已保存图片" }),
+  ).toHaveCount(0);
+  expect(artworkRequests).toBe(0);
+  await preview.click();
+  await expect(page.locator(".ant-image-preview")).toBeVisible();
+  await expect.poll(() => artworkRequests).toBe(1);
+  await expect
+    .poll(() =>
+      page
+        .locator(".ant-image-preview img")
+        .evaluate((img) => (img as HTMLImageElement).naturalWidth),
+    )
+    .toBe(32);
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".ant-image-preview")).toBeHidden();
+  await expect(preview).toBeFocused();
   await expect(card.getByLabel("核验原因")).toHaveCount(0);
   const details = card.getByRole("button", { name: "核验", exact: true });
   await details.click();
