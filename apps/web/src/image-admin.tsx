@@ -127,36 +127,21 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
                 {review.data?.tasks.length === 0 && <p>暂无待核验任务。</p>}
                 <div className="review-grid">
                   {review.data?.tasks.map((t) => (
-                    <form
+                    <article
                       key={t.id}
                       aria-label="核验任务"
                       className="review-task"
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        const reason = String(
-                          new FormData(e.currentTarget).get("reason") ?? "",
-                        ).trim();
-                        void run(async () => {
-                          await api(`/image-admin/review/${t.id}`, {
-                            confirmed: 0,
-                            ...(reason && { reason }),
-                          });
-                        });
-                      }}
                     >
                       <div className="review-task-heading">
                         <div className="review-task-summary">
                           <strong title={t.userId}>{t.username}</strong>
-                          <span>{taskStates[t.state]}</span>
-                          <span>
-                            已保存 {t.used} / {t.count} 张
-                          </span>
                           <strong className="review-task-hold">
                             预留 {t.held} 张
                           </strong>
                         </div>
                         <HelpPopover
                           title="核验详情"
+                          triggerLabel="核验"
                           visible={section === "review"}
                           focusContent
                         >
@@ -208,25 +193,44 @@ export function ImageAdminPage({ csrfToken }: { csrfToken: string }) {
                             </ul>
                           )}
                           <p className="hint">释放预留不返还上游尝试。</p>
+                          <form
+                            className="review-task-action"
+                            onSubmit={(e) => {
+                              e.preventDefault();
+                              const reason = String(
+                                new FormData(e.currentTarget).get("reason") ??
+                                  "",
+                              ).trim();
+                              void run(async () => {
+                                await api(`/image-admin/review/${t.id}`, {
+                                  confirmed: 0,
+                                  ...(reason && { reason }),
+                                });
+                              });
+                            }}
+                          >
+                            <Input
+                              aria-label="核验原因（选填）"
+                              name="reason"
+                              placeholder="核验原因（选填）"
+                              maxLength={500}
+                            />
+                            <Button disabled={busy}>确认无图并释放</Button>
+                          </form>
                         </HelpPopover>
+                      </div>
+                      <div>
+                        {taskStates[t.state]} · {t.used}/{t.count} 张
                       </div>
                       <div className="review-task-meta">
                         <span>{t.model}</span>
+                        <span aria-hidden="true">·</span>
                         <span className="review-task-age">
-                          {t.finishedAt ? "待核验" : "提交于"}{" "}
+                          {!t.finishedAt && "提交于 "}
                           {reviewAge(t.finishedAt ?? t.createdAt, now)}
                         </span>
                       </div>
-                      <div className="review-task-action">
-                        <Input
-                          aria-label="核验原因（选填）"
-                          name="reason"
-                          placeholder="核验原因（选填）"
-                          maxLength={500}
-                        />
-                        <Button disabled={busy}>确认无图并释放</Button>
-                      </div>
-                    </form>
+                    </article>
                   ))}
                 </div>
               </section>

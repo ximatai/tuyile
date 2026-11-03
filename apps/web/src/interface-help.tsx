@@ -14,11 +14,13 @@ export function HelpPopover({
   children,
   visible = true,
   focusContent = false,
+  triggerLabel,
 }: {
   title: string;
   children: ReactNode;
   visible?: boolean;
   focusContent?: boolean;
+  triggerLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<ComponentRef<typeof Button>>(null);
@@ -48,6 +50,8 @@ export function HelpPopover({
           className={
             focusContent ? "help-content help-content-scroll" : "help-content"
           }
+          role={triggerLabel ? "dialog" : undefined}
+          aria-label={triggerLabel ? title : undefined}
           tabIndex={0}
           onKeyDown={escape}
         >
@@ -62,12 +66,13 @@ export function HelpPopover({
       <Button
         ref={trigger}
         type="button"
-        className="help-trigger"
-        aria-label={title}
+        className={triggerLabel ? undefined : "help-trigger"}
+        aria-label={triggerLabel ? undefined : title}
+        aria-haspopup={triggerLabel ? "dialog" : undefined}
         aria-expanded={open}
         onKeyDown={escape}
       >
-        <Info size={16} aria-hidden="true" />
+        {triggerLabel ?? <Info size={16} aria-hidden="true" />}
       </Button>
     </Popover>
   );

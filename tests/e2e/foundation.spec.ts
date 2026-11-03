@@ -2336,13 +2336,11 @@ test("review cards show task age, call evidence and release action together", as
   const tab = page.getByRole("tab", { name: /^核验/ });
   await expect(tab).toContainText("2");
   await tab.click();
-  const cards = page.getByRole("form", { name: "核验任务" });
+  const cards = page.getByRole("article", { name: "核验任务" });
   await expect(cards).toHaveCount(2);
   const card = cards.first();
   await expect(card).toContainText("review-account");
-  await expect(card).toContainText("待核验 1小时前");
-  const reason = card.getByLabel("核验原因"),
-    release = card.getByRole("button", { name: "确认无图并释放" });
+  await expect(card).toContainText("1小时前");
   for (const width of [1440, 1920]) {
     await page.setViewportSize({ width, height: 900 });
     const first = (await card.boundingBox())!,
@@ -2350,24 +2348,18 @@ test("review cards show task age, call evidence and release action together", as
     expect(second.x).toBeGreaterThan(first.x + first.width);
     expect(Math.abs(second.y - first.y)).toBeLessThan(2);
     expect(first.width).toBeLessThanOrEqual(460);
-    const firstAction = (await release.boundingBox())!;
-    const secondAction = (await cards
-      .nth(1)
-      .getByRole("button", {
-        name: "确认无图并释放",
-      })
-      .boundingBox())!;
-    expect(Math.abs(firstAction.y - secondAction.y)).toBeLessThan(2);
   }
-  await expect(card.getByText("RESULT_UNKNOWN")).toBeHidden();
-  const details = card.getByRole("button", { name: "核验详情" });
+  await expect(card.getByLabel("核验原因")).toHaveCount(0);
+  const details = card.getByRole("button", { name: "核验", exact: true });
   await details.click();
-  const evidence = page.locator(".help-content").filter({ hasText: id });
+  const evidence = page.getByRole("dialog", { name: "核验详情" });
+  const reason = evidence.getByLabel("核验原因"),
+    release = evidence.getByRole("button", { name: "确认无图并释放" });
   await expect(evidence.locator("time").nth(1)).toHaveAttribute(
     "datetime",
     finishedAt,
   );
-  await expect(card).toContainText("已保存 1 / 2 张");
+  await expect(card).toContainText("部分完成 · 1/2 张");
   await expect(card).toContainText("预留 1 张");
   await expect(evidence.getByRole("listitem")).toContainText("第 2 张（重试）");
   await expect(evidence.getByRole("listitem")).toContainText("HTTP 504");
@@ -2376,6 +2368,7 @@ test("review cards show task age, call evidence and release action together", as
   await page.keyboard.press("Escape");
   await expect(evidence).toBeHidden();
   await expect(details).toBeFocused();
+  await details.click();
   await expect(reason).toHaveValue("");
   await release.click();
   await expect(cards).toHaveCount(1);

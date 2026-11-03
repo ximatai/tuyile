@@ -711,7 +711,7 @@ form {
 .review-task-heading {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  align-items: start;
+  align-items: center;
   gap: 6px;
 }
 .review-task-summary > strong:first-child {
@@ -746,7 +746,6 @@ form {
   color: var(--brand-blue-dark);
 }
 .review-task-action {
-  margin-top: auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 8px;
