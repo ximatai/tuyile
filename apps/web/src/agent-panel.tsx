@@ -9,6 +9,7 @@ import {
   initialSettings,
   selectedCapability,
   settingsIssues,
+  settingsDisplayIssues,
 } from "./image-settings";
 import { useEffect, useRef, useState } from "react";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
@@ -428,9 +429,16 @@ export function AgentPanel({
             skills.error?.message}
         </Notice>
       )}
-      {!pending && issues.length > 0 && (
-        <Notice error>{issues.join(" ")}</Notice>
-      )}
+      {!pending &&
+        (settingsOpen ? settingsDisplayIssues(usage, settings, issues) : issues)
+          .length > 0 && (
+          <Notice error>
+            {(settingsOpen
+              ? settingsDisplayIssues(usage, settings, issues)
+              : issues
+            ).join(" ")}
+          </Notice>
+        )}
       {!pending && conversationUnavailable && (
         <Notice error>原对话模型已不可用，请重新选择或联系管理员。</Notice>
       )}
@@ -761,6 +769,7 @@ function PlanCard({
   function patch(index: number, change: Partial<AgentStep>) {
     if (locallyConfirmed || plan.confirmed || busy || pending || confirmation)
       return;
+    setError("");
     setDocument((old) => ({
       ...old,
       steps: old.steps.map((step, i) => {
@@ -1100,7 +1109,7 @@ function PlanCard({
                       />
                       {!confirmed &&
                         usage &&
-                        settingsIssues(
+                        settingsDisplayIssues(
                           usage,
                           {
                             ...step,
@@ -1109,7 +1118,18 @@ function PlanCard({
                                 `historical:${plan.id}`)
                               : step.model,
                           },
-                          step.referenceIds.length + (step.usePrevious ? 1 : 0),
+                          settingsIssues(
+                            usage,
+                            {
+                              ...step,
+                              modelKey: usage.modelOptions
+                                ? (step.modelSelectionId ??
+                                  `historical:${plan.id}`)
+                                : step.model,
+                            },
+                            step.referenceIds.length +
+                              (step.usePrevious ? 1 : 0),
+                          ),
                         ).map((issue) => (
                           <Notice key={issue} error>
                             {issue}

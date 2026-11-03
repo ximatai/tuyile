@@ -19,8 +19,11 @@ import {
   supportedSizePresets,
   sizeOptionLabel,
   initialSettings,
-  validSize,
+  imageSizeCorrections,
   imageSizeIssue,
+  imageSizeFieldIssues,
+  sizeCorrectionLabel,
+  modelSwitchSize,
   type ImageSettings,
 } from "./image-settings";
 export function ImageControls({
@@ -43,6 +46,8 @@ export function ImageControls({
   disabled?: boolean;
 }) {
   const disabled = useControlsDisabled(disabledProp);
+  const [editing, setEditing] = useState<"width" | "height" | null>(null);
+  const [sizeChange, setSizeChange] = useState("");
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const customSizeRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -52,18 +57,38 @@ export function ImageControls({
     const reveal = () => {
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
-        section.scrollIntoView({
-          block: "nearest",
-          inline: "nearest",
-          behavior: "instant",
-        });
+        // Move only the editor's scroll area, never the page behind a popover.
+        let container = section.parentElement;
+        while (
+          container &&
+          !/(auto|scroll)/.test(getComputedStyle(container).overflowY)
+        )
+          container = container.parentElement;
+        if (!container) return;
+        const bounds = container.getBoundingClientRect();
+        const box = section.getBoundingClientRect();
+        if (box.bottom > bounds.bottom)
+          container.scrollTop += Math.min(
+            box.bottom - bounds.bottom,
+            Math.max(0, box.top - bounds.top),
+          );
+        else if (box.top < bounds.top)
+          container.scrollTop += box.top - bounds.top;
       });
     };
-    // Follow Collapse's height animation as well as the initial expansion.
+    // Follow only the initial Collapse animation; later validation must not scroll.
     const observer = new ResizeObserver(reveal);
+    const stopFollowing = () => {
+      observer.disconnect();
+      cancelAnimationFrame(frame);
+    };
+    const stop = window.setTimeout(stopFollowing, 350);
+    section.addEventListener("focusin", stopFollowing);
     observer.observe(section);
     reveal();
     return () => {
+      window.clearTimeout(stop);
+      section.removeEventListener("focusin", stopFollowing);
       observer.disconnect();
       cancelAnimationFrame(frame);
     };
@@ -93,24 +118,23 @@ export function ImageControls({
   );
   const sizeHintId = useId();
   const sizeIssue = usage && cap && imageSizeIssue(usage, cap, value);
+  const fields =
+    usage && cap
+      ? imageSizeFieldIssues(usage, cap, value)
+      : { width: undefined, height: undefined };
+  const combinationIssue =
+    !fields.width && !fields.height ? sizeIssue : undefined;
+  // Existing invalid values need feedback before the user touches either field.
+  // Only an active edit defers validation; blur restores the current errors.
+  const visibleFields = {
+    width: editing !== "width" && fields.width,
+    height: editing !== "height" && fields.height,
+  };
+  const visibleCombination = !editing && combinationIssue;
   const maxEdge =
     cap && usage ? Math.min(cap.maxEdge, usage.policy.maxEdge) : 256;
-  const nearby = (n: number) => [
-    ...new Set([Math.floor(n / 16) * 16, Math.ceil(n / 16) * 16]),
-  ];
-  const corrections =
-    sizeIssue && usage && cap && !cap.sizes.length
-      ? nearby(value.width).flatMap((width) =>
-          nearby(value.height).flatMap((height) =>
-            validSize(usage, cap, width, height) ? [{ width, height }] : [],
-          ),
-        )
-      : [];
-  const suggestions = corrections.length
-    ? corrections
-    : sizeIssue
-      ? sizes.slice(0, 2)
-      : [];
+  const suggestions =
+    usage && cap ? imageSizeCorrections(usage, cap, value) : [];
   const patch = (v: Partial<ImageSettings>) => {
     if (disabled) return;
     if (v.modelKey && usage && v.modelKey !== value.modelKey) {
@@ -124,10 +148,19 @@ export function ImageControls({
       };
       const defaults = initialSettings(nextUsage);
       const next = selectedCapability(usage, v.modelKey);
+      if (next?.sizes.length) setAdvancedOpen(false);
       if (next && !next.sizes.length && imageSizeIssue(usage, next, value))
         setAdvancedOpen(true);
+      const dimensions = modelSwitchSize(usage, v.modelKey, value);
+      setSizeChange(
+        dimensions.width
+          ? `已由 ${value.width} × ${value.height} 调整为 ${dimensions.width} × ${dimensions.height}，以符合当前模型。`
+          : "",
+      );
+      setEditing(null);
       onChange({
         ...value,
+        ...dimensions,
         modelKey: v.modelKey,
         quality:
           next && allowedQualities(usage, next).includes(value.quality)
@@ -139,6 +172,7 @@ export function ImageControls({
       });
       return;
     }
+    setSizeChange("");
     onChange({ ...value, ...v });
   };
   const qualityNames = { low: "快速草稿", medium: "标准", high: "高质量" };
@@ -231,10 +265,17 @@ export function ImageControls({
         />
         {compact && qualityControl}
       </div>
+      {sizeChange && (
+        <p className="hint" role="status">
+          {sizeChange}
+        </p>
+      )}
       <div className="parameter-grid">
         <ChoiceField
           label={label("比例")}
-          value={currentSize?.ratio ?? "custom"}
+          value={
+            currentSize?.ratio ?? (cap?.sizes.length ? undefined : "custom")
+          }
           disabled={
             disabled || !ratios.length || (ratios.length === 1 && !!currentSize)
           }
@@ -261,7 +302,11 @@ export function ImageControls({
         />
         <ChoiceField
           label={label("尺寸")}
-          value={`${value.width}x${value.height}`}
+          value={
+            cap?.sizes.length && !currentSize
+              ? undefined
+              : `${value.width}x${value.height}`
+          }
           disabled={
             disabled ||
             !sameRatioSizes.length ||
@@ -274,7 +319,7 @@ export function ImageControls({
               label: sizeOptionLabel(s),
             }))
             .concat(
-              currentSize
+              currentSize || cap?.sizes.length
                 ? []
                 : [
                     {
@@ -325,6 +370,11 @@ export function ImageControls({
           }))}
         />
       </div>
+      {sizeIssue && (!advancedOpen || !!cap?.sizes.length) && (
+        <p className="size-field-error" role="status">
+          {sizeIssue}
+        </p>
+      )}
       {!!cap && !cap.sizes.length && (
         <div ref={customSizeRef}>
           <Collapse
@@ -341,42 +391,77 @@ export function ImageControls({
                   <div>
                     <div className="parameter-grid">
                       {(["width", "height"] as const).map((axis) => (
-                        <Field
-                          key={axis}
-                          label={label(axis === "width" ? "宽度" : "高度")}
-                          disabled={disabled}
-                          name={axis}
-                          type="number"
-                          value={value[axis] || ""}
-                          onChange={(e) =>
-                            patch({ [axis]: Number(e.target.value) })
-                          }
-                          aria-describedby={sizeHintId}
-                          min={256}
-                          max={maxEdge}
-                          step={16}
-                          required
-                        />
+                        <div key={axis}>
+                          <Field
+                            label={label(axis === "width" ? "宽度" : "高度")}
+                            disabled={disabled}
+                            name={axis}
+                            type="number"
+                            value={value[axis] || ""}
+                            onChange={(e) => {
+                              patch({ [axis]: Number(e.target.value) });
+                            }}
+                            onFocus={() => setEditing(axis)}
+                            onBlur={() => setEditing(null)}
+                            aria-invalid={
+                              !!(visibleFields[axis] || visibleCombination)
+                            }
+                            aria-describedby={
+                              [
+                                visibleFields[axis] && `${sizeHintId}-${axis}`,
+                                visibleCombination && `${sizeHintId}-combined`,
+                              ]
+                                .filter(Boolean)
+                                .join(" ") || undefined
+                            }
+                            min={256}
+                            max={maxEdge}
+                            step={16}
+                            required
+                          />
+                          <p
+                            id={`${sizeHintId}-${axis}`}
+                            className="size-field-error"
+                            aria-live="polite"
+                          >
+                            {visibleFields[axis]}
+                          </p>
+                        </div>
                       ))}
                     </div>
-                    <p id={sizeHintId} className="hint">
-                      宽和高须为 16 的倍数，每边 256–{maxEdge} 像素。
+                    <p
+                      id={`${sizeHintId}-combined`}
+                      className="size-field-error"
+                      aria-live="polite"
+                    >
+                      {visibleCombination}
                     </p>
-                    {sizeIssue && (
-                      <div aria-live="polite">
-                        <p>{sizeIssue}</p>
-                        {suggestions.map(({ width, height }) => (
-                          <Button
-                            key={`${width}x${height}`}
-                            type="button"
-                            disabled={disabled}
-                            onClick={() => patch({ width, height })}
-                          >
-                            改为 {width} × {height}
-                          </Button>
-                        ))}
-                      </div>
-                    )}
+                    {suggestions.length > 0 &&
+                      (visibleCombination ||
+                        visibleFields.width ||
+                        visibleFields.height) && (
+                        <div className="size-corrections">
+                          {suggestions.map(({ width, height }) => (
+                            <Button
+                              key={`${width}x${height}`}
+                              type="button"
+                              disabled={disabled}
+                              onClick={() => {
+                                const axis =
+                                  width !== value.width ? "width" : "height";
+                                patch({ width, height });
+                                customSizeRef.current
+                                  ?.querySelector<HTMLInputElement>(
+                                    `input[name="${axis}"]`,
+                                  )
+                                  ?.focus();
+                              }}
+                            >
+                              {sizeCorrectionLabel(value, { width, height })}
+                            </Button>
+                          ))}
+                        </div>
+                      )}
                   </div>
                 ),
               },

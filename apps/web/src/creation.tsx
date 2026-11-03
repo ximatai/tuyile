@@ -28,6 +28,7 @@ import {
   initialSettings,
   selectedCapability,
   settingsIssues,
+  settingsDisplayIssues,
   taskSettings,
 } from "./image-settings";
 import { AgentPanel } from "./agent-panel";
@@ -953,9 +954,12 @@ function CreationEditor({
                     />
                   </fieldset>
                 </ControlScope>
-                {issues.length > 0 && !pending && (
-                  <Notice error>{issues.join(" ")}</Notice>
-                )}
+                {settingsDisplayIssues(usage, settings, issues).length > 0 &&
+                  !pending && (
+                    <Notice error>
+                      {settingsDisplayIssues(usage, settings, issues).join(" ")}
+                    </Notice>
+                  )}
                 {error && <Notice error>{error}</Notice>}
                 <GenerationFeedback
                   tasks={tasks}

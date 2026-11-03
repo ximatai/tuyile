@@ -507,12 +507,12 @@ test("background creation survives refresh, page closure and ordinary logout, wi
     }),
   ).toContainText("2 张");
   await expect(page.getByLabel("宽度", { exact: true })).toBeHidden();
-  await page.getByRole("button", { name: "自定义尺寸", exact: true }).click();
+  await page.getByRole("button", { name: /^自定义尺寸/ }).click();
   await expect(page.getByLabel("宽度", { exact: true })).toBeEnabled();
   await page.getByLabel("宽度", { exact: true }).fill("1008");
   await expect(resolutionField).toContainText("1008 × 1024");
   await page.getByLabel("宽度", { exact: true }).fill("1024");
-  await page.getByRole("button", { name: "自定义尺寸", exact: true }).click();
+  await page.getByRole("button", { name: /^自定义尺寸/ }).click();
   await expect(
     page.getByRole("combobox", { name: "格式", exact: true }),
   ).toBeVisible();
@@ -2437,9 +2437,9 @@ test("administrators add a service and users select same-named models from the c
     "Synthetic preserved draft",
   );
   await expect(page.getByLabel("宽度", { exact: true })).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: "自定义尺寸", exact: true }),
-  ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^自定义尺寸/ })).toHaveCount(
+    0,
+  );
   for (const name of ["比例", "尺寸", "质量", "格式"]) {
     await expect(
       page.getByRole("combobox", { name, exact: true }),
@@ -3592,9 +3592,22 @@ test("custom size expansion reveals both fields in the editor scroll area", asyn
   await page.setViewportSize({ width: 1440, height: 720 });
   await login(page);
   // Exercise range-capable controls independently of earlier fixed-size catalog edits.
+  let fixedSizes = ["768x1024"];
   await page.route("**/api/images/usage", async (route) => {
     const response = await route.fetch();
     const usage = await response.json();
+    const baseModels =
+      usage.modelOptions ??
+      usage.capabilities.map((cap: any, index: number) => ({
+        id: cap.model,
+        modelId: cap.model,
+        serviceId: "size-test-service",
+        serviceName: "尺寸测试",
+        kind: "image",
+        isDefault: index === 0,
+        supportsImages: true,
+        image: cap,
+      }));
     await route.fulfill({
       response,
       json: {
@@ -3603,10 +3616,28 @@ test("custom size expansion reveals both fields in the editor scroll area", asyn
           ...cap,
           sizes: [],
         })),
-        modelOptions: usage.modelOptions?.map((model: any) => ({
-          ...model,
-          image: model.image ? { ...model.image, sizes: [] } : undefined,
-        })),
+        modelOptions: [
+          ...baseModels.map((model: any) => ({
+            ...model,
+            image: model.image ? { ...model.image, sizes: [] } : undefined,
+          })),
+          ...["fixed", "range", "range2"].map((kind) => ({
+            ...baseModels[0],
+            id: `size-test-${kind}`,
+            modelId: `size-test-${kind}`,
+            isDefault: false,
+            image: {
+              ...baseModels[0].image,
+              model:
+                kind === "range2"
+                  ? "gpt-image-2.5-sunburst"
+                  : `size-test-${kind}`,
+              sizes: kind === "fixed" ? fixedSizes : [],
+              maxEdge: 2048,
+              maxPixels: kind === "range2" ? 1048576 : 4194304,
+            },
+          })),
+        ],
       },
     });
   });
@@ -3620,7 +3651,7 @@ test("custom size expansion reveals both fields in the editor scroll area", asyn
   const prompt = page.getByLabel("创作需求", { exact: true });
   await expect(prompt).toBeVisible();
   const before = (await prompt.boundingBox())!.height;
-  await page.getByRole("button", { name: "自定义尺寸", exact: true }).click();
+  await page.getByRole("button", { name: /^自定义尺寸/ }).click();
   const width = page.getByLabel("宽度", { exact: true }),
     height = page.getByLabel("高度", { exact: true });
   await expect(width).toBeVisible();
@@ -3641,23 +3672,355 @@ test("custom size expansion reveals both fields in the editor scroll area", asyn
   await expect(
     page.getByRole("button", { name: "提交图片任务", exact: true }),
   ).toBeVisible();
+  await height.fill("1024");
+  await width.fill("255");
+  await prompt.focus();
+  await expect(
+    page.getByText("宽度至少为 256 像素。", { exact: true }),
+  ).toBeVisible();
+  // The default synthetic model is permissive; no preset replaces the nearest edge.
+  await expect(
+    page.getByRole("button", { name: "宽改为 256（+1）", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".size-corrections button")).toHaveCount(1);
+  await expect(width).toHaveValue("255");
+  await page
+    .getByRole("button", { name: "宽改为 256（+1）", exact: true })
+    .click();
+  await expect(width).toBeFocused();
+  await expect(width).toHaveValue("256");
+  await expect(height).toHaveValue("1024");
+  await width.fill("8193");
+  await prompt.focus();
+  await expect(page.getByText(/宽度不能超过 \d+ 像素。/)).toBeVisible();
   await height.fill("1536");
+  await width.fill("");
+  await expect(width).toHaveValue("");
+  await expect(width).toHaveAttribute("aria-invalid", "false");
+  await prompt.focus();
+  await expect(page.getByText("请填写宽度。", { exact: true })).toBeVisible();
+  await expect(page.locator(".size-corrections button")).toHaveCount(0);
   await width.fill("1000");
+  await expect(width).toHaveAttribute("aria-invalid", "false");
   await height.focus();
+  await expect(width).toHaveAttribute("aria-invalid", "true");
   await expect(page.getByText("宽度须为 16 的倍数。").first()).toBeVisible();
-  const lower = page.getByRole("button", { name: "改为 992 × 1536" });
-  const upper = page.getByRole("button", { name: "改为 1008 × 1536" });
+  const lower = page.getByRole("button", { name: "宽改为 992（-8）" });
+  const upper = page.getByRole("button", { name: "宽改为 1008（+8）" });
+  await prompt.focus();
   await expect(lower).toBeVisible();
   await expect(upper).toBeVisible();
-  await upper.scrollIntoViewIfNeeded();
+  await prompt.focus();
   await page.screenshot({ path: ".codex-temp/custom-size-expanded.png" });
-  await upper.click();
+  await height.focus();
+  await page.keyboard.press("Tab");
+  await expect(lower).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(upper).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(width).toBeFocused();
   await expect(width).toHaveValue("1008");
   await width.press("ArrowUp");
   await expect(width).toHaveValue("1024");
   await expect(upper).toBeHidden();
-  await page.getByRole("button", { name: "自定义尺寸", exact: true }).click();
+  await width.fill("2048");
+  await height.fill("2048");
+  await prompt.focus();
+  await width.fill("1000");
+  await prompt.focus();
+  const described = await width.getAttribute("aria-describedby");
+  expect(described).toBeTruthy();
+  await expect(page.locator(`[id="${described}"]`)).toHaveText(
+    "宽度须为 16 的倍数。",
+  );
+  await width.fill("1024");
+  await height.fill("1536");
+  await prompt.focus();
+  await page.getByRole("button", { name: /^自定义尺寸/ }).click();
   await expect(height).toBeHidden();
+  await expect(
+    page.getByRole("button", { name: "自定义尺寸", exact: true }),
+  ).toBeVisible();
+  const model = page.getByRole("combobox", { name: "图片模型", exact: true });
+  await model.click();
+  await page
+    .locator(".ant-select-dropdown:visible .ant-select-item-option")
+    .filter({ hasText: "size-test-fixed" })
+    .click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "已由" }),
+  ).toContainText("1024 × 1536 调整为 768 × 1024");
+  await expect(
+    page.getByRole("combobox", { name: "尺寸", exact: true }),
+  ).toBeDisabled();
+  await expect(page.locator(".image-controls")).not.toContainText("（自定义）");
+  await model.click();
+  await page
+    .locator(".ant-select-dropdown:visible .ant-select-item-option")
+    .filter({ hasText: /size-test-range(?!2)/ })
+    .click();
+  await page.getByRole("button", { name: /^自定义尺寸/ }).click();
+  await expect(width).toHaveValue("768");
+  await width.fill("1000");
+  await height.focus();
+  await model.click();
+  await page
+    .locator(".ant-select-dropdown:visible .ant-select-item-option")
+    .filter({ hasText: "size-test-range2" })
+    .click();
+  await expect(width).toHaveValue("1000");
+  // Model switches must explain retained invalid values before either field is touched.
+  await expect(width).toHaveAttribute("aria-invalid", "true");
+  const switchedDescription = await width.getAttribute("aria-describedby");
+  expect(switchedDescription).toBeTruthy();
+  await expect(page.locator(`[id="${switchedDescription}"]`)).toHaveText(
+    "宽度须为 16 的倍数。",
+  );
+  await expect(
+    page.getByText("宽度须为 16 的倍数。", { exact: true }),
+  ).toBeVisible();
+  await width.fill("1024");
+  await height.fill("1536");
+  await expect(
+    page.getByText("总像素不能超过 1,048,576。", { exact: true }),
+  ).toBeHidden();
+  await prompt.focus();
+  const combined = page.getByText("总像素不能超过 1,048,576。", {
+    exact: true,
+  });
+  await expect(combined).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "宽改为 672（-352）", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".size-corrections button")).toHaveCount(1);
+
+  for (const input of [width, height]) {
+    await expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(await input.getAttribute("aria-describedby")).toBe(
+      await combined.getAttribute("id"),
+    );
+  }
+  // A valid size in a broader model becomes invalid externally, without a field blur.
+  await model.click();
+  await page
+    .locator(".ant-select-dropdown:visible .ant-select-item-option")
+    .filter({ hasText: /size-test-range(?!2)/ })
+    .click();
+  await expect(combined).toBeHidden();
+  await model.click();
+  await page
+    .locator(".ant-select-dropdown:visible .ant-select-item-option")
+    .filter({ hasText: "size-test-range2" })
+    .click();
+  await expect(width).toHaveValue("1024");
+  await expect(height).toHaveValue("1536");
+  await expect(combined).toBeVisible();
+  await expect(width).toHaveAttribute("aria-invalid", "true");
+  await expect(height).toHaveAttribute("aria-invalid", "true");
+  await height.focus();
+  await expect(combined).toBeHidden();
+  await height.fill("1024");
+  await width.fill("255");
+  await prompt.focus();
+  const knownCorrection = page.getByRole("button", {
+    name: "宽改为 640（+385）",
+    exact: true,
+  });
+  await expect(knownCorrection).toBeVisible();
+  await expect(page.locator(".size-corrections button")).toHaveCount(1);
+  await knownCorrection.click();
+  await expect(width).toBeFocused();
+  await expect(width).toHaveValue("640");
+  await expect(height).toHaveValue("1024");
+  await height.fill("256");
+  await width.fill("256");
+  await prompt.focus();
+  await expect(
+    page.getByText("总像素至少为 655,360。", { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".size-corrections button")).toHaveCount(0);
+  await width.fill("2048");
+  await expect(
+    page.getByText("总像素至少为 655,360。", { exact: true }),
+  ).toBeHidden();
+  await height.fill("320");
+  await prompt.focus();
+  await expect(
+    page.getByText("长边不能超过短边的 3 倍。", { exact: true }),
+  ).toBeVisible();
+  // Increasing height to fix the ratio would exceed the pixel ceiling;
+  // reducing width would violate the pixel minimum. No single-axis fix exists.
+  await expect(page.locator(".size-corrections button")).toHaveCount(0);
+  await model.click();
+  await page
+    .locator(".ant-select-dropdown:visible .ant-select-item-option")
+    .filter({ hasText: "size-test-fixed" })
+    .click();
+  await model.click();
+  await page
+    .locator(".ant-select-dropdown:visible .ant-select-item-option")
+    .filter({ hasText: /size-test-range(?!2)/ })
+    .click();
+  await expect(width).toHaveValue("768");
+  await model.click();
+  await page
+    .locator(".ant-select-dropdown:visible .ant-select-item-option")
+    .filter({ hasText: "size-test-fixed" })
+    .click();
+  const projectId = page.url().split("/").at(-1)!;
+  await expect
+    .poll(
+      async () =>
+        (
+          await (
+            await page.request.get(`/api/projects/${projectId}/draft`)
+          ).json()
+        ).document.direct.settings.modelKey,
+    )
+    .toBe("size-test-fixed");
+  fixedSizes = ["1024x1024", "1536x1024"];
+  // Refresh the stale capability query while preserving the mounted selection.
+  await expect
+    .poll(async () => {
+      await page.evaluate(() =>
+        window.dispatchEvent(new Event("visibilitychange")),
+      );
+      return page.locator(".image-controls").textContent();
+    })
+    .toContain("当前模型仅支持指定尺寸，请选择画面规格。");
+  const invalidSize = page
+    .locator(".image-controls .field")
+    .filter({ has: page.getByRole("combobox", { name: "尺寸", exact: true }) });
+  await expect(invalidSize).not.toContainText("768 × 1024");
+  await expect(invalidSize).not.toContainText("1024 × 1024");
+  // Synthetic Agent proposal: no provider call is dispatched.
+  const jobs: any[] = [];
+  await page.route("**/api/agent/jobs?**", (route) =>
+    route.fulfill({ json: { jobs } }),
+  );
+  await page.route("**/api/agent/planning", async (route) => {
+    const input = route.request().postDataJSON();
+    const jobId = randomUUID();
+    const job = {
+      id: jobId,
+      projectId,
+      state: "succeeded",
+      charged: true,
+      errorCode: null,
+      prompt: input.prompt,
+      createdAt: new Date().toISOString(),
+      plans: [
+        {
+          id: randomUUID(),
+          jobId,
+          version: 1,
+          confirmed: false,
+          taskIds: [],
+          document: {
+            message: "尺寸校验",
+            steps: [
+              {
+                title: "尺寸步骤",
+                prompt: "合成测试",
+                model: "gpt-image-2.5-sunburst",
+                modelSelectionId: "size-test-range2",
+                width: 1024,
+                height: 1024,
+                quality: input.quality,
+                format: input.format,
+                count: 1,
+                referenceIds: [],
+                usePrevious: false,
+                tool: { id: "image.generate", version: 1 },
+              },
+            ],
+          },
+        },
+      ],
+    };
+    jobs.push(job);
+    await route.fulfill({ status: 202, json: job });
+  });
+  await selectCreationPanel(page, "agent");
+  await page.getByRole("button", { name: "创作设置", exact: true }).click();
+  const popover = page.locator(".agent-settings-content:visible");
+  const agentModel = popover.getByRole("combobox", {
+    name: "图片模型",
+    exact: true,
+  });
+  await agentModel.click();
+  await page
+    .locator(".ant-select-dropdown:visible .ant-select-item-option")
+    .filter({ hasText: "size-test-range2" })
+    .click();
+  await popover
+    .getByRole("button", { name: "自定义尺寸", exact: true })
+    .click();
+  const agentWidth = popover.getByLabel("宽度", { exact: true });
+  const agentHeight = popover.getByLabel("高度", { exact: true });
+  await agentWidth.fill("1024");
+  await agentHeight.fill("1536");
+  await popover.getByRole("combobox", { name: "比例", exact: true }).focus();
+  await expect(
+    popover.getByText("总像素不能超过 1,048,576。", { exact: true }),
+  ).toBeVisible();
+  await agentHeight.focus();
+  await expect(
+    popover.getByText("总像素不能超过 1,048,576。", { exact: true }),
+  ).toBeHidden();
+  await agentHeight.fill("1024");
+  await page.keyboard.press("Escape");
+  await expect(popover).toBeHidden();
+  const agentPrompt = page.getByLabel("告诉 Agent 你的想法", { exact: true });
+  await agentPrompt.fill("仅生成合成计划");
+  await page.getByRole("button", { name: "生成计划", exact: true }).click();
+  await page
+    .getByRole("button", { name: "步骤 1 图片设置", exact: true })
+    .click();
+  const stepCustomSize = popover.getByRole("button", {
+    name: "自定义尺寸",
+    exact: true,
+  });
+  await expect(stepCustomSize).toBeVisible();
+  if ((await stepCustomSize.getAttribute("aria-expanded")) !== "true")
+    await stepCustomSize.click();
+  const stepWidth = popover.getByLabel("步骤 1 宽度", { exact: true });
+  await stepWidth.fill("1000");
+  await expect(
+    page.getByText("宽度须为 16 的倍数。", { exact: true }),
+  ).toBeHidden();
+  await popover.getByLabel("步骤 1 高度", { exact: true }).focus();
+  await expect(
+    page.getByText("宽度须为 16 的倍数。", { exact: true }),
+  ).toHaveCount(1);
+  await expect(
+    page.getByText("宽度须为 16 的倍数。", { exact: true }),
+  ).toBeVisible();
+  const stepErrorId = await stepWidth.getAttribute("aria-describedby");
+  expect(stepErrorId).toBeTruthy();
+  await expect(page.locator(`[id="${stepErrorId}"]`)).toHaveText(
+    "宽度须为 16 的倍数。",
+  );
+  await page.keyboard.press("Tab");
+  const stepLower = popover.getByRole("button", {
+    name: "宽改为 992（-8）",
+    exact: true,
+  });
+  await expect(stepLower).toBeFocused();
+  await expect
+    .poll(() =>
+      stepLower.evaluate((el) => {
+        const bounds = el
+          .closest(".agent-settings-content")!
+          .getBoundingClientRect();
+        const box = el.getBoundingClientRect();
+        return box.top >= bounds.top && box.bottom <= bounds.bottom;
+      }),
+    )
+    .toBe(true);
+  await page.keyboard.press("Enter");
+  await expect(stepWidth).toBeFocused();
+  await expect(stepWidth).toHaveValue("992");
   // Drain polling callbacks before Playwright tears down this page.
   await page.unrouteAll({ behavior: "wait" });
 });

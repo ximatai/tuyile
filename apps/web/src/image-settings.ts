@@ -129,16 +129,8 @@ export function imageSizeIssue(
       cap.sizes.includes(`${width}x${height}`)
       ? undefined
       : "当前模型仅支持指定尺寸，请选择画面规格。";
-  const maxEdge = Math.min(cap.maxEdge, usage.policy.maxEdge);
-  for (const [label, value] of [
-    ["宽度", width],
-    ["高度", height],
-  ] as const) {
-    if (value < 256 || value > maxEdge)
-      return `${label}须在 256–${maxEdge} 像素之间。`;
-    if (!Number.isInteger(value) || value % 16 !== 0)
-      return `${label}须为 16 的倍数。`;
-  }
+  const fields = imageSizeFieldIssues(usage, cap, { width, height });
+  if (fields.width || fields.height) return fields.width ?? fields.height;
   const maxPixels = Math.min(cap.maxPixels, usage.policy.maxPixels);
   if (width * height > maxPixels)
     return `总像素不能超过 ${maxPixels.toLocaleString()}。`;
@@ -251,4 +243,103 @@ export function sizeOptionLabel(size: Pick<SizePreset, "width" | "height">) {
     ["3840x2160", "4K"],
   ]).get(`${size.width}x${size.height}`);
   return common ? `${pixels} · ${common}` : pixels;
+}
+
+export function imageSizeFieldIssues(
+  usage: ImageUsage,
+  cap: ImageCapability,
+  size: Pick<ImageSettings, "width" | "height">,
+) {
+  const maxEdge = Math.min(
+    effectiveImageCapability(cap).maxEdge,
+    usage.policy.maxEdge,
+  );
+  const issue = (label: string, n: number) => {
+    if (!Number.isFinite(n) || n === 0) return `请填写${label}。`;
+    if (n < 256) return `${label}至少为 256 像素。`;
+    if (n > maxEdge) return `${label}不能超过 ${maxEdge} 像素。`;
+    if (!Number.isInteger(n)) return `${label}须为整数。`;
+    if (n % 16 !== 0) return `${label}须为 16 的倍数。`;
+  };
+  return {
+    width: issue("宽度", size.width),
+    height: issue("高度", size.height),
+  };
+}
+// Only offer explainable single-axis edits. Search the product's bounded 16px
+// grid, checking the complete model/policy constraints rather than presets.
+export function imageSizeCorrections(
+  usage: ImageUsage,
+  declared: ImageCapability,
+  size: Pick<ImageSettings, "width" | "height">,
+): Pick<ImageSettings, "width" | "height">[] {
+  const cap = effectiveImageCapability(declared);
+  if (
+    cap.sizes.length ||
+    ![size.width, size.height].every((n) => Number.isFinite(n) && n > 0) ||
+    !imageSizeIssue(usage, cap, size)
+  )
+    return [];
+  const maxEdge = Math.min(8192, cap.maxEdge, usage.policy.maxEdge);
+  const candidates: Pick<ImageSettings, "width" | "height">[] = [];
+  for (const axis of ["width", "height"] as const) {
+    let below: Pick<ImageSettings, "width" | "height"> | undefined;
+    let above: Pick<ImageSettings, "width" | "height"> | undefined;
+    for (let edge = 256; edge <= maxEdge; edge += 16) {
+      const next = { ...size, [axis]: edge };
+      if (
+        edge === size[axis] ||
+        !validSize(usage, cap, next.width, next.height)
+      )
+        continue;
+      if (edge < size[axis]) below = next;
+      else {
+        above = next;
+        break;
+      }
+    }
+    if (below) candidates.push(below);
+    if (above) candidates.push(above);
+  }
+  const distance = (next: Pick<ImageSettings, "width" | "height">) =>
+    Math.abs(next.width - size.width) + Math.abs(next.height - size.height);
+  const nearest = Math.min(...candidates.map(distance));
+  return candidates.filter((next) => distance(next) === nearest).slice(0, 2);
+}
+
+export function sizeCorrectionLabel(
+  before: Pick<ImageSettings, "width" | "height">,
+  after: Pick<ImageSettings, "width" | "height">,
+) {
+  const axes = (["width", "height"] as const).filter(
+    (axis) => before[axis] !== after[axis],
+  );
+  if (axes.length !== 1) return `改为 ${after.width} × ${after.height}`;
+  const axis = axes[0]!,
+    delta = after[axis] - before[axis];
+  return `${axis === "width" ? "宽" : "高"}改为 ${after[axis]}（${delta > 0 ? "+" : ""}${delta}）`;
+}
+export function modelSwitchSize(
+  usage: ImageUsage,
+  modelKey: string,
+  value: ImageSettings,
+) {
+  const cap = selectedCapability(usage, modelKey);
+  if (!cap?.sizes.length || !imageSizeIssue(usage, cap, value)) return {};
+  const sizes = sizeChoices(usage, cap);
+  const next = sizes.find((s) => s.value === "1024x1024") ?? sizes[0];
+  if (!next) return {};
+  const [width, height] = next.value.split("x").map(Number) as [number, number];
+  return { width, height };
+}
+
+// Submission uses settingsIssues; ImageControls owns the size error presentation.
+export function settingsDisplayIssues(
+  usage: ImageUsage | undefined,
+  settings: ImageSettings,
+  issues: string[],
+) {
+  const cap = usage && selectedCapability(usage, settings.modelKey);
+  const sizeIssue = usage && cap && imageSizeIssue(usage, cap, settings);
+  return issues.filter((issue) => issue !== sizeIssue);
 }

@@ -118,7 +118,15 @@ export function Field({
   return (
     <label className="field" htmlFor={id}>
       <span>{label}</span>
-      <Input id={id} {...props} />
+      <Input
+        id={id}
+        status={
+          props["aria-invalid"] === true || props["aria-invalid"] === "true"
+            ? "error"
+            : undefined
+        }
+        {...props}
+      />
     </label>
   );
 }
@@ -156,22 +164,7 @@ export function useConfirm() {
       });
     });
 }
-export function ChoiceField({
-  label,
-  name,
-  value,
-  defaultValue,
-  options,
-  groups,
-  onValueChange,
-  disabled,
-  hideLabel = false,
-  labelExtra,
-  showSearch,
-  optionRender,
-  labelRender,
-  popupMatchSelectWidth,
-}: {
+export function ChoiceField(props: {
   label: string;
   name?: string;
   value?: string;
@@ -187,10 +180,29 @@ export function ChoiceField({
   labelRender?: SelectProps["labelRender"];
   popupMatchSelectWidth?: SelectProps["popupMatchSelectWidth"];
 }) {
+  const {
+    label,
+    name,
+    value,
+    defaultValue,
+    options,
+    groups,
+    onValueChange,
+    disabled,
+    hideLabel = false,
+    labelExtra,
+    showSearch,
+    optionRender,
+    labelRender,
+    popupMatchSelectWidth,
+  } = props;
   const id = useId(),
     [local, setLocal] = useState(defaultValue ?? options[0]?.value ?? "");
   const locked = useControlsDisabled(disabled);
-  const current = value ?? local;
+  // An explicit undefined clears a controlled choice; only omission uses local state.
+  const current = Object.prototype.hasOwnProperty.call(props, "value")
+    ? value
+    : local;
   return (
     <div className="field">
       {labelExtra ? (
@@ -211,7 +223,7 @@ export function ChoiceField({
       )}
       <Select
         id={id}
-        value={current}
+        value={current ?? null}
         options={groups ?? options}
         disabled={locked}
         showSearch={showSearch}
@@ -223,7 +235,7 @@ export function ChoiceField({
           onValueChange?.(value);
         }}
       />
-      {name && <input type="hidden" name={name} value={current} />}
+      {name && <input type="hidden" name={name} value={current ?? ""} />}
     </div>
   );
 }

@@ -4227,3 +4227,8 @@ h3 {
 .create-project > .button { justify-self: end; }
 
 .token-count { white-space: nowrap; font-variant-numeric: tabular-nums; cursor: help; }
+
+.size-field-error { color: var(--ant-color-error, #c9363e); font-size: 12px; margin: 4px 0 0; }
+.size-field-error:empty { display: none; }
+.size-corrections { display: flex; flex-wrap: wrap; gap: 6px; }
+.size-corrections .ant-btn { height: 28px; font-size: 12px; }

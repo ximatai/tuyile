@@ -2,7 +2,14 @@ import { expect, it } from "vitest";
 import type { ImageCapability, ImageTask, ImageUsage } from "@tuyile/contracts";
 import { defaultImagePolicy } from "@tuyile/core";
 import {
+  imageSizeCorrections,
+  imageSizeIssue,
+  validSize,
+  settingsDisplayIssues,
   initialSettings,
+  modelSwitchSize,
+  imageSizeFieldIssues,
+  sizeCorrectionLabel,
   selectedCapability,
   settingsIssues,
   sizeChoices,
@@ -197,4 +204,170 @@ it("restores only image settings fields, keeping style and references out of sav
     "quality",
     "width",
   ]);
+});
+
+it("switches incompatible fixed sizes to legal defaults and preserves range drafts", () => {
+  const draft = initialSettings(usage);
+  expect(modelSwitchSize(usage, "pool-b", draft)).toEqual({
+    width: 768,
+    height: 1024,
+  });
+  expect(modelSwitchSize(usage, "pool-a", draft)).toEqual({});
+  const range = {
+    ...usage,
+    modelOptions: [
+      { ...usage.modelOptions![1]!, image: { ...cap, sizes: [] } },
+    ],
+  };
+  expect(modelSwitchSize(range, "pool-b", { ...draft, width: 1000 })).toEqual(
+    {},
+  );
+});
+it("separates each field issue and describes correction deltas", () => {
+  expect(imageSizeFieldIssues(usage, cap, { width: 0, height: 1000 })).toEqual({
+    width: "请填写宽度。",
+    height: "高度须为 16 的倍数。",
+  });
+  expect(
+    sizeCorrectionLabel(
+      { width: 1000, height: 1024 },
+      { width: 1008, height: 1024 },
+    ),
+  ).toBe("宽改为 1008（+8）");
+  expect(
+    sizeCorrectionLabel(
+      { width: 1000, height: 1000 },
+      { width: 1024, height: 1024 },
+    ),
+  ).toBe("改为 1024 × 1024");
+});
+
+it("keeps submission strict while displaying size errors only beside controls", () => {
+  const draft = { ...initialSettings(usage), width: 1000 };
+  const issues = settingsIssues(usage, draft, 0);
+  expect(issues.length).toBeGreaterThan(0);
+  expect(settingsDisplayIssues(usage, draft, issues)).toEqual([]);
+  expect(
+    settingsDisplayIssues(usage, draft, [...issues, "其他阻止原因"]),
+  ).toEqual(["其他阻止原因"]);
+});
+it("preserves compatible fixed dimensions", () => {
+  expect(
+    modelSwitchSize(usage, "pool-b", {
+      ...initialSettings(usage),
+      width: 768,
+      height: 1024,
+    }),
+  ).toEqual({});
+});
+
+it("reports only the violated edge bound, with integer before step errors", () => {
+  for (const [width, error] of [
+    [255, "宽度至少为 256 像素。"],
+    [2049, "宽度不能超过 2048 像素。"],
+    [1000.5, "宽度须为整数。"],
+    [1000, "宽度须为 16 的倍数。"],
+    [256, undefined],
+  ] as const) {
+    expect(
+      imageSizeFieldIssues(usage, cap, { width, height: 1024 }).width,
+    ).toBe(error);
+  }
+});
+
+it("offers nearest fully legal single-axis edits without preset fallback", () => {
+  const range = { ...cap, sizes: [] };
+  const known = { ...range, model: "gpt-image-2.5-sunburst" };
+  const limited = { ...usage, policy: { ...usage.policy, maxPixels: 1048576 } };
+  const cases = [
+    [
+      usage,
+      range,
+      { width: 255, height: 1024 },
+      [{ width: 256, height: 1024 }],
+    ],
+    [usage, range, { width: 256, height: 1024 }, []],
+    [
+      usage,
+      range,
+      { width: 2049, height: 1024 },
+      [{ width: 2048, height: 1024 }],
+    ],
+    [
+      usage,
+      range,
+      { width: 1000, height: 1024 },
+      [
+        { width: 992, height: 1024 },
+        { width: 1008, height: 1024 },
+      ],
+    ],
+    [
+      usage,
+      known,
+      { width: 255, height: 1024 },
+      [{ width: 640, height: 1024 }],
+    ],
+    [
+      usage,
+      known,
+      { width: 2048, height: 320 },
+      [{ width: 2048, height: 688 }],
+    ],
+    [
+      limited,
+      known,
+      { width: 1024, height: 1536 },
+      [{ width: 672, height: 1536 }],
+    ],
+    [usage, known, { width: 256, height: 256 }, []],
+    [usage, range, { width: 255, height: 255 }, []],
+    [usage, range, { width: 0, height: 1024 }, []],
+    [usage, range, { width: NaN, height: 1024 }, []],
+    [usage, range, { width: 1024, height: Infinity }, []],
+    [usage, cap, { width: 1000, height: 1024 }, []],
+  ] as const;
+  for (const [policy, model, before, expected] of cases) {
+    const suggestions = imageSizeCorrections(policy, model, before);
+    expect(suggestions).toEqual(expected);
+    for (const after of suggestions) {
+      expect(validSize(policy, model, after.width, after.height)).toBe(true);
+      expect(imageSizeIssue(policy, model, after)).toBeUndefined();
+      expect(
+        Number(before.width !== after.width) +
+          Number(before.height !== after.height),
+      ).toBe(1);
+    }
+  }
+});
+
+it("uses known model edge ceilings even when declarations and policy are broader", () => {
+  const broad = {
+    ...usage,
+    policy: { ...usage.policy, maxEdge: 8192, maxPixels: 67108864 },
+  };
+  for (const model of [
+    "gpt-image-2.5-sunburst",
+    "gpt-image-2.5-flare",
+    "gpt-image-2.5-sunburst-2026-09-08",
+    "gpt-image-2.5-flare-2026-09-08",
+  ]) {
+    const declared = {
+      ...cap,
+      model,
+      sizes: [],
+      maxEdge: 8192,
+      maxPixels: 67108864,
+    };
+    const before = { width: 3841, height: 1536 };
+    expect(imageSizeFieldIssues(broad, declared, before).width).toBe(
+      "宽度不能超过 3840 像素。",
+    );
+    expect(imageSizeCorrections(broad, declared, before)).toEqual([
+      { width: 3840, height: 1536 },
+    ]);
+    expect(
+      imageSizeCorrections(broad, declared, { width: 255, height: 1024 }),
+    ).toEqual([{ width: 640, height: 1024 }]);
+  }
 });
