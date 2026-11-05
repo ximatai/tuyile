@@ -313,9 +313,18 @@ export class EditorStore {
     for (const o of fresh) {
       const width = 260,
         height = Math.max(60, Math.min(800, (260 * o.height) / o.width));
+      const source = nodes.find(
+        (n) => n.kind === "image" && o.sourceIds.includes(n.assetId ?? ""),
+      );
       const position = imagePosition(
         nodes,
-        this.state.document.viewport,
+        source
+          ? {
+              x: 60 - (source.x + source.width + 24),
+              y: 70 - source.y,
+              zoom: 1,
+            }
+          : this.state.document.viewport,
         width,
         height,
       );

@@ -4,8 +4,9 @@ import type { ImageCapability } from "./extensions.js";
 const gptImage25 = {
   source:
     "https://developers.openai.com/api/docs/guides/image-generation#size-and-quality-options",
-  checkedAt: "2026-10-30",
+  checkedAt: "2026-11-05",
   evidence: "documentation" as const,
+  markup: true,
   formats: ["png", "jpeg", "webp"] as const,
   qualities: ["low", "medium", "high"] as const, // Application-supported subset.
   maxEdge: 3840,

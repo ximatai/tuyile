@@ -36,6 +36,13 @@ export function checkImageCapability(
     input.width * input.height > c.maxPixels ||
     !c.qualities.includes(input.quality) ||
     !c.formats.includes(input.format) ||
+    (input.editSession &&
+      (input.referenceIds.length !== 1 || input.count !== 1)) ||
+    (input.annotation !== undefined &&
+      (!c.markup ||
+        input.referenceIds.length !== 1 ||
+        input.count !== 1 ||
+        !input.annotation.strokes.length)) ||
     (input.complexity !== undefined &&
       !c.complexities?.includes(input.complexity)) ||
     (c.sizes.length && !c.sizes.includes(`${input.width}x${input.height}`))

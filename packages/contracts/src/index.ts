@@ -113,3 +113,5 @@ export interface AdminArtworksPage {
   artworks: AdminArtwork[];
   hasMore: boolean;
 }
+
+export * from "./annotation.js";

@@ -154,6 +154,11 @@ export class PgCreationContext {
       count: r.input.count,
       settings: {
         ...(r.input.style ? { style: r.input.style } : {}),
+        ...(r.input.editSession ? { editSession: true as const } : {}),
+        ...(r.input.annotation ? { annotation: r.input.annotation } : {}),
+        ...(r.input.preserveRequirements
+          ? { preserveRequirements: r.input.preserveRequirements }
+          : {}),
         width: r.input.width,
         height: r.input.height,
         ...(r.input.complexity !== undefined

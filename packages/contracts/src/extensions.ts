@@ -11,6 +11,7 @@ export const imageCapability = z
     model: z.string().min(1).max(120),
     generation: z.boolean(),
     editing: z.boolean(),
+    markup: z.boolean().optional(),
     complexities: z
       .array(z.enum(["low", "medium", "high"]))
       .max(3)

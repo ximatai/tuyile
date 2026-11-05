@@ -141,3 +141,36 @@ it("sends explicit complexity in generation JSON and edit multipart but omits le
     );
   }
 });
+
+it("dispatches the exact persisted prompt once without recomposing requirements or runtime text snapshots", async () => {
+  const { imageDispatchInput } = await import("@tuyile/core");
+  const { composeCreativePrompt } = await import("@tuyile/contracts");
+  const value = {
+    ...input,
+    projectId: "00000000-0000-4000-8000-000000000001",
+    requestKey: "00000000-0000-4000-8000-000000000002",
+    style: { name: "Style", text: "Soft light" },
+    preserveRequirements: "Keep the subject",
+    textSources: [{ nodeId: "n", title: "Copy", text: "Exact copy  \n" }],
+  };
+  const finalPrompt = composeCreativePrompt(value);
+  const wire = imageDispatchInput(value, finalPrompt);
+  expect(wire.style).toBeUndefined();
+  expect(wire.preserveRequirements).toBeUndefined();
+  expect(wire).not.toHaveProperty("textSources");
+  const p = new CompatibleImageProvider(false, 0, async (_url, options) => {
+    expect(JSON.parse(String(options?.body)).prompt).toBe(finalPrompt);
+    return new Response(JSON.stringify({ data: [{ b64_json: "aGVsbG8=" }] }));
+  });
+  await p.generate(config, wire, [], new AbortController().signal);
+  const trailing = composeCreativePrompt({ ...value, style: undefined });
+  await new CompatibleImageProvider(false, 0, async (_url, options) => {
+    expect(JSON.parse(String(options?.body)).prompt).toBe(trailing);
+    return new Response(JSON.stringify({ data: [{ b64_json: "aGVsbG8=" }] }));
+  }).generate(
+    config,
+    imageDispatchInput({ ...value, style: undefined }, trailing),
+    [],
+    new AbortController().signal,
+  );
+});

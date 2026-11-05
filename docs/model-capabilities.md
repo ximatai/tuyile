@@ -4,17 +4,19 @@
 
 ## 已知依据
 
-校准日期：2026-10-30。依据为[OpenAI 图片生成官方文档](https://developers.openai.com/api/docs/guides/image-generation#size-and-quality-options)，记录位于 `packages/contracts/src/image-model-knowledge.ts`。本次已核对文档，没有进行付费试调用。
+校准日期：2026-11-05。依据为[OpenAI 图片生成官方文档](https://developers.openai.com/api/docs/guides/image-generation#size-and-quality-options)，记录位于 `packages/contracts/src/image-model-knowledge.ts`。本次已核对文档，没有进行付费试调用。
 
 | 模型 | 格式 | 尺寸边界 |
 | --- | --- | --- |
-| gpt-image-2.5-sunburst、gpt-image-2.5-flare（含2026-09-08快照） | PNG、JPEG、WebP | 边长不超过3840，边长为16的倍数，总像素655360—8294400，长短边比例不超过3:1 |
+| gpt-image-2.5-sunburst、gpt-image-2.5-flare（含2026-09-08快照），gpt-image-2.6-sunburst、gpt-image-2.6-flare | PNG、JPEG、WebP | 边长不超过3840，边长为16的倍数，总像素655360—8294400，长短边比例不超过3:1 |
 
 当前应用只开放 low / medium / high 三档质量，不因文档存在更高档位而自动扩充产品枚举。已知模型上限独立于管理员声明；管理员可以缩小范围，不能扩大上限。旧配置仍可读取，但执行和用户选项受已知上限约束，新发布需通过校准校验。
 
 `/models`只用于发现模型标识，不作为能力证明。没有独立记录的模型继续明确标为未校准，管理员必须依据对应服务文档声明，不能按相似名称套用其他模型的结论。新增实际测试应逐项记录服务、精确模型、参数、响应及时间；一次成功只证明该次参数组合，失败需区分参数不支持、网络、权限和额度问题。凭据、原始响应和测试图片留在忽略的本地目录，不进入Git。
 
 ## 推荐配置
+
+标注编辑按2026-11-05图片指南接入：支持的2.5/2.6服务需显式声明markup，使用与首张原图方向校正后尺寸一致的透明PNG。指南与部分接口字段说明的模型列表更新节奏可能不同，兼容服务必须单独核对；本地仅验证合成链路和请求协议，不据同名模型宣称真实服务已通过。
 
 2.6 Sunburst / Flare 的静态 PNG/JPEG/WebP 输出采用当前尺寸边界与应用三档质量，复杂度独立支持 low / medium / high。省略 complexity 时不补写请求字段，由服务默认处理；官方说明2.6默认high。管理员必须显式声明开放复杂度，第三方兼容服务不因同名模型自动开放新参数。核对日期2026-11-05，依据为[图片生成指南](https://developers.openai.com/api/docs/guides/image-generation)及[生成接口](https://developers.openai.com/api/reference/resources/images/methods/generate)，尚未付费实测。SVG与GIF尚未接入。
 

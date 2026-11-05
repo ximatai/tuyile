@@ -1,4 +1,4 @@
-import { composeCreativePrompt } from "@tuyile/contracts";
+import { imageInput, composeCreativePrompt } from "@tuyile/contracts";
 import { createToolRegistry, type ToolRegistry } from "./tools.js";
 import type { ToolBinding } from "@tuyile/contracts";
 import { ImageOperations } from "./image-operations.js";
@@ -157,6 +157,19 @@ export class ImageCallError extends Error {
     super(code);
   }
 }
+/** Finalize once, stripping stored composition metadata before the protocol adapter. */
+export function imageDispatchInput(
+  input: ImageInput,
+  finalPrompt?: string,
+): ImageInput {
+  const parsed = imageInput.parse(input);
+  return {
+    ...parsed,
+    prompt: finalPrompt ?? composeCreativePrompt(input),
+    style: undefined,
+    preserveRequirements: undefined,
+  };
+}
 export interface ImageProvider {
   generate(
     config: ImageExecutionConfig,
@@ -201,12 +214,7 @@ export class ImageExecutor {
                 generate: () =>
                   this.provider.generate(
                     dispatched.provider,
-                    {
-                      ...task.input,
-                      prompt:
-                        task.finalPrompt ?? composeCreativePrompt(task.input),
-                      style: undefined,
-                    },
+                    imageDispatchInput(task.input, task.finalPrompt),
                     bytes,
                     signal,
                     (usage) =>

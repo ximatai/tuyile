@@ -59,6 +59,18 @@ export function TaskDetails({
           },
         ]}
       />
+      {task.settings?.preserveRequirements && (
+        <div>
+          <h3>保持要求</h3>
+          <p>{task.settings.preserveRequirements}</p>
+        </div>
+      )}
+      {task.settings?.annotation && (
+        <p className="hint">
+          已保存 {task.settings.annotation.strokes.length}{" "}
+          处标注，可复用设置继续修改。
+        </p>
+      )}
       <div>
         <h3>创作需求</h3>
         <p className="task-detail-prompt">{task.prompt || "未填写"}</p>

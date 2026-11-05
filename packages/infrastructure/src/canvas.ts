@@ -80,7 +80,7 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
       [id],
     );
     await this.c.query(
-      "UPDATE image_tasks SET input=jsonb_set(jsonb_set(input - 'textSources' - 'textNodeIds' - 'finalPrompt','{prompt}',to_jsonb(''::text)),'{referenceIds}','[]'::jsonb) WHERE project_id=$1",
+      "UPDATE image_tasks SET input=jsonb_set(jsonb_set(input - 'textSources' - 'textNodeIds' - 'finalPrompt' - 'annotation' - 'preserveRequirements','{prompt}',to_jsonb(''::text)),'{referenceIds}','[]'::jsonb) WHERE project_id=$1",
       [id],
     );
     await this.c.query(
@@ -158,7 +158,22 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
     }
     if ((old?.revision ?? 0) !== input.revision)
       throw new AppError("DRAFT_CONFLICT", 409);
-    const assets = [...input.document.referenceIds].sort();
+    if (
+      input.document.edit?.pendingInput &&
+      input.document.edit.pendingInput.projectId !== project
+    )
+      throw new AppError("NOT_FOUND", 404);
+    const assets = [
+      ...new Set([
+        ...input.document.referenceIds,
+        ...(input.document.edit
+          ? [
+              input.document.edit.baseAssetId,
+              ...(input.document.edit.pendingInput?.referenceIds ?? []),
+            ]
+          : []),
+      ]),
+    ].sort();
     const ready = await this.c.query(
       "SELECT id FROM image_assets WHERE workspace_id=$1 AND id=ANY($2::uuid[]) AND state='ready' ORDER BY id FOR UPDATE",
       [p.workspaceId, assets],

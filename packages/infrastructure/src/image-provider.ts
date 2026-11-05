@@ -1,5 +1,5 @@
+import { renderAnnotation } from "./image-annotation.js";
 import { parseModelUsage, type ModelUsage } from "@tuyile/core";
-import { composeCreativePrompt } from "@tuyile/contracts";
 import sharp from "sharp";
 import {
   ImageCallError,
@@ -91,7 +91,7 @@ export class CompatibleImageProvider implements ImageProvider {
       };
       const parameters = {
         model: input.model,
-        prompt: composeCreativePrompt(input),
+        prompt: input.prompt,
         size: `${input.width}x${input.height}`,
         ...(input.complexity !== undefined
           ? { complexity: input.complexity }
@@ -102,6 +102,17 @@ export class CompatibleImageProvider implements ImageProvider {
       };
       if (references.length) {
         const form = new FormData();
+        if (input.annotation) {
+          const overlay = await renderAnnotation(
+            input.annotation,
+            references[0],
+          );
+          form.set(
+            "markup",
+            new Blob([Buffer.from(overlay)], { type: "image/png" }),
+            "markup.png",
+          );
+        }
         for (const [k, v] of Object.entries(parameters)) form.set(k, String(v));
         for (const [i, bytes] of references.entries()) {
           const type =

@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { textNodeIds } from "./creation.js";
+import { imageAnnotation } from "./annotation.js";
+import { imageInput, textNodeIds } from "./creation.js";
 // Drafts accept incomplete input; execution applies the stricter creation schemas.
 const text = (max: number) =>
   z
@@ -41,6 +42,20 @@ export const projectDraftDocument = z
       .max(4)
       .refine((ids) => new Set(ids).size === ids.length),
     textNodeIds: textNodeIds.optional(),
+    edit: z
+      .object({
+        baseAssetId: z.uuid(),
+        prompt: text(12000),
+        style: draftStyle.optional(),
+        preserveRequirements: text(2000).optional(),
+        textNodeIds: textNodeIds.optional(),
+        settings: draftSettings,
+        annotation: imageAnnotation,
+        pendingInput: imageInput.optional(),
+        resultTaskId: z.uuid().optional(),
+      })
+      .strict()
+      .optional(),
     mode: z.enum(["direct", "agent"]),
   })
   .strict();

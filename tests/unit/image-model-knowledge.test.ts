@@ -11,7 +11,7 @@ it("records documented limits and keeps the administrator subset", () => {
   const model = "gpt-image-2.5-sunburst";
   expect(imageModelKnowledge(model)).toMatchObject({
     evidence: "documentation",
-    checkedAt: "2026-10-30",
+    checkedAt: "2026-11-05",
     formats: ["png", "jpeg", "webp"],
   });
   const cap = effectiveImageCapability({

@@ -33,6 +33,7 @@ export function recommendedModelCapabilities(
       model,
       generation: true,
       editing: !!known,
+      ...(known?.markup ? { markup: true } : {}),
       ...(known?.complexities.length
         ? { complexities: [...known.complexities] }
         : {}),

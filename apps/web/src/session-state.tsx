@@ -91,13 +91,33 @@ export class SessionState {
       );
       const settings = taskSettings(input.task, usage);
       if (!settings) throw new Error("这次任务没有可复用的参数。");
-      patch.direct = {
-        prompt: taskDraftPrompt(input.task),
-        style: input.task.settings?.style,
-        settings,
-      };
-      patch.referenceIds = input.task.settings!.referenceIds;
-      patch.textNodeIds = [];
+      if (
+        (input.task.settings?.editSession || input.task.settings?.annotation) &&
+        input.task.settings.referenceIds[0]
+      ) {
+        if (store.get().document.edit?.pendingInput)
+          throw new Error("请先继续图片修改，找回原提交结果。");
+        patch.edit = {
+          baseAssetId: input.task.settings.referenceIds[0],
+          prompt: taskDraftPrompt(input.task),
+          style: input.task.settings.style,
+          preserveRequirements: input.task.settings.preserveRequirements,
+          settings: { ...settings, count: 1 },
+          textNodeIds: [],
+          annotation: input.task.settings.annotation ?? {
+            version: 1,
+            strokes: [],
+          },
+        };
+      } else {
+        patch.direct = {
+          prompt: taskDraftPrompt(input.task),
+          style: input.task.settings?.style,
+          settings,
+        };
+        patch.referenceIds = input.task.settings!.referenceIds;
+        patch.textNodeIds = [];
+      }
     }
     if (input.prompt !== undefined)
       patch.direct = {
@@ -125,6 +145,8 @@ export class SessionState {
   ) {
     const stored = this.projectDrafts.get(projectId)?.get();
     if (!stored?.ready) return false;
+    if (input.task?.settings?.editSession || input.task?.settings?.annotation)
+      return !!stored.document.edit;
     const current = stored.document.direct;
     const prompt = input.task ? taskDraftPrompt(input.task) : input.prompt;
     const referenceIds =

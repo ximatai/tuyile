@@ -1,3 +1,4 @@
+import { imageAnnotation } from "./annotation.js";
 import { imageCapability, type ImageCapability } from "./extensions.js";
 import { z } from "zod";
 export const creationStyle = z
@@ -25,9 +26,13 @@ export function composeCreativePrompt(input: {
   textSources?: TextSource[];
   prompt: string;
   style?: CreationStyle;
+  preserveRequirements?: string;
 }) {
   return [
     input.prompt.trim(),
+    ...(input.preserveRequirements?.trim()
+      ? [`保持要求：${input.preserveRequirements.trim()}`]
+      : []),
     ...(input.textSources?.map(
       (s, i) => `引用文案 ${i + 1}（${s.title || "未命名文案"}）：\n${s.text}`,
     ) ?? []),
@@ -44,6 +49,9 @@ export const imageInput = z.object({
     .max(12000)
     .regex(/^[^\u0000]+$/),
   style: creationStyle.optional(),
+  preserveRequirements: z.string().trim().max(2000).optional(),
+  annotation: imageAnnotation.optional(),
+  editSession: z.literal(true).optional(),
   model: z.string().min(1).max(120),
   modelSelectionId: z.uuid().optional(),
   width: z.number().int().min(256).max(8192).multipleOf(16),
@@ -108,6 +116,9 @@ export interface ImageTask {
   settings?: Pick<
     ImageInput,
     | "style"
+    | "preserveRequirements"
+    | "annotation"
+    | "editSession"
     | "width"
     | "height"
     | "complexity"

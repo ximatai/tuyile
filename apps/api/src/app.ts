@@ -87,19 +87,21 @@ export function createApp(
     bodyLimit({
       maxSize: /^\/api\/projects\/[^/]+\/canvas(?:\/copy)?$/.test(c.req.path)
         ? CANVAS_REQUEST_MAX_BYTES
-        : c.req.path.startsWith("/api/model-admin/") ||
-            c.req.path.startsWith("/api/agent/") ||
-            /^\/api\/projects\/[^/]+\/(canvas|draft)/.test(c.req.path)
-          ? 1024 * 1024
-          : c.req.path === "/api/images/uploads"
-            ? 20 * 1024 * 1024
-            : c.req.path.startsWith("/api/images/") ||
-                c.req.path.startsWith("/api/image-admin/") ||
-                c.req.path.startsWith("/api/library/") ||
-                c.req.path === "/api/admin/prompts" ||
-                c.req.path === "/api/admin/demo-template"
-              ? 65536
-              : 16384,
+        : c.req.path === "/api/images/tasks"
+          ? 256 * 1024
+          : c.req.path.startsWith("/api/model-admin/") ||
+              c.req.path.startsWith("/api/agent/") ||
+              /^\/api\/projects\/[^/]+\/(canvas|draft)/.test(c.req.path)
+            ? 1024 * 1024
+            : c.req.path === "/api/images/uploads"
+              ? 20 * 1024 * 1024
+              : c.req.path.startsWith("/api/images/") ||
+                  c.req.path.startsWith("/api/image-admin/") ||
+                  c.req.path.startsWith("/api/library/") ||
+                  c.req.path === "/api/admin/prompts" ||
+                  c.req.path === "/api/admin/demo-template"
+                ? 65536
+                : 16384,
       onError: (c) =>
         c.json(
           { error: { code: "BODY_TOO_LARGE", requestId: c.get("requestId") } },

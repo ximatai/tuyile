@@ -1,3 +1,4 @@
+import { ImageEditDialog } from "./image-edit-dialog";
 import { taskDraftPrompt } from "./task-presentation";
 import {
   TextCanvasBoundary,
@@ -9,6 +10,7 @@ import { useCreationPanel } from "./use-creation-panel";
 import { LoadingState } from "./loading-state";
 import {
   ProjectDraftBoundary,
+  useProjectDraft,
   useDraftValue,
   useDraftMode,
   useDraftReferences,
@@ -42,6 +44,7 @@ import {
   useState,
   useEffect,
   useRef,
+  useSyncExternalStore,
   useId,
   type FormEvent,
   type ComponentRef,
@@ -300,6 +303,12 @@ function CreationEditor({
   projectId: string;
 }) {
   const textRefs = useTextReferences();
+  const draftStore = useProjectDraft();
+  const editSnapshot = useSyncExternalStore(
+    draftStore.subscribe,
+    draftStore.get,
+  );
+  const [editOpen, setEditOpen] = useState(false);
   const sessionState = useSessionState();
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
@@ -322,6 +331,66 @@ function CreationEditor({
     panelToggle.current?.focus({ preventScroll: true });
   }
   const confirmDraft = useConfirm();
+  const editFeedback = useFeedback();
+  async function discardImageEdit() {
+    const previous = draftStore.get().document.edit;
+    if (
+      !previous ||
+      previous.pendingInput ||
+      !(await confirmDraft("清除图片修改草稿？原图及生成作品保留。"))
+    )
+      return;
+    setEditOpen(false);
+    draftStore.edit({ edit: undefined });
+    try {
+      await draftStore.flush();
+    } catch (e) {
+      draftStore.edit({ edit: previous });
+      editFeedback.error(
+        `未能清除修改草稿，内容已保留。${(e as Error).message}`,
+      );
+    }
+  }
+  async function openImageEdit(id: string, task?: ImageTask) {
+    if (busy || pending) {
+      setError("请先确认当前提交结果。");
+      return;
+    }
+    const current = draftStore.get().document;
+    if (current.edit && current.edit.baseAssetId === id && !task) {
+      setEditOpen(true);
+      return;
+    }
+    if (current.edit?.pendingInput) {
+      setError("请先继续图片修改，找回原提交结果。");
+      return;
+    }
+    if (
+      current.edit &&
+      !(await confirmDraft("替换当前图片修改草稿？已有原图及生成作品保留。"))
+    )
+      return;
+    const source = current[current.mode];
+    const settings =
+      task && usage ? taskSettings(task, usage) : source.settings;
+    if (!settings) return;
+    draftStore.edit({
+      edit: {
+        baseAssetId: id,
+        prompt: task ? taskDraftPrompt(task) : "",
+        style: task ? task.settings?.style : source.style,
+        preserveRequirements: task
+          ? task.settings?.preserveRequirements
+          : current.mode === "agent"
+            ? current.agent.preserveRequirements
+            : undefined,
+        textNodeIds: task ? [] : current.textNodeIds,
+        settings: { ...settings, count: 1 },
+        annotation: task?.settings?.annotation ?? { version: 1, strokes: [] },
+      },
+    });
+    setEditOpen(true);
+  }
   const chooseReference = useCallback(
     (id: string) => {
       panel.show();
@@ -472,6 +541,13 @@ function CreationEditor({
     }
     if (!usage || busy || pending) {
       setError("请先确认当前提交结果，再复用设置。");
+      return;
+    }
+    if (
+      (task.settings?.editSession || task.settings?.annotation) &&
+      task.settings.referenceIds[0]
+    ) {
+      await openImageEdit(task.settings.referenceIds[0], task);
       return;
     }
     const next = taskSettings(task, usage);
@@ -716,6 +792,14 @@ function CreationEditor({
   }
   return (
     <section className="creation-workbench">
+      {editOpen && editSnapshot.document.edit && (
+        <ImageEditDialog
+          projectId={projectId}
+          usage={usage}
+          onClose={() => setEditOpen(false)}
+          onRefresh={refresh}
+        />
+      )}
       <div className="mobile-creation-switch">
         <Button
           aria-pressed={mobile === "create"}
@@ -776,6 +860,7 @@ function CreationEditor({
               tasks={tasks}
               statusStale={!!taskQuery.error}
               projectId={projectId}
+              onEdit={(id) => void openImageEdit(id)}
               onReference={chooseReference}
               onTextReference={(id) => {
                 if (busy || pending)
@@ -797,6 +882,20 @@ function CreationEditor({
             items={[
               {
                 key: "history",
+                extra: editSnapshot.document.edit ? (
+                  <span onClick={(e) => e.stopPropagation()}>
+                    <Button type="button" onClick={() => setEditOpen(true)}>
+                      继续图片修改
+                    </Button>
+                    <Button
+                      type="button"
+                      disabled={!!editSnapshot.document.edit.pendingInput}
+                      onClick={() => void discardImageEdit()}
+                    >
+                      清除修改草稿
+                    </Button>
+                  </span>
+                ) : undefined,
                 label: `任务与结果 · ${tasks.length}${demoQuery.data ? " · 示例 3" : ""}`,
                 children: (
                   <>

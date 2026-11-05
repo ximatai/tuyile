@@ -243,3 +243,50 @@ it("confirms task replacement when only generation parameters differ", async () 
   expect(state.replacesCreativeDraft("project", { task })).toBe(false);
   state.clear();
 });
+
+it("restores annotations without an edit marker into the independent edit draft", async () => {
+  const state = new SessionState(session);
+  const document = emptyProjectDraft();
+  document.direct.prompt = "Keep direct input";
+  const store = await seed(state, "project", document);
+  const annotation = {
+    version: 1 as const,
+    strokes: [
+      {
+        kind: "ellipse" as const,
+        points: [
+          [0, 0],
+          [1000, 1000],
+        ] as [number, number][],
+      },
+    ],
+  };
+  const task = {
+    id: "task",
+    projectId: "project",
+    prompt: "Modify",
+    model: "model",
+    count: 1,
+    settings: {
+      width: 1024,
+      height: 1024,
+      quality: "medium",
+      format: "png",
+      referenceIds: ["00000000-0000-4000-8000-000000000001"],
+      annotation,
+    },
+  } as import("@tuyile/contracts").ImageTask;
+  const fetcher = vi
+    .spyOn(globalThis, "fetch")
+    .mockResolvedValue(new Response(JSON.stringify({ models: ["model"] })));
+  try {
+    await state.queueDraftTransfer("project", { task });
+    store.applyQueuedTransfer();
+    expect(store.get().document.edit?.annotation).toEqual(annotation);
+    expect(store.get().document.direct.prompt).toBe("Keep direct input");
+    expect(state.replacesCreativeDraft("project", { task })).toBe(true);
+  } finally {
+    fetcher.mockRestore();
+    state.clear();
+  }
+});

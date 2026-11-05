@@ -994,6 +994,17 @@ export function ModelServicesAdmin() {
                   >
                     支持参考图编辑
                   </Checkbox>
+                  <Checkbox
+                    checked={advanced.image.markup ?? false}
+                    onChange={(e) =>
+                      setAdvanced({
+                        ...advanced,
+                        image: { ...advanced.image!, markup: e.target.checked },
+                      })
+                    }
+                  >
+                    支持标注引导修改
+                  </Checkbox>
                   <div className="parameter-grid">
                     {(["maxEdge", "maxPixels", "maxReferences"] as const).map(
                       (key) => (

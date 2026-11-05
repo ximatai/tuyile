@@ -8,6 +8,9 @@ export const agentStep = imageInput
     projectId: true,
     requestKey: true,
     style: true,
+    annotation: true,
+    editSession: true,
+    preserveRequirements: true,
     textNodeIds: true,
     textCanvasRevision: true,
   })
@@ -61,7 +64,7 @@ export const agentPlan = z
 export type AgentStep = z.infer<typeof agentStep>;
 export type AgentPlan = z.infer<typeof agentPlan>;
 export const planningRequest = imageInput
-  .omit({ count: true })
+  .omit({ count: true, annotation: true, editSession: true })
   .extend({
     skillId: z.uuid().optional(),
     conversationModelId: z.uuid().optional(),
