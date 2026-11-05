@@ -185,4 +185,4 @@ CI复用这些合成验证，不执行公开部署。远程CI是否通过以其�
 
 连续创作专项使用独立编译版入口：先 build，再运行 `corepack pnpm test:e2e -- --config playwright.upgrade.config.ts`，覆盖探索、圈注、比较、Agent 保持要求/衍生、SVG 下载和跨项目复用。该 fixture 接管模型目录，只在独立重建的 tuyile_test 中运行；默认完整 e2e 仍保留旧配置接入测试的初始状态，不依赖专项测试先运行。导出的合成 SVG 留在忽略目录，可交外部矢量工具检查结构、颜色和编辑互通。
 
-候选镜像离线运行 `node dist/svg/check.js`（Docker 使用 `--network none`），在目标架构验证最大 SVG、真正终止后恢复、队列边界和 Linux 原生分配/CPU 硬限。Docker 冒烟复用镜像内的同一入口，同时通过应用接口验证 SVG 私有预览、下载和栅格副本。独立检查不加载应用配置、不连接数据库或调用模型。不能从 macOS/arm64 的通过外推 Linux/amd64。
+候选镜像离线运行 `node dist/svg/check.js`（Docker 使用 `--network none`），在目标架构验证最大 SVG、真正终止后恢复、队列边界和 Linux 原生分配/CPU 硬限。Docker 冒烟通过应用接口验证 SVG 私有预览、下载和栅格副本，并用同一入口的 `--linux-limits-only` 模式验证 Linux 硬限。独立检查不加载应用配置、不连接数据库或调用模型。不能从 macOS/arm64 的通过外推 Linux/amd64。

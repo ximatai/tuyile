@@ -173,11 +173,13 @@ const rendererCheck = JSON.parse(
       "worker",
       "node",
       "dist/svg/check.js",
+      "--linux-limits-only",
     ],
     { encoding: "utf8", timeout: 45000 },
   ),
 );
 assert.equal(rendererCheck.svgCheck, "passed");
+assert.equal(rendererCheck.mode, "linux-limits");
 assert.equal(rendererCheck.platform, "linux");
 assert.equal(rendererCheck.linuxNativeAndCpuLimits, true);
 console.log(
