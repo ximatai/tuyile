@@ -219,7 +219,7 @@ class PgLibraryRepository
     await this.auth(this.c, p, false, false);
     return (
       await this.c.query(
-        "SELECT id,mime,width,height,bytes,created_at,task_id,demo_template_id FROM image_assets WHERE workspace_id=$1 AND state='ready' ORDER BY created_at DESC,id LIMIT 51 OFFSET $2",
+        "SELECT id,mime,width,height,bytes,created_at,task_id,demo_template_id,derived_from FROM image_assets WHERE workspace_id=$1 AND state='ready' ORDER BY created_at DESC,id LIMIT 51 OFFSET $2",
         [p.workspaceId, offset],
       )
     ).rows.map((r) => ({
@@ -229,7 +229,14 @@ class PgLibraryRepository
       height: r.height,
       bytes: Number(r.bytes),
       createdAt: r.created_at.toISOString(),
-      origin: r.demo_template_id ? "demo" : r.task_id ? "generated" : "upload",
+      origin: r.derived_from
+        ? "derivative"
+        : r.demo_template_id
+          ? "demo"
+          : r.task_id
+            ? "generated"
+            : "upload",
+      ...(r.derived_from ? { derivedFrom: r.derived_from } : {}),
     }));
   }
   async favorites(
@@ -348,6 +355,7 @@ class PgLibraryRepository
     return (
       await this.c.query(
         `SELECT 'canvas' kind,c.project_id id,p.name label,p.id project_id FROM canvas_references c JOIN projects p ON p.id=c.project_id WHERE c.workspace_id=$1 AND c.asset_id=$2
+   UNION ALL SELECT 'derivative',a.id,'SVG 栅格副本（请先删除副本）',NULL::uuid FROM image_assets a WHERE a.workspace_id=$1 AND a.derived_from=$2 AND a.state IN ('staging','ready','deleting')
    UNION ALL SELECT 'draft',d.project_id,'创作草稿',d.project_id FROM draft_references d WHERE d.workspace_id=$1 AND d.asset_id=$2
    UNION ALL SELECT 'task',t.id,'图片任务',t.project_id FROM image_references r JOIN image_tasks t ON t.id=r.task_id WHERE r.workspace_id=$1 AND r.asset_id=$2
    UNION ALL SELECT 'agent',j.id,'Agent 对话与计划',j.project_id FROM agent_references r JOIN planning_jobs j ON j.id=r.job_id WHERE r.workspace_id=$1 AND r.asset_id=$2

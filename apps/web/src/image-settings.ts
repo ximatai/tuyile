@@ -149,6 +149,13 @@ export function settingsIssues(
   const cap = selectedCapability(usage, settings.modelKey);
   if (!cap) return ["原模型已不可用，请重新选择图片模型及服务。"];
   const errors: string[] = [];
+  if (
+    settings.format === "svg" &&
+    (settings.count !== 1 || referenceCount !== 0 || !cap.svgAuthor)
+  )
+    errors.push(
+      "SVG 矢量创作仅支持无参考图、单张生成；需管理员开放作者配置。用作参考请先转换栅格副本。",
+    );
   const sizeIssue = imageSizeIssue(usage, cap, settings);
   if (sizeIssue) errors.push(sizeIssue);
   if (!allowedQualities(usage, cap).includes(settings.quality))

@@ -1,3 +1,4 @@
+import { withSvgUsage } from "@tuyile/core";
 import { renderAnnotation } from "./image-annotation.js";
 import { parseModelUsage, type ModelUsage } from "@tuyile/core";
 import sharp from "sharp";
@@ -41,6 +42,11 @@ export class CompatibleImageProvider implements ImageProvider {
     signal: AbortSignal,
     onUsage?: (usage: ModelUsage) => Promise<void>,
   ): Promise<Uint8Array> {
+    if (
+      input.format === "svg" &&
+      (references.length || input.count !== 1 || !config.svgAuthor)
+    )
+      throw new ImageCallError("rejected", "MODEL_CAPABILITY_UNSUPPORTED");
     if (config.mode === "fake") {
       if (!this.fakeAllowed)
         throw new ImageCallError("rejected", "FAKE_PROVIDER_DISABLED");
@@ -59,20 +65,40 @@ export class CompatibleImageProvider implements ImageProvider {
         signal.addEventListener("abort", abort, { once: true });
         if (signal.aborted) abort();
       });
-      await onUsage?.(
-        parseModelUsage(
-          {
-            input_tokens: 100,
-            output_tokens: 256,
-            input_tokens_details: {
-              text_tokens: 100,
-              image_tokens: 0,
-              cached_tokens: 0,
-            },
+      const fakeUsage = parseModelUsage(
+        {
+          input_tokens: 100,
+          output_tokens: 256,
+          input_tokens_details: {
+            text_tokens: 100,
+            image_tokens: 0,
+            cached_tokens: 0,
           },
-          "image",
-        ),
+        },
+        "image",
       );
+      await onUsage?.(
+        input.format === "svg"
+          ? withSvgUsage(
+              fakeUsage,
+              {
+                input_tokens: 50,
+                output_tokens: 100,
+                model:
+                  config.svgAuthor?.mode === "explicit"
+                    ? config.svgAuthor.model
+                    : "gpt-6.1-sol",
+                reasoning_tokens: 20,
+                total_tokens: 150,
+              },
+              config.svgAuthor,
+            )
+          : fakeUsage,
+      );
+      if (input.format === "svg")
+        return Buffer.from(
+          `<svg xmlns="http://www.w3.org/2000/svg" width="${input.width}" height="${input.height}" viewBox="0 0 ${input.width} ${input.height}"><rect width="${input.width}" height="${input.height}" fill="#0062b0"/><circle cx="${input.width / 2}" cy="${input.height / 2}" r="${Math.min(input.width, input.height) / 4}" fill="#ffffff"/></svg>`,
+        );
       return sharp({
         create: {
           width: input.width,
@@ -99,6 +125,16 @@ export class CompatibleImageProvider implements ImageProvider {
         quality: input.quality,
         output_format: input.format,
         n: 1,
+        ...(input.format === "svg" && config.svgAuthor?.mode === "explicit"
+          ? {
+              svg: {
+                model: config.svgAuthor.model,
+                ...(config.svgAuthor.reasoning
+                  ? { reasoning: { effort: config.svgAuthor.reasoning } }
+                  : {}),
+              },
+            }
+          : {}),
       };
       if (references.length) {
         const form = new FormData();
@@ -148,7 +184,15 @@ export class CompatibleImageProvider implements ImageProvider {
       }
       let json = JSON.parse(await bounded(response));
       if (typeof json === "string") json = JSON.parse(json);
-      await onUsage?.(parseModelUsage(json?.usage, "image"));
+      await onUsage?.(
+        input.format === "svg"
+          ? withSvgUsage(
+              parseModelUsage(json?.usage, "image"),
+              json?.svg_usage,
+              config.svgAuthor,
+            )
+          : parseModelUsage(json?.usage, "image"),
+      );
       const value = json?.data?.[0]?.b64_json;
       if (
         !Array.isArray(json?.data) ||

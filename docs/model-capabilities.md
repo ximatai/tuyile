@@ -18,8 +18,10 @@
 
 标注编辑按2026-11-05图片指南接入：支持的2.5/2.6服务需显式声明markup，使用与首张原图方向校正后尺寸一致的透明PNG。指南与部分接口字段说明的模型列表更新节奏可能不同，兼容服务必须单独核对；本地仅验证合成链路和请求协议，不据同名模型宣称真实服务已通过。
 
-2.6 Sunburst / Flare 的静态 PNG/JPEG/WebP 输出采用当前尺寸边界与应用三档质量，复杂度独立支持 low / medium / high。省略 complexity 时不补写请求字段，由服务默认处理；官方说明2.6默认high。管理员必须显式声明开放复杂度，第三方兼容服务不因同名模型自动开放新参数。核对日期2026-11-05，依据为[图片生成指南](https://developers.openai.com/api/docs/guides/image-generation)及[生成接口](https://developers.openai.com/api/reference/resources/images/methods/generate)，尚未付费实测。SVG与GIF尚未接入。
+2.6 Sunburst / Flare 的静态 PNG/JPEG/WebP 输出采用当前尺寸边界与应用三档质量，复杂度独立支持 low / medium / high。省略 complexity 时不补写请求字段，由服务默认处理；官方说明2.6默认high。管理员必须显式声明开放复杂度，第三方兼容服务不因同名模型自动开放新参数。核对日期2026-11-05，依据为[图片生成指南](https://developers.openai.com/api/docs/guides/image-generation)及[生成接口](https://developers.openai.com/api/reference/resources/images/methods/generate)，尚未付费实测。SVG 已接入生成与导出，需管理员显式开放 SVG 格式及作者配置，不由推荐默认开放；GIF 尚未接入。
 
 2.6参考价格使用2026-11-05版本：文字输入5、图片输入8、图片输出30 USD/百万tokens，按当前Images路径保守估算未折扣输入；不据价格目录单独列出的缓存价格推断此次请求获得缓存优惠。旧任务价格快照不重算。
 
 能力设置抽屉的“恢复默认”与新增模型使用同一套系统推荐值，只修改抽屉草稿，应用到待发布配置并发布后才生效。Terra根据[官方模型说明](https://developers.openai.com/api/docs/models/gpt-6.1-terra)默认启用参考图理解；规划推荐输出预算4096 tokens、输入上限32000字符，这些是应用预算，不是模型能力上限。已校准图片模型使用记录内支持的格式、尺寸上限及应用支持的质量档位；未知模型采用保守初值，不能视为已核验。
+
+SVG 仅支持单张无参考图生成，不支持 SVG 编辑或将原件直接作为参考。服务默认作者模式省略 svg 参数；显式作者模式仅使用管理员根据服务权限声明的 model/reasoning，不使用普通对话池作为作者目录。实际作者由响应 svg_usage.model 记录，缺失身份不推测价格。安全解析仅开放静态 SVG 子集，不支持 CSS/style、嵌入图片、脚本和外部资源；不符合子集的原件明确失败。下载可在外部工具处理路径，界面使用私有栅格预览；参考转换保留原件及来源，不调用生成模型。

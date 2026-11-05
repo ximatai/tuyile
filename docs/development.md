@@ -61,7 +61,7 @@ unset ADMIN_USERNAME ADMIN_PASSWORD
 
 ## 数据库与配置
 
-PostgreSQL初始化分别建立migrator和runtime角色：前者拥有tuyile schema，后者只有schema usage和业务表DML，不能改schema或迁移记录。迁移显式执行并校验checksum；API/Worker只检查schema兼容性和运行身份，发现缺失、不兼容或过度授权即拒绝启动。当前迁移1—29，实际版本以[migrations](../migrations)和启动校验为准。
+PostgreSQL初始化分别建立migrator和runtime角色：前者拥有tuyile schema，后者只有schema usage和业务表DML，不能改schema或迁移记录。迁移显式执行并校验checksum；API/Worker只检查schema兼容性和运行身份，发现缺失、不兼容或过度授权即拒绝启动。当前迁移1—30，实际版本以[migrations](../migrations)和启动校验为准。
 
 模型服务通过命名连接管理Base URL和加密Key，从GET /models取得候选，也可手动登记；对话/图片分别发布开放池并指定默认项。目录刷新不自动改动开放范围，能力由管理员声明，已接受任务绑定不可变版本。普通用户只收到允许模型与能力，不收到地址或Key；个人策略按池条目ID与全局开放池取交集。
 
@@ -118,7 +118,7 @@ corepack pnpm test:recovery
 
 专项浏览器测试通过统一入口运行，例如 `corepack pnpm test:e2e -- tests/e2e/text-canvas.spec.ts --grep "text palette"`，同样执行专用数据库准备与串行锁保护。不能绕过该入口直接并发运行会改写测试库的 Playwright。文案测试分为侧栏、配色/操作条边界、直接创作、Agent 四个独立项目场景；触控板模拟单独运行 `corepack pnpm test:e2e -- tests/e2e/canvas-gestures.spec.ts`。
 
-图片修改专项为 `corepack pnpm test:e2e -- tests/e2e/image-edit.spec.ts`。编译版弹窗、标注和CSP检查先完成build，再运行 `corepack pnpm test:e2e -- --config playwright.built.config.ts`；入口使用loopback8794及同一专用测试库，仍须串行，不是生产部署或真实模型验收。
+图片修改专项为 `corepack pnpm test:e2e -- tests/e2e/image-edit.spec.ts`。编译版弹窗、标注和CSP检查先完成build，再运行 `corepack pnpm test:e2e -- --config playwright.built.config.ts`（同时覆盖 SVG 生成、下载及参考转换）；入口使用loopback8794及同一专用测试库，仍须串行，不是生产部署或真实模型验收。
 
 触控板人工验收在本地合成数据环境执行：准备一张图片、短便签和可滚动的长便签，分别在图片、便签标题、正文和编辑框上捏合，确认只缩放画布、浏览器页面比例不变；普通双指滚动在长正文和编辑框内只滚动文字（到边界也不带动页面），短正文与图片上的行为一致。缩放后检查可编辑、保存和刷新恢复。记录浏览器、系统及实际触控板结果；Ctrl+wheel 自动化只能模拟 Chromium 捏合事件，不能标记为真实硬件验收通过。
 

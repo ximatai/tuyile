@@ -42,7 +42,7 @@ export function recommendedModelCapabilities(
       maxPixels: known?.maxPixels ?? 1048576,
       sizes: known ? [] : ["1024x1024"],
       qualities: known ? [...known.qualities] : ["medium"],
-      formats: known ? [...known.formats] : ["png"],
+      formats: known ? known.formats.filter((f) => f !== "svg") : ["png"],
     },
   };
 }

@@ -215,6 +215,13 @@ export class AgentService {
             .length > 12000
         )
           throw new AppError("PROMPT_TOO_LONG", 400);
+        const ancestor = dependsOn
+          ? document.steps.find((s) => s.id === dependsOn)
+          : usePrevious
+            ? document.steps[index - 1]
+            : undefined;
+        if (ancestor?.format === "svg")
+          throw new AppError("SVG_RASTER_REFERENCE_REQUIRED", 409);
         const effective = {
           ...input,
           referenceIds: [

@@ -58,7 +58,7 @@ export const imageInput = z.object({
   height: z.number().int().min(256).max(8192).multipleOf(16),
   complexity: z.enum(["low", "medium", "high"]).optional(),
   quality: z.enum(["low", "medium", "high"]),
-  format: z.enum(["png", "jpeg", "webp"]),
+  format: z.enum(["png", "jpeg", "webp", "svg"]),
   count: z.number().int().min(1).max(16),
   referenceIds: z.array(z.uuid()).max(4).default([]),
   textNodeIds: textNodeIds.optional(),

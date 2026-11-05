@@ -22,6 +22,7 @@ export const asset = (r: AssetRow): StoredAsset => ({
   previewBytes: Number(r.preview_bytes),
   hash: r.hash,
   taskId: r.task_id,
+  derivedFrom: r.derived_from,
 });
 export function policy(r: PolicyRow): ImagePolicy {
   return {

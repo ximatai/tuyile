@@ -1098,12 +1098,96 @@ export function ModelServicesAdmin() {
                     />
                   </label>
                   <label className="field">
+                    <span>SVG 作者配置</span>
+                    <Select
+                      aria-label="SVG 作者配置"
+                      value={advanced.image.svgAuthor?.mode ?? "disabled"}
+                      options={[
+                        { value: "disabled", label: "未开放" },
+                        { value: "service-default", label: "服务默认作者" },
+                        { value: "explicit", label: "服务允许指定作者" },
+                      ]}
+                      onChange={(mode) =>
+                        setAdvanced({
+                          ...advanced,
+                          image: {
+                            ...advanced.image!,
+                            svgAuthor:
+                              mode === "disabled"
+                                ? undefined
+                                : mode === "explicit"
+                                  ? { mode, model: "" }
+                                  : { mode: "service-default" },
+                          },
+                        })
+                      }
+                    />
+                  </label>
+                  {advanced.image.svgAuthor?.mode === "explicit" && (
+                    <>
+                      <label className="field">
+                        <span>允许的 SVG 作者模型（服务文档确认）</span>
+                        <Input
+                          aria-label="SVG 作者模型"
+                          value={advanced.image.svgAuthor.model}
+                          onChange={(e) =>
+                            setAdvanced({
+                              ...advanced,
+                              image: {
+                                ...advanced.image!,
+                                svgAuthor: {
+                                  ...advanced.image!.svgAuthor!,
+                                  mode: "explicit",
+                                  model: e.target.value,
+                                },
+                              },
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>作者 reasoning</span>
+                        <Select
+                          aria-label="作者 reasoning"
+                          allowClear
+                          value={advanced.image.svgAuthor.reasoning}
+                          options={[
+                            "none",
+                            "minimal",
+                            "low",
+                            "medium",
+                            "high",
+                            "xhigh",
+                          ].map((value) => ({ value, label: value }))}
+                          onChange={(reasoning) =>
+                            setAdvanced({
+                              ...advanced,
+                              image: {
+                                ...advanced.image!,
+                                svgAuthor: {
+                                  ...advanced.image!.svgAuthor!,
+                                  mode: "explicit",
+                                  model:
+                                    advanced.image!.svgAuthor!.mode ===
+                                    "explicit"
+                                      ? advanced.image!.svgAuthor!.model
+                                      : "",
+                                  reasoning,
+                                },
+                              },
+                            })
+                          }
+                        />
+                      </label>
+                    </>
+                  )}
+                  <label className="field">
                     <span>支持格式</span>
                     <Select
                       aria-label="支持格式"
                       mode="multiple"
                       value={advanced.image.formats}
-                      options={["png", "jpeg", "webp"].map((value) => ({
+                      options={["png", "jpeg", "webp", "svg"].map((value) => ({
                         value,
                         label: value,
                       }))}

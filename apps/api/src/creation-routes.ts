@@ -81,6 +81,19 @@ export function creationRoutes(app: Hono<ApiEnv>, service: CreationService) {
       201,
     );
   });
+  app.get("/api/images/assets/:id", async (c) => {
+    const a = await service.asset(
+      c.get("session").user,
+      id.parse(c.req.param("id")),
+    );
+    return c.json({
+      id: a.id,
+      mime: a.mime,
+      width: a.width,
+      height: a.height,
+      derivedFrom: a.derivedFrom,
+    });
+  });
   app.get("/api/images/assets/:id/:variant", async (c) => {
     const variant = c.req.param("variant");
     if (!["original", "preview", "download"].includes(variant))
@@ -89,14 +102,32 @@ export function creationRoutes(app: Hono<ApiEnv>, service: CreationService) {
       c.get("session").user,
       id.parse(c.req.param("id")),
       variant === "preview",
+      variant === "download",
     );
     c.header("Content-Type", variant === "preview" ? "image/webp" : asset.mime);
     c.header("X-Content-Type-Options", "nosniff");
     c.header(
       "Content-Disposition",
-      `${variant === "download" ? "attachment" : "inline"}; filename="${asset.id}.${variant === "preview" ? "webp" : asset.mime.split("/")[1]}"`,
+      `${variant === "download" ? "attachment" : "inline"}; filename="${asset.id}.${variant === "preview" ? "webp" : asset.mime === "image/svg+xml" ? "svg" : asset.mime.split("/")[1]}"`,
     );
     return c.body(Buffer.from(bytes));
+  });
+  app.post("/api/images/assets/:id/raster-copy", async (c) => {
+    const a = await service.rasterCopy(
+      c.get("session").user,
+      id.parse(c.req.param("id")),
+    );
+    return c.json(
+      {
+        id: a.id,
+        mime: a.mime,
+        width: a.width,
+        height: a.height,
+        bytes: a.bytes,
+        derivedFrom: a.derivedFrom,
+      },
+      201,
+    );
   });
   app.post("/api/images/assets/:id/delete", async (c) => {
     await service.delete(c.get("session").user, id.parse(c.req.param("id")));

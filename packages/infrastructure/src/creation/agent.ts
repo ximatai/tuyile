@@ -366,7 +366,7 @@ export class PgAgentRepository
       if (
         (
           await this.c.query(
-            "SELECT id FROM image_assets WHERE workspace_id=$1 AND id=ANY($2::uuid[]) AND state='ready' ORDER BY id FOR UPDATE",
+            "SELECT id FROM image_assets WHERE workspace_id=$1 AND id=ANY($2::uuid[]) AND state='ready' AND mime <> 'image/svg+xml' ORDER BY id FOR UPDATE",
             [row.workspace_id, ids],
           )
         ).rowCount !== ids.length
@@ -510,7 +510,7 @@ export class PgAgentRepository
     if (
       (
         await this.c.query(
-          "SELECT id FROM image_assets WHERE workspace_id=$1 AND id=ANY($2::uuid[]) AND state='ready' ORDER BY id FOR UPDATE",
+          "SELECT id FROM image_assets WHERE workspace_id=$1 AND id=ANY($2::uuid[]) AND state='ready' AND mime <> 'image/svg+xml' ORDER BY id FOR UPDATE",
           [p.workspaceId, ids],
         )
       ).rowCount !== ids.length
@@ -610,7 +610,7 @@ export class PgAgentRepository
     if (
       (
         await this.c.query(
-          "SELECT id FROM image_assets WHERE workspace_id=$1 AND id=ANY($2::uuid[]) AND state='ready' ORDER BY id FOR UPDATE",
+          "SELECT id FROM image_assets WHERE workspace_id=$1 AND id=ANY($2::uuid[]) AND state='ready' AND mime <> 'image/svg+xml' ORDER BY id FOR UPDATE",
           [p.workspaceId, ids],
         )
       ).rowCount !== ids.length

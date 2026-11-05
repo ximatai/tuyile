@@ -54,6 +54,7 @@ export class AdministrationService {
       false,
     );
     if (!this.files || !asset.mime) throw new AppError("NOT_FOUND", 404);
+    preview ||= asset.mime === "image/svg+xml";
     return {
       mime: preview ? "image/webp" : asset.mime,
       bytes: await this.files.read(asset, preview),

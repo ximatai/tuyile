@@ -1,3 +1,4 @@
+import { rasterReferences } from "./raster-reference";
 import { taskDraftPrompt } from "./task-presentation";
 import {
   createContext,
@@ -81,7 +82,17 @@ export class SessionState {
   async queueDraftTransfer(
     projectId: string,
     input: { prompt?: string; referenceIds?: string[]; task?: ImageTask },
+    confirm?: (message: string) => Promise<boolean>,
   ) {
+    if (input.referenceIds && confirm) {
+      const ids = await rasterReferences(
+        this.session.csrfToken,
+        input.referenceIds,
+        confirm,
+      );
+      if (!ids) return false;
+      input = { ...input, referenceIds: ids };
+    }
     const store = this.projectDraft(projectId);
     await store.load();
     const patch: Partial<ProjectDraftDocument> = { mode: "direct" };
@@ -129,6 +140,7 @@ export class SessionState {
       patch,
       input.referenceIds ? "图库参考图" : input.task ? "任务参考图" : undefined,
     );
+    return true;
   }
   releaseProject(projectId: string) {
     this.editors.get(projectId)?.dispose();

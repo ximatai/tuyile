@@ -66,6 +66,7 @@ export interface TasksRepository {
   cancel(p: Principal, id: string): Promise<void>;
 }
 export interface AssetsRepository {
+  reserveDerivative(p: Principal, sourceId: string): Promise<StoredAsset>;
   uploads(p: Principal, offset?: number): Promise<StoredAsset[]>;
   reserveUpload(p: Principal): Promise<StoredAsset>;
   prepareCommit(

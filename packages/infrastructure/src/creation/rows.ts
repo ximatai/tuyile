@@ -32,6 +32,7 @@ export interface TaskRow {
   storage_remaining: string;
 }
 export interface AssetRow {
+  derived_from?: string | null;
   id: string;
   workspace_id: string;
   user_id: string;

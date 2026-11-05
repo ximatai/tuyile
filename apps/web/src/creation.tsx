@@ -1,3 +1,4 @@
+import { rasterReferences } from "./raster-reference";
 import { ImageEditDialog } from "./image-edit-dialog";
 import { taskDraftPrompt } from "./task-presentation";
 import {
@@ -356,6 +357,9 @@ function CreationEditor({
       setError("请先确认当前提交结果。");
       return;
     }
+    const converted = await resolveReferenceAssets([id]);
+    if (!converted) return;
+    id = converted[0]!;
     const current = draftStore.get().document;
     if (current.edit && current.edit.baseAssetId === id && !task) {
       setEditOpen(true);
@@ -391,27 +395,19 @@ function CreationEditor({
     });
     setEditOpen(true);
   }
-  const chooseReference = useCallback(
-    (id: string) => {
-      panel.show();
-      if (busy || pending) {
-        setError("请先确认当前提交结果，再修改草稿。");
-        return;
-      }
-      setReferences((v) =>
-        v.some((r) => r.id === id) || v.length >= 4
-          ? v
-          : [...v, { id, name: "画布参考图" }],
-      );
-      setMobile("create");
-    },
-    [busy, pending, panel.show],
-  );
-  function useCanvasSelection() {
-    if (busy || pending) {
-      setError("请先确认当前提交结果，再修改参考图。");
-      return;
-    }
+  async function chooseReference(id: string) {
+    panel.show();
+    const ids = await resolveReferenceAssets([id]);
+    if (!ids) return;
+    id = ids[0]!;
+    setReferences((v) =>
+      v.some((r) => r.id === id) || v.length >= 4
+        ? v
+        : [...v, { id, name: "画布参考图" }],
+    );
+    setMobile("create");
+  }
+  async function useCanvasSelection() {
     const next = [
       ...new Map(
         [...references, ...canvasSelection].map((r) => [r.id, r]),
@@ -421,7 +417,9 @@ function CreationEditor({
       setError("参考图最多4张，请先移除部分引用。");
       return;
     }
-    setReferences(next);
+    const ids = await resolveReferenceAssets(next.map((r) => r.id));
+    if (!ids) return;
+    setReferences(ids.map((id, i) => ({ id, name: next[i]!.name })));
     setError("");
   }
   const [mode, setMode] = useDraftMode();
@@ -430,6 +428,43 @@ function CreationEditor({
   const [historyOpen, setHistoryOpen] = useState(false);
   const resultsRef = useRef<HTMLDivElement>(null);
   const active = useRef(false);
+  const referenceAlive = useRef(true);
+  const liveDraftStore = useRef(draftStore);
+  liveDraftStore.current = draftStore;
+  useEffect(() => {
+    referenceAlive.current = true;
+    return () => {
+      referenceAlive.current = false;
+    };
+  }, []);
+  async function resolveReferenceAssets(ids: string[]) {
+    if (active.current || busy || pending) {
+      setError("请先确认当前提交结果，再修改参考图。");
+      return null;
+    }
+    const before = draftStore.get();
+    active.current = true;
+    setBusy(true);
+    try {
+      const result = await rasterReferences(csrfToken, ids, confirmDraft);
+      const current = draftStore.get();
+      if (
+        !referenceAlive.current ||
+        liveDraftStore.current !== draftStore ||
+        current.document !== before.document ||
+        current.epoch !== before.epoch
+      )
+        return null;
+      return result;
+    } catch (error) {
+      if (referenceAlive.current) setError((error as Error).message);
+      return null;
+    } finally {
+      active.current = false;
+      if (referenceAlive.current) setBusy(false);
+    }
+  }
+
   const usageQuery = useQuery({
     queryKey: sessionState.key("usage"),
     queryFn: ({ signal }) =>

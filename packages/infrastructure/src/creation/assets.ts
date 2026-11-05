@@ -21,6 +21,29 @@ export class PgAssetsRepository extends PgCreationContext {
       )
     ).rows.map(asset);
   }
+  async reserveDerivative(p: Principal, sourceId: string) {
+    await this.auth(this.c, p);
+    const source = await this.asset(p, sourceId);
+    if (source.mime !== "image/svg+xml")
+      throw new AppError("SVG_SOURCE_REQUIRED", 409);
+    const existing = (
+      await this.c.query<AssetRow>(
+        "SELECT * FROM image_assets WHERE workspace_id=$1 AND derived_from=$2 AND state IN ('staging','ready')",
+        [p.workspaceId, sourceId],
+      )
+    ).rows[0];
+    if (existing) {
+      if (existing.state !== "ready")
+        throw new AppError("SVG_CONVERSION_PENDING", 409);
+      return asset(existing);
+    }
+    const target = await this.reserveUpload(p);
+    await this.c.query("UPDATE image_assets SET derived_from=$2 WHERE id=$1", [
+      target.id,
+      sourceId,
+    ]);
+    return { ...target, derivedFrom: sourceId };
+  }
   async reserveUpload(p: Principal) {
     const c = this.c;
 
@@ -94,7 +117,7 @@ export class PgAssetsRepository extends PgCreationContext {
   async pin(p: Principal, taskId: string, referenceIds: string[]) {
     for (const id of new Set(referenceIds)) {
       const found = await this.c.query(
-        "SELECT id FROM image_assets WHERE workspace_id=$1 AND id=$2 AND state='ready' FOR UPDATE",
+        "SELECT id FROM image_assets WHERE workspace_id=$1 AND id=$2 AND state='ready' AND mime <> 'image/svg+xml' FOR UPDATE",
         [p.workspaceId, id],
       );
       if (!found.rowCount) throw new AppError("REFERENCE_UNAVAILABLE", 404);
@@ -140,7 +163,7 @@ export class PgAssetsRepository extends PgCreationContext {
     if (
       (
         await c.query(
-          "SELECT 1 FROM demo_projects WHERE images @> jsonb_build_array(jsonb_build_object('assetId',$1::uuid)) UNION ALL SELECT 1 FROM demo_template_assets WHERE asset_id=$1 UNION ALL SELECT 1 FROM image_references WHERE asset_id=$1 UNION ALL SELECT 1 FROM draft_references WHERE asset_id=$1 UNION ALL SELECT 1 FROM canvas_references WHERE asset_id=$1 UNION ALL SELECT 1 FROM agent_references WHERE asset_id=$1 UNION ALL SELECT 1 FROM library_favorites WHERE asset_id=$1 UNION ALL SELECT 1 FROM image_outputs o JOIN image_tasks d ON d.depends_on=o.task_id WHERE o.asset_id=$1 AND o.ordinal=0 AND (d.state IN ('queued','running') OR d.pending_review) LIMIT 1",
+          "SELECT 1 FROM image_assets WHERE derived_from=$1 AND state IN ('staging','ready','deleting') UNION ALL SELECT 1 FROM demo_projects WHERE images @> jsonb_build_array(jsonb_build_object('assetId',$1::uuid)) UNION ALL SELECT 1 FROM demo_template_assets WHERE asset_id=$1 UNION ALL SELECT 1 FROM image_references WHERE asset_id=$1 UNION ALL SELECT 1 FROM draft_references WHERE asset_id=$1 UNION ALL SELECT 1 FROM canvas_references WHERE asset_id=$1 UNION ALL SELECT 1 FROM agent_references WHERE asset_id=$1 UNION ALL SELECT 1 FROM library_favorites WHERE asset_id=$1 UNION ALL SELECT 1 FROM image_outputs o JOIN image_tasks d ON d.depends_on=o.task_id WHERE o.asset_id=$1 AND o.ordinal=0 AND (d.state IN ('queued','running') OR d.pending_review) LIMIT 1",
           [id],
         )
       ).rowCount

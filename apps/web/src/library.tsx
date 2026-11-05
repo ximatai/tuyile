@@ -263,7 +263,10 @@ export function LibraryPage({ mode }: { mode: Mode }) {
       await api(`/projects/${destination}`);
       await state.flush();
       if (!mounted.current) return;
-      await state.queueDraftTransfer(destination, input);
+      if (
+        (await state.queueDraftTransfer(destination, input, confirm)) === false
+      )
+        return;
       navigate(`/projects/${destination}`);
     });
   }
@@ -467,6 +470,10 @@ export function LibraryPage({ mode }: { mode: Mode }) {
             <div key={`${r.kind}-${r.id}-${i}`}>
               {r.projectId ? (
                 <Link to={`/projects/${r.projectId}`}>{r.label}</Link>
+              ) : r.kind === "derivative" ? (
+                <span>
+                  {r.label} · {r.id}
+                </span>
               ) : (
                 <Link to="/favorites">收藏：{r.label}</Link>
               )}
@@ -637,24 +644,30 @@ export function LibraryPage({ mode }: { mode: Mode }) {
                 >
                   <img
                     src={`/api/images/assets/${asset.id}/preview`}
-                    alt={`${asset.origin === "demo" ? "示例" : asset.origin === "upload" ? "上传" : "生成"}图片 ${asset.width} × ${asset.height}`}
+                    alt={`${asset.origin === "derivative" ? "SVG 栅格副本" : asset.origin === "demo" ? "示例" : asset.origin === "upload" ? "上传" : "生成"}图片 ${asset.width} × ${asset.height}`}
                     loading="lazy"
                   />
                 </a>
                 <div className="gallery-card-title">
                   <strong>
-                    {asset.origin === "demo"
-                      ? "示例素材"
-                      : asset.origin === "upload"
-                        ? "上传素材"
-                        : "生成图片"}{" "}
+                    {asset.origin === "derivative"
+                      ? "SVG 栅格副本"
+                      : asset.origin === "demo"
+                        ? "示例素材"
+                        : asset.origin === "upload"
+                          ? "上传素材"
+                          : "生成图片"}{" "}
                     ·{" "}
                     {new Date(asset.createdAt).toLocaleDateString("zh-CN", {
                       month: "2-digit",
                       day: "2-digit",
                     })}
                   </strong>
-                  <span>{asset.mime.replace("image/", "").toUpperCase()}</span>
+                  <span>
+                    {asset.mime === "image/svg+xml"
+                      ? "SVG 矢量原件"
+                      : asset.mime.replace("image/", "").toUpperCase()}
+                  </span>
                 </div>
                 <p className="hint">
                   {asset.width} × {asset.height} ·{" "}

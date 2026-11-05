@@ -15,7 +15,7 @@ export const draftSettings = z
     height: z.number().int().min(0).max(8192),
     complexity: z.enum(["low", "medium", "high"]).optional(),
     quality: z.enum(["low", "medium", "high"]),
-    format: z.enum(["png", "jpeg", "webp"]),
+    format: z.enum(["png", "jpeg", "webp", "svg"]),
     count: z.number().int().min(1).max(16),
   })
   .strict();

@@ -1,4 +1,6 @@
 import sharp from "sharp";
+import { rasterizeSvg } from "./svg-render.js";
+import { validateSvg } from "./svg-validation.js";
 import { mkdir, lstat, open, rename, rm, statfs } from "node:fs/promises";
 import { constants } from "node:fs";
 import { resolve, join } from "node:path";
@@ -28,7 +30,27 @@ export class PrivateImageFiles implements ImageFiles {
     if (!/^[a-f0-9-]{36}$/.test(key)) throw new Error("INVALID_FILE_KEY");
     return join(this.root, `${key}.${suffix}`);
   }
-  async inspect(bytes: Uint8Array): Promise<AssetBytes> {
+  async rasterize(bytes: Uint8Array) {
+    return rasterizeSvg(bytes);
+  }
+  async inspect(bytes: Uint8Array, vector = false): Promise<AssetBytes> {
+    if (vector) {
+      const dimensions = validateSvg(bytes);
+      const png = await rasterizeSvg(bytes);
+      const preview = await sharp(png)
+        .resize(480, 480, { fit: "inside", withoutEnlargement: true })
+        .webp({ quality: 72 })
+        .toBuffer();
+      if (preview.length > 1024 * 1024)
+        throw new AppError("SVG_PREVIEW_FAILED", 422);
+      return {
+        original: bytes,
+        preview,
+        mime: "image/svg+xml",
+        ...dimensions,
+        hash: createHash("sha256").update(bytes).digest("hex"),
+      };
+    }
     if (bytes.length > 20 * 1024 * 1024 || !bytes.length)
       throw new AppError("UPLOAD_TOO_LARGE", 413);
     if (this.decoding >= 2) throw new AppError("IMAGE_DECODER_BUSY", 503);

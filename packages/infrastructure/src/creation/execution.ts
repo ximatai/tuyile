@@ -228,13 +228,18 @@ export class PgExecutionRepository extends PgCreationContext {
     );
     return {
       attemptId: row.id,
-      provider: (provider.mode === "fake"
-        ? { mode: "fake" }
-        : {
-            mode: "openai",
-            baseUrl: provider.base_url,
-            apiKey: this.decrypt(provider.secret_cipher),
-          }) satisfies ImageExecutionConfig,
+      provider: {
+        svgAuthor: provider.capabilities.find(
+          (c: { model: string }) => c.model === t.input.model,
+        )?.svgAuthor,
+        ...(provider.mode === "fake"
+          ? { mode: "fake" }
+          : {
+              mode: "openai",
+              baseUrl: provider.base_url,
+              apiKey: this.decrypt(provider.secret_cipher),
+            }),
+      } satisfies ImageExecutionConfig,
     };
   }
   recordUsage(id: string, usage: ModelUsage) {

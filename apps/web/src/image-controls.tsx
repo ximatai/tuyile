@@ -112,7 +112,7 @@ export function ImageControls({
       (s) => s.width === value.width && s.height === value.height,
     ),
     qualities = usage ? allowedQualities(usage, cap) : [];
-  const formats = (["png", "jpeg", "webp"] as const).filter((format) =>
+  const formats = (["png", "jpeg", "webp", "svg"] as const).filter((format) =>
     cap?.formats.includes(format),
   );
   const ratios = [...new Set(sizes.map((size) => size.ratio))];
@@ -366,11 +366,16 @@ export function ImageControls({
             label={label(labelPrefix ? "张数" : "图片张数")}
             value={String(value.count)}
             disabled={
-              disabled || (usage?.policy.maxCount === 1 && value.count === 1)
+              disabled ||
+              ((usage?.policy.maxCount === 1 || value.format === "svg") &&
+                value.count === 1)
             }
             onValueChange={(count) => patch({ count: Number(count) })}
             options={Array.from(
-              { length: usage?.policy.maxCount ?? 16 },
+              {
+                length:
+                  value.format === "svg" ? 1 : (usage?.policy.maxCount ?? 16),
+              },
               (_, i) => ({ value: String(i + 1), label: `${i + 1} 张` }),
             )}
           />
@@ -393,6 +398,12 @@ export function ImageControls({
           }))}
         />
       </div>
+      {value.format === "svg" && (
+        <p className="muted">
+          SVG
+          矢量创作：无参考图、单张输出；可下载原件到外部工具编辑路径。参考图使用需显式转换栅格副本。
+        </p>
+      )}
       {(!!cap?.complexities?.length || value.complexity !== undefined) && (
         <Collapse
           ghost

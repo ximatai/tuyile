@@ -16,6 +16,7 @@ const gptImage25 = {
 };
 const gptImage26 = {
   ...gptImage25,
+  formats: ["png", "jpeg", "webp", "svg"] as const,
   checkedAt: "2026-11-05",
   complexities: ["low", "medium", "high"] as const,
 };
@@ -67,7 +68,7 @@ export function effectiveImageCapability(
     maxEdge: Math.min(declared.maxEdge, known.maxEdge),
     maxPixels: Math.min(declared.maxPixels, known.maxPixels),
     formats: declared.formats.filter((format) =>
-      known.formats.includes(format),
+      (known.formats as readonly string[]).includes(format),
     ),
     qualities: declared.qualities.filter((quality) =>
       known.qualities.includes(quality),
@@ -79,9 +80,11 @@ export function imageDeclarationWithinKnownLimits(declared: ImageCapability) {
   const known = imageModelKnowledge(declared.model);
   return (
     !known ||
-    ((declared.complexities ?? []).every((v) =>
-      (known.complexities as readonly string[]).includes(v),
-    ) &&
+    ((!declared.formats.includes("svg") ||
+      (known.formats as readonly string[]).includes("svg")) &&
+      (declared.complexities ?? []).every((v) =>
+        (known.complexities as readonly string[]).includes(v),
+      ) &&
       declared.maxEdge <= known.maxEdge &&
       declared.maxPixels <= known.maxPixels &&
       declared.sizes.every((size) => {

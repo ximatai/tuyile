@@ -6,12 +6,25 @@ export const toolBinding = z
   })
   .strict();
 export type ToolBinding = z.infer<typeof toolBinding>;
+export const svgAuthor = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("service-default") }).strict(),
+  z
+    .object({
+      mode: z.literal("explicit"),
+      model: z.string().regex(/^[a-zA-Z0-9._-]{1,120}$/),
+      reasoning: z
+        .enum(["none", "minimal", "low", "medium", "high", "xhigh"])
+        .optional(),
+    })
+    .strict(),
+]);
 export const imageCapability = z
   .object({
     model: z.string().min(1).max(120),
     generation: z.boolean(),
     editing: z.boolean(),
     markup: z.boolean().optional(),
+    svgAuthor: svgAuthor.optional(),
     complexities: z
       .array(z.enum(["low", "medium", "high"]))
       .max(3)
@@ -25,11 +38,14 @@ export const imageCapability = z
       .min(1)
       .max(3),
     formats: z
-      .array(z.enum(["png", "jpeg", "webp"]))
+      .array(z.enum(["png", "jpeg", "webp", "svg"]))
       .min(1)
-      .max(3),
+      .max(4),
   })
-  .strict();
+  .strict()
+  .refine((c) => !c.formats.includes("svg") || !!c.svgAuthor, {
+    message: "SVG requires an administrator author configuration",
+  });
 export type ImageCapability = z.infer<typeof imageCapability>;
 export const planningProviderInput = z
   .object({

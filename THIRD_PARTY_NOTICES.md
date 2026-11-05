@@ -31,3 +31,5 @@ Before distributing an image or other binary, inspect that target platform's pac
 ## Content and external services
 
 The software license does not grant model access, API credits, trademarks or rights to uploaded/generated material. No real user images, model credentials or generated design references are distributed in this repository. Examples and public screenshots must be independently reviewed for rights and privacy.
+
+SVG XML validation uses saxes 6.0.0 and xmlchars 2.2.0 (ISC); their full notices are retained in [licenses/saxes-ISC.txt](licenses/saxes-ISC.txt) and [licenses/xmlchars-ISC.txt](licenses/xmlchars-ISC.txt). Rendering uses the existing sharp/libvips dependency and its retained notices.
