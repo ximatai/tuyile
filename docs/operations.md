@@ -4,7 +4,7 @@
 
 ## 独立运行
 
-依赖和隔离地址见 [本地开发](development.md)。当前程序要求 schema 1—25（以[迁移目录](../migrations)及启动校验为准）；迁移由 migrator 显式执行，API/Worker 只检查兼容性，运行身份不能修改 schema。普通停止用 `docker compose ... stop api worker`，保留数据库与图片卷；不要用删除卷解决启动问题。
+依赖和隔离地址见 [本地开发](development.md)。当前程序要求 schema 1—30（以[迁移目录](../migrations)及启动校验为准）；迁移由 migrator 显式执行，API/Worker 只检查兼容性，运行身份不能修改 schema。普通停止用 `docker compose ... stop api worker`，保留数据库与图片卷；不要用删除卷解决启动问题。
 
 本地 Docker 使用 `.env.docker`、项目 `tuyile-docker`、数据库 `tuyile_docker`/55441 和应用8792。专用自动测试只使用 `tuyile_test`/55440。其他实例的数据、凭据与后台服务不参与本实例运行或构建。
 
@@ -71,3 +71,11 @@ corepack pnpm test:recovery
 规划任务出现 `PLANNING_RESULT_UNKNOWN` 时，先按任务 ID 查询 `planning_attempts.error_code`。新调用可区分 `PLANNING_DNS_FAILURE`、`PLANNING_CONNECT_TIMEOUT`、`PLANNING_CONNECT_REFUSED`、`PLANNING_TLS_FAILURE`、`PLANNING_CONNECTION_LOST`、`PLANNING_RESPONSE_TIMEOUT`、`PLANNING_RESPONSE_READ_FAILED`、`PLANNING_RESPONSE_JSON_INVALID` 和 `PLANNING_TRANSPORT_FAILED`。这些是故障阶段提示，不能单凭连接断开认定上游未处理或未计费。历史同名泛化错误不含原始原因；不要为诊断盲目重放任务。调用中断沿用 `PLANNING_INTERRUPTED`，worker 中断沿用原有恢复规则。诊断记录不保存原始响应、异常消息或凭据。
 
 文案便签使用CanvasDocument v1的新增节点类型及任务JSONB快照，无需新增SQL迁移；升级时API、Worker与Web应使用同一镜像版本。旧版不认识text节点，不应在已有文案的实例上直接降级；先备份数据库与图片卷，并在隔离环境核对目标版本兼容性。
+
+## 创作升级与版本核对
+
+升级到 SVG 支持版本须先在同一停写点备份，再显式应用 0030；它只追加衍生来源外键和活跃副本索引，不覆盖已有任务、原件或额度。迁移前后核对原表已有列的数据摘要、原件/预览文件哈希及 schema；迁移成功后旧版 schema 校验不兼容，不直接切旧镜像。启动前发生失败可以恢复同停写点成套备份；新 API 接受写入后先保留当前完整状态，再决定恢复点。
+
+`/api/health` 和 `/api/ready` 返回 package.json 版本，镜像构建可传入 APP_REVISION、APP_VERSION，保存 OCI 版本/提交标签。API 与唯一 Worker 使用同一候选镜像；候选和正式版本均核对 HTTPS、私有文件、数据库身份、Worker 启动及重启次数。浏览器需实际核对 CSP、旧资料读取、新草稿保存及隔离；不以进程运行或首页 200 代替业务验收。
+
+新增 2.6、markup 或 SVG 选项前核对实际服务权限及能力。发现模型目录刷新失败时保留原目录和已发布默认项，不据同名模型推定真实接口已验证。没有付费测试授权时只做不付费检查，记录未验证组合；生产禁止 fake。

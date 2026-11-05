@@ -26,7 +26,7 @@ test("SVG generation exports the original, previews safely, and converts referen
     await page.request.post("/api/model-admin/services", {
       headers,
       data: {
-        name: "Synthetic Image26",
+        name: `Synthetic SVG-${randomUUID().slice(0, 8)}`,
         mode: "fake",
         baseUrl: "",
         preserveKey: false,

@@ -1,6 +1,6 @@
 # Tuyile 产品基线
 
-更新日期：2026-11-01。本文是当前业务范围来源；技术实现见[架构设计](architecture.md)，交付与验证状态见[交付状态](delivery-roadmap.md)。
+更新日期：2026-11-05。本文是当前业务范围来源；技术实现见[架构设计](architecture.md)，交付与验证状态见[交付状态](delivery-roadmap.md)。
 
 ## 1. 产品定位
 

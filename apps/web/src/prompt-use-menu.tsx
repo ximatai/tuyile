@@ -40,6 +40,7 @@ export function PromptUseMenu({
     api = client(state.session.csrfToken);
   const [searchOpen, setSearchOpen] = useState(false);
   const searchId = useId();
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [open, setOpen] = useState(false),
     [search, setSearch] = useState(""),
     [term, setTerm] = useState("");
@@ -80,6 +81,7 @@ export function PromptUseMenu({
     if (event.key === "Escape") {
       event.stopPropagation();
       setOpen(false);
+      setKeyboardOpen(false);
       trigger.current?.focus();
     }
   }
@@ -88,7 +90,10 @@ export function PromptUseMenu({
     pending.current = true;
     setBusy(true);
     try {
-      if (await useDestination(id)) setOpen(false);
+      if (await useDestination(id)) {
+        setOpen(false);
+        setKeyboardOpen(false);
+      }
     } finally {
       pending.current = false;
       setBusy(false);
@@ -132,12 +137,13 @@ export function PromptUseMenu({
   return (
     <>
       <Popover
-        trigger={["hover", "click"]}
+        trigger={keyboardOpen ? ["click"] : ["hover", "click"]}
         placement="rightTop"
         open={open && !creating}
         onOpenChange={(value) => {
           if (!busy && !disabled) {
             setOpen(value);
+            if (!value) setKeyboardOpen(false);
             if (value) setError("");
           }
         }}
@@ -157,6 +163,7 @@ export function PromptUseMenu({
                   disabled={disabled || busy}
                   onClick={() => {
                     setOpen(false);
+                    setKeyboardOpen(false);
                     setCreating(true);
                     setName("");
                     setError("");
@@ -251,6 +258,9 @@ export function PromptUseMenu({
             escape(event);
             if (event.key === "ArrowRight" || event.key === "ArrowDown") {
               event.preventDefault();
+              // Use Ant's click activation to cancel an already-scheduled hover close.
+              trigger.current?.click();
+              setKeyboardOpen(true);
               setOpen(true);
             }
           }}

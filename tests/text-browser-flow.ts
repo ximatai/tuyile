@@ -507,6 +507,8 @@ export async function verifyDirectTextCreation(page: Page) {
     expect(bar.y).toBeGreaterThanOrEqual(card.y + card.height);
     expect(bar.x + bar.width).toBeLessThanOrEqual(card.x + card.width);
     await page.mouse.move(card.x + card.width - 10, card.y + card.height + 4);
+    // Deliberately pause beyond the 180ms leave grace: the 8px corridor keeps pointer ownership.
+    await page.waitForTimeout(300);
     await actions.hover();
     await expect(actions).toHaveCSS("opacity", "1");
     await leave();

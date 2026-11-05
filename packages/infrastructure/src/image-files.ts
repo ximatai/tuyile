@@ -53,6 +53,16 @@ export class PrivateImageFiles implements ImageFiles {
     }
     if (bytes.length > 20 * 1024 * 1024 || !bytes.length)
       throw new AppError("UPLOAD_TOO_LARGE", 413);
+    // Reject other formats before libvips can invoke an SVG or other native loader in the API process.
+    const header = Buffer.from(bytes.subarray(0, 12));
+    const raster =
+      header
+        .subarray(0, 8)
+        .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) ||
+      (header[0] === 255 && header[1] === 216 && header[2] === 255) ||
+      (header.toString("ascii", 0, 4) === "RIFF" &&
+        header.toString("ascii", 8, 12) === "WEBP");
+    if (!raster) throw new AppError("INVALID_IMAGE", 400);
     if (this.decoding >= 2) throw new AppError("IMAGE_DECODER_BUSY", 503);
     this.decoding++;
     try {

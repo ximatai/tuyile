@@ -1,6 +1,7 @@
 import { build } from "esbuild";
 await build({
   entryPoints: {
+    "svg/check": "scripts/svg-check.ts",
     "svg/render": "packages/infrastructure/src/svg-render-worker.ts",
     "api/main": "apps/api/src/main.ts",
     "worker/main": "apps/worker/src/main.ts",

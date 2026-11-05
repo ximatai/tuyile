@@ -1115,7 +1115,11 @@ test("desktop administration publishes service model pools and preserves version
     name: "对话模型池",
     exact: true,
   });
-  await chatPool.getByRole("button", { name: "能力设置", exact: true }).click();
+  await chatPool
+    .locator(".model-pool-entry")
+    .filter({ has: page.getByText("test-planner", { exact: true }) })
+    .getByRole("button", { name: "能力设置", exact: true })
+    .click();
   await page.getByRole("button", { name: "高级设置", exact: true }).click();
   await page
     .getByLabel("单次规划总输出 token 预算", { exact: true })
@@ -2457,11 +2461,19 @@ test("administration saves bounded execution policies and clearing ended Agent h
   );
   await page.getByLabel("每日规划次数", { exact: true }).fill("45");
   await page.getByLabel("每用户规划排队上限", { exact: true }).fill("8");
+  const policySaved = page.waitForResponse(
+    (r) =>
+      r.url().includes("/api/image-admin/planning-policies/") &&
+      r.request().method() === "POST",
+  );
   await page.getByRole("button", { name: "保存规划策略", exact: true }).click();
-  await expect(page.getByText("已保存", { exact: true })).toBeVisible();
-  expect(
-    (await (await page.request.get("/api/agent/usage")).json()).dailyLimit,
-  ).toBe(45);
+  expect((await policySaved).ok()).toBe(true);
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get("/api/agent/usage")).json()).dailyLimit,
+    )
+    .toBe(45);
   await page.locator(".operations-admin").screenshot({
     path: ".codex-temp/m3-administration-1440.png",
     animations: "disabled",
@@ -4684,6 +4696,21 @@ test("prompt bookmarks connect public browsing, private editing and protected cr
   await card
     .getByRole("button", { name: "使用提示词", exact: true })
     .press("ArrowRight");
+  await page.mouse.move(0, 0);
+  // A keyboard-open menu stays open across a hover-leave delay.
+  await page.waitForTimeout(300);
+  await expect(
+    page.getByRole("menuitem", { name: project.name, exact: true }),
+  ).toBeVisible();
+  await page
+    .locator(".prompt-use-popover:visible")
+    .getByRole("button", { name: "新建项目", exact: true })
+    .click();
+  await page
+    .getByRole("dialog", { name: "新建项目", exact: true })
+    .getByRole("button", { name: "取消", exact: true })
+    .click();
+  await card.getByRole("button", { name: "使用提示词", exact: true }).hover();
   await expect(
     page.getByRole("menuitem", { name: project.name, exact: true }),
   ).toBeVisible();
@@ -4728,9 +4755,15 @@ test("prompt bookmarks connect public browsing, private editing and protected cr
   await expect(
     favoritesPage.getByRole("heading", { name: "我的收藏", exact: true }),
   ).toBeVisible();
+  const favoritesFiltered = page.waitForResponse(
+    (r) =>
+      new URL(r.url()).pathname === "/api/library/favorites" &&
+      new URL(r.url()).searchParams.get("search") === suffix,
+  );
   await favoritesPage
     .getByRole("textbox", { name: "搜索提示词", exact: true })
     .fill(suffix);
+  expect((await favoritesFiltered).ok()).toBe(true);
   await expect(favoritesPage.locator(".favorite-prompt-card")).toHaveCount(2);
   const personal = page
     .locator(".favorite-prompt-card")

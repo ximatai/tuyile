@@ -4374,3 +4374,7 @@ h3 {
   text-align: center;
   margin-top: 8px;
 }
+
+/* Keep the short pointer corridor to a portal toolbar interactive while it is shown. */
+.canvas-image-actions::before { content: ""; position: absolute; left: 0; right: 0; height: 8px; top: -8px; }
+.canvas-image-actions[data-side="above"]::before { top: auto; bottom: -8px; }

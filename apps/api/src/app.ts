@@ -1,3 +1,5 @@
+import packageMetadata from "../../../package.json" with { type: "json" };
+const { version } = packageMetadata;
 import { modelCatalogRoutes } from "./model-catalog-routes.js";
 import { administrationRoutes } from "./administration-routes.js";
 import type { AdministrationService } from "@tuyile/core";
@@ -129,14 +131,14 @@ export function createApp(
     }
     await next();
   });
-  app.get("/api/health", (c) => c.json({ status: "ok" }));
+  app.get("/api/health", (c) => c.json({ status: "ok", version }));
   app.get("/api/ready", async (c) => {
     try {
       await ready();
     } catch {
       throw new AppError("NOT_READY", 503);
     }
-    return c.json({ status: "ready" });
+    return c.json({ status: "ready", version });
   });
   app.use("/api/auth/*", async (c, next) => {
     if (

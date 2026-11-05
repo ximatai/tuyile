@@ -1,6 +1,7 @@
 import { it, expect } from "vitest";
 import { validateSvg } from "../../packages/infrastructure/src/svg-validation.js";
 import { rasterizeSvg } from "../../packages/infrastructure/src/svg-render.js";
+import { PrivateImageFiles } from "@tuyile/infrastructure";
 import { CompatibleImageProvider } from "@tuyile/infrastructure";
 import { withSvgUsage, parseModelUsage } from "@tuyile/core";
 import sharp from "sharp";
@@ -147,4 +148,29 @@ it("uses explicit author settings or omits the SVG object in service-default mod
     priceSnapshot: null,
     referenceUsd: null,
   });
+});
+
+it("keeps SVG and other unaccepted formats out of raster uploads while validating accepted image bytes", async () => {
+  const files = new PrivateImageFiles(".codex-temp/svg-validation-unit", 0);
+  await expect(files.inspect(bytes(svg))).rejects.toMatchObject({
+    code: "INVALID_IMAGE",
+  });
+  await expect(
+    files.inspect(
+      bytes(svg.replace("<rect", '<image href="file:///etc/passwd"')),
+    ),
+  ).rejects.toMatchObject({ code: "INVALID_IMAGE" });
+  const png = await sharp({
+    create: { width: 256, height: 256, channels: 3, background: "#0062b0" },
+  })
+    .png()
+    .toBuffer();
+  expect((await files.inspect(png)).mime).toBe("image/png");
+  for (const format of ["jpeg", "webp"] as const) {
+    const raster = await sharp(png).toFormat(format).toBuffer();
+    expect((await files.inspect(raster)).mime).toBe(`image/${format}`);
+  }
+  await expect(
+    files.inspect(Buffer.concat([png.subarray(0, 8), bytes(svg)])),
+  ).rejects.toMatchObject({ code: "INVALID_IMAGE" });
 });

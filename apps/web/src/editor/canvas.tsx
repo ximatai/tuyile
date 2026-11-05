@@ -290,6 +290,7 @@ function ImageCard({
         position={Position.Bottom}
         align="end"
         offset={toolbarOffset}
+        data-side={toolbarOffset < 0 ? "above" : "below"}
         style={{ marginLeft: horizontalInset }}
         className={`canvas-image-actions nodrag nopan${actions.visible || (compact && menuOpen) ? " is-visible" : ""}`}
         {...actions.events}
@@ -596,6 +597,7 @@ function TextCard({
         position={Position.Bottom}
         align="end"
         offset={placement.offset}
+        data-side={placement.offset < 0 ? "above" : "below"}
         style={{ marginLeft: placement.horizontalInset }}
         className={`canvas-image-actions nodrag nopan${actions.visible ? " is-visible" : ""}`}
         {...actions.events}

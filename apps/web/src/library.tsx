@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useQuery,
+} from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import {
   type Favorite,
@@ -91,6 +95,7 @@ export function LibraryPage({ mode }: { mode: Mode }) {
     enabled: mode === "gallery",
   });
   const favorites = useInfiniteQuery({
+    placeholderData: keepPreviousData,
     queryKey: state.key("favorites", JSON.stringify(selectedGroups), term),
     initialPageParam: 0,
     queryFn: ({ signal, pageParam }) =>
@@ -108,6 +113,7 @@ export function LibraryPage({ mode }: { mode: Mode }) {
       api<{ groups: string[] }>("/library/groups", undefined, signal),
   });
   const prompts = useInfiniteQuery({
+    placeholderData: keepPreviousData,
     queryKey: state.key(
       "prompt-templates",
       JSON.stringify(promptCategories),
@@ -779,7 +785,12 @@ export function LibraryPage({ mode }: { mode: Mode }) {
               ),
             )}
           </aside>
-          <div className="prompt-results" aria-label="提示词列表" role="region">
+          <div
+            className="prompt-results"
+            aria-label="提示词列表"
+            role="region"
+            aria-busy={prompts.isFetching}
+          >
             {prompts.isPending && <p role="status">正在加载提示词…</p>}
             <div className="prompt-grid">
               {!prompts.isPending && !prompts.error && !allPrompts.length && (
@@ -819,7 +830,7 @@ export function LibraryPage({ mode }: { mode: Mode }) {
                 <Button
                   type="button"
                   loading={prompts.isFetchingNextPage}
-                  disabled={prompts.isFetchingNextPage}
+                  disabled={prompts.isFetching || prompts.isPlaceholderData}
                   onClick={() => void prompts.fetchNextPage()}
                 >
                   加载更多提示词
@@ -861,7 +872,12 @@ export function LibraryPage({ mode }: { mode: Mode }) {
               </Checkbox>
             ))}
           </aside>
-          <div className="favorite-results" role="region" aria-label="收藏列表">
+          <div
+            className="favorite-results"
+            role="region"
+            aria-label="收藏列表"
+            aria-busy={favorites.isFetching}
+          >
             {pendingReuse && (
               <Notice>
                 上次加入画布尚未确认。
@@ -969,7 +985,9 @@ export function LibraryPage({ mode }: { mode: Mode }) {
               <Button
                 type="button"
                 loading={favorites.isFetchingNextPage}
-                disabled={favorites.isFetchingNextPage || busy}
+                disabled={
+                  favorites.isFetching || favorites.isPlaceholderData || busy
+                }
                 onClick={() => void favorites.fetchNextPage()}
               >
                 加载更多收藏

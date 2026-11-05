@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { AppError } from "@tuyile/core";
 import { validateSvg } from "./svg-validation.js";
 let active = 0;
+let renderTail: Promise<void> = Promise.resolve();
 /** Killable rendering, bounded process count, wall/CPU time, V8 heap, RSS and output. */
 export async function rasterizeSvg(
   bytes: Uint8Array,
@@ -11,6 +12,12 @@ export async function rasterizeSvg(
   validateSvg(bytes);
   if (active >= 2) throw new AppError("SVG_RENDERER_BUSY", 503);
   active++;
+  const previous = renderTail;
+  let release!: () => void;
+  renderTail = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await previous;
   try {
     return await new Promise<Uint8Array>((resolve, reject) => {
       const source = import.meta.url.endsWith(".ts");
@@ -20,13 +27,25 @@ export async function rasterizeSvg(
           import.meta.url,
         ),
       );
+      const hardLimits = process.platform === "linux" && !source;
+      const argumentsForNode = [
+        "--max-old-space-size=64",
+        ...(hardLimits ? ["--jitless"] : []),
+        ...(source ? ["--import", "tsx"] : []),
+        entry,
+      ];
+      // Linux DATA limits cover native allocations; jitless avoids V8's large writable CodeRange reservation.
       const child = spawn(
-        process.execPath,
-        [
-          "--max-old-space-size=64",
-          ...(source ? ["--import", "tsx"] : []),
-          entry,
-        ],
+        hardLimits ? "/bin/sh" : process.execPath,
+        hardLimits
+          ? [
+              "-c",
+              'set -e\nulimit -c 0\nulimit -d 196608\nulimit -t 3\nexec "$@"',
+              "svg-render",
+              process.execPath,
+              ...argumentsForNode,
+            ]
+          : argumentsForNode,
         {
           env: {
             PATH: process.env.PATH!,
@@ -84,6 +103,7 @@ export async function rasterizeSvg(
       child.stdin.end(bytes);
     });
   } finally {
+    release();
     active--;
   }
 }

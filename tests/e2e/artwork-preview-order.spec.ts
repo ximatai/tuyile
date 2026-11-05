@@ -82,16 +82,22 @@ test("artwork previews keep asset metadata and selection when polling prepends o
   await expect(page.locator(".admin-artworks img")).toHaveCount(2);
   const image = page.locator(".ant-image-preview-img"),
     meta = page.locator(".admin-artwork-meta");
+  async function previewClosed() {
+    await expect(image).toBeHidden();
+    // The image can hide before rc-motion's mask finishes under the controlled clock.
+    await page.clock.runFor(500);
+    await expect(page.locator(".ant-image-preview-mask")).toBeHidden();
+  }
   await page.locator(".admin-artworks img").nth(1).click();
   await expect(image).toHaveAttribute("src", new RegExp(`${b.id}/original$`));
   await expect(meta).toContainText("MODEL-B · 512 × 512");
   await page.keyboard.press("Escape");
-  await expect(image).toBeHidden();
+  await previewClosed();
   await page.locator(".admin-artworks img").first().click();
   await expect(image).toHaveAttribute("src", new RegExp(`${a.id}/original$`));
   await expect(meta).toContainText("MODEL-A · 384 × 512");
   await page.keyboard.press("Escape");
-  await expect(image).toBeHidden();
+  await previewClosed();
   artworks = [c, a, b];
   await page.getByRole("button", { name: "刷新", exact: true }).click();
   await expect(page.locator(".admin-artworks img")).toHaveCount(3);
@@ -99,7 +105,7 @@ test("artwork previews keep asset metadata and selection when polling prepends o
   await expect(image).toHaveAttribute("src", new RegExp(`${b.id}/original$`));
   await expect(meta).toContainText("MODEL-B · 512 × 512");
   await page.keyboard.press("Escape");
-  await expect(image).toBeHidden();
+  await previewClosed();
   await page.locator(".admin-artworks img").first().click();
   await expect(image).toHaveAttribute("src", new RegExp(`${c.id}/original$`));
   await expect(meta).toContainText("MODEL-C · 640 × 512");
@@ -115,7 +121,7 @@ test("artwork previews keep asset metadata and selection when polling prepends o
   artworks = [d, a, b];
   await page.clock.runFor(16000);
   await expect(page.locator(".admin-artworks img")).toHaveCount(3);
-  await expect(image).toBeHidden();
+  await previewClosed();
   await expect(page.locator(".user-settings-drawer")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.locator(".user-settings-drawer")).toBeHidden();
