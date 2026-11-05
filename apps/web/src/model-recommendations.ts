@@ -33,6 +33,9 @@ export function recommendedModelCapabilities(
       model,
       generation: true,
       editing: !!known,
+      ...(known?.complexities.length
+        ? { complexities: [...known.complexities] }
+        : {}),
       maxReferences: known ? 4 : 0,
       maxEdge: known?.maxEdge ?? 1024,
       maxPixels: known?.maxPixels ?? 1048576,

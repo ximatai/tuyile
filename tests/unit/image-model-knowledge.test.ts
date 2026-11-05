@@ -65,3 +65,40 @@ it("checks both documented limits and declared formats at submission", () => {
     ),
   ).toThrow();
 });
+
+it("calibrates 2.6 complexity while preserving explicit service declarations", () => {
+  const model = "gpt-image-2.6-flare";
+  const known = imageModelKnowledge(model)!;
+  expect(known.checkedAt).toBe("2026-11-05");
+  expect(known.complexities).toEqual(["low", "medium", "high"]);
+  expect(imageSizeWithinKnownLimits(model, 1024, 1024)).toBe(true);
+  expect(imageSizeWithinKnownLimits(model, 512, 512)).toBe(false);
+  const cap = {
+    ...imageCapabilityDefaults(model),
+    maxEdge: 3840,
+    maxPixels: 8294400,
+  };
+  const input = {
+    model,
+    width: 1024,
+    height: 1024,
+    quality: "medium",
+    format: "png",
+    referenceIds: [],
+    count: 1,
+  };
+  expect(() => checkImageCapability(input as any, [cap])).not.toThrow();
+  expect(() =>
+    checkImageCapability({ ...input, complexity: "low" } as any, [cap]),
+  ).toThrow();
+  expect(() =>
+    checkImageCapability({ ...input, complexity: "low" } as any, [
+      { ...cap, complexities: ["low"] },
+    ]),
+  ).not.toThrow();
+  expect(() =>
+    checkImageCapability({ ...input, complexity: "high" } as any, [
+      { ...cap, complexities: ["low"] },
+    ]),
+  ).toThrow();
+});

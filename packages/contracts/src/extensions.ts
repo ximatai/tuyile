@@ -11,6 +11,10 @@ export const imageCapability = z
     model: z.string().min(1).max(120),
     generation: z.boolean(),
     editing: z.boolean(),
+    complexities: z
+      .array(z.enum(["low", "medium", "high"]))
+      .max(3)
+      .optional(),
     maxReferences: z.number().int().min(0).max(4),
     maxEdge: z.number().int().min(256).max(8192),
     maxPixels: z.number().int().min(65536).max(32000000),

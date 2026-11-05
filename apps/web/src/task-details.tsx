@@ -32,6 +32,17 @@ export function TaskDetails({
             }),
           },
           { key: "model", label: "图片模型", children: task.model },
+          ...(task.settings?.complexity
+            ? [
+                {
+                  key: "complexity",
+                  label: "复杂度",
+                  children: { low: "低", medium: "中", high: "高" }[
+                    task.settings.complexity
+                  ],
+                },
+              ]
+            : []),
           ...(task.settings
             ? [
                 {

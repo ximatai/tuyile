@@ -13,7 +13,7 @@ import type {
 
 export type ImageSettings = Pick<
   ImageInput,
-  "width" | "height" | "quality" | "format" | "count"
+  "width" | "height" | "quality" | "complexity" | "format" | "count"
 > & { modelKey: string };
 const qualityOrder = ["low", "medium", "high"] as const;
 export function selectedCapability(
@@ -153,6 +153,11 @@ export function settingsIssues(
   if (sizeIssue) errors.push(sizeIssue);
   if (!allowedQualities(usage, cap).includes(settings.quality))
     errors.push("当前质量不受支持，请重新选择。");
+  if (
+    settings.complexity !== undefined &&
+    !cap.complexities?.includes(settings.complexity)
+  )
+    errors.push("当前复杂度不受支持，请重新选择或使用模型默认。");
   if (!cap.formats.includes(settings.format))
     errors.push("当前格式不受支持，请重新选择。");
   if (
@@ -182,6 +187,9 @@ export function taskSettings(
   return {
     width: task.settings.width,
     height: task.settings.height,
+    ...(task.settings.complexity !== undefined
+      ? { complexity: task.settings.complexity }
+      : {}),
     quality: task.settings.quality,
     format: task.settings.format,
     count: task.count,

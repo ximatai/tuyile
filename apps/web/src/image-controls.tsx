@@ -370,6 +370,40 @@ export function ImageControls({
           }))}
         />
       </div>
+      {(!!cap?.complexities?.length || value.complexity !== undefined) && (
+        <Collapse
+          ghost
+          size="small"
+          items={[
+            {
+              key: "complexity",
+              label: "进阶设置",
+              children: (
+                <ChoiceField
+                  label={label("复杂度")}
+                  value={value.complexity ?? "default"}
+                  disabled={disabled}
+                  options={[
+                    { value: "default", label: "模型默认" },
+                    ...(cap?.complexities ?? []).map((v) => ({
+                      value: v,
+                      label: { low: "低", medium: "中", high: "高" }[v],
+                    })),
+                  ]}
+                  onValueChange={(v) =>
+                    patch({
+                      complexity:
+                        v === "default"
+                          ? undefined
+                          : (v as ImageSettings["complexity"]),
+                    })
+                  }
+                />
+              ),
+            },
+          ]}
+        />
+      )}
       {sizeIssue && (!advancedOpen || !!cap?.sizes.length) && (
         <p className="size-field-error" role="status">
           {sizeIssue}

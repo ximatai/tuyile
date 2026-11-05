@@ -36,6 +36,8 @@ export function checkImageCapability(
     input.width * input.height > c.maxPixels ||
     !c.qualities.includes(input.quality) ||
     !c.formats.includes(input.format) ||
+    (input.complexity !== undefined &&
+      !c.complexities?.includes(input.complexity)) ||
     (c.sizes.length && !c.sizes.includes(`${input.width}x${input.height}`))
   )
     throw new AppError("MODEL_CAPABILITY_UNSUPPORTED", 409);

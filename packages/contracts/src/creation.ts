@@ -48,6 +48,7 @@ export const imageInput = z.object({
   modelSelectionId: z.uuid().optional(),
   width: z.number().int().min(256).max(8192).multipleOf(16),
   height: z.number().int().min(256).max(8192).multipleOf(16),
+  complexity: z.enum(["low", "medium", "high"]).optional(),
   quality: z.enum(["low", "medium", "high"]),
   format: z.enum(["png", "jpeg", "webp"]),
   count: z.number().int().min(1).max(16),
@@ -109,6 +110,7 @@ export interface ImageTask {
     | "style"
     | "width"
     | "height"
+    | "complexity"
     | "quality"
     | "format"
     | "modelSelectionId"

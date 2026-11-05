@@ -93,6 +93,9 @@ export class CompatibleImageProvider implements ImageProvider {
         model: input.model,
         prompt: composeCreativePrompt(input),
         size: `${input.width}x${input.height}`,
+        ...(input.complexity !== undefined
+          ? { complexity: input.complexity }
+          : {}),
         quality: input.quality,
         output_format: input.format,
         n: 1,

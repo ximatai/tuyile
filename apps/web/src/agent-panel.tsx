@@ -203,6 +203,9 @@ export function AgentPanel({
       ...(conversationModel ? { conversationModelId: conversationModel } : {}),
       width: settings.width,
       height: settings.height,
+      ...(settings.complexity !== undefined
+        ? { complexity: settings.complexity }
+        : {}),
       quality: settings.quality,
       format: settings.format,
       referenceIds: references.map((r) => r.id),
@@ -1099,6 +1102,7 @@ function PlanCard({
                           patch(index, {
                             width: value.width,
                             height: value.height,
+                            complexity: value.complexity,
                             quality: value.quality,
                             format: value.format,
                             count: value.count,

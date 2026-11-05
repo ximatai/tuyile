@@ -142,6 +142,7 @@ export class SessionState {
         )) ||
         settings.width !== task.settings.width ||
         settings.height !== task.settings.height ||
+        settings.complexity !== task.settings.complexity ||
         settings.quality !== task.settings.quality ||
         settings.format !== task.settings.format ||
         settings.count !== task.count)

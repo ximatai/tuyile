@@ -78,6 +78,8 @@ export function referencePrice(
   if (kind === "image") {
     if (
       ![
+        "gpt-image-2.6-sunburst",
+        "gpt-image-2.6-flare",
         "gpt-image-2",
         "gpt-image-2.5-sunburst",
         "gpt-image-2.5-flare",
@@ -86,7 +88,16 @@ export function referencePrice(
       ].includes(model)
     )
       return null;
-    return { ...base, input: 5, imageInput: 8, output: 30, cached: 0 };
+    return {
+      ...base,
+      ...(model.startsWith("gpt-image-2.6-")
+        ? { version: "openai-standard-2026-11-05" }
+        : {}),
+      input: 5,
+      imageInput: 8,
+      output: 30,
+      cached: 0,
+    };
   }
   const p = Object.hasOwn(text, model) ? text[model] : undefined;
   return p

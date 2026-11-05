@@ -100,6 +100,9 @@ export class CompatiblePlanningProvider implements PlanningProvider {
               model: input.model,
               width: input.width,
               height: input.height,
+              ...(input.complexity !== undefined
+                ? { complexity: input.complexity }
+                : {}),
               quality: input.quality,
               format: input.format,
               count: 1,

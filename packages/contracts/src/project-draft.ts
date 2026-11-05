@@ -12,6 +12,7 @@ export const draftSettings = z
     modelKey: text(200),
     width: z.number().int().min(0).max(8192),
     height: z.number().int().min(0).max(8192),
+    complexity: z.enum(["low", "medium", "high"]).optional(),
     quality: z.enum(["low", "medium", "high"]),
     format: z.enum(["png", "jpeg", "webp"]),
     count: z.number().int().min(1).max(16),

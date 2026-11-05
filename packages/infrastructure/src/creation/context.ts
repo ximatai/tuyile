@@ -156,6 +156,9 @@ export class PgCreationContext {
         ...(r.input.style ? { style: r.input.style } : {}),
         width: r.input.width,
         height: r.input.height,
+        ...(r.input.complexity !== undefined
+          ? { complexity: r.input.complexity }
+          : {}),
         quality: r.input.quality,
         format: r.input.format,
         referenceIds: [...new Set([...r.input.referenceIds, ...sources])],

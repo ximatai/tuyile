@@ -851,7 +851,7 @@ export function ModelServicesAdmin() {
                   setAdvanced(null);
                 } catch {
                   setError(
-                    "请检查模型能力：质量和格式至少选择一项，尺寸及上限需符合已校准的能力。",
+                    "请检查模型能力：质量和格式至少选择一项，复杂度、尺寸及上限需符合已校准的能力。",
                   );
                 }
               }}
@@ -869,7 +869,9 @@ export function ModelServicesAdmin() {
                 </p>
               ) : imageModelKnowledge(advanced.modelId) ? (
                 <p className="hint">
-                  已校准官方文档（2026-10-30）：PNG / JPEG /
+                  已校准官方文档（
+                  {imageModelKnowledge(advanced.modelId)!.checkedAt}）：PNG /
+                  JPEG /
                   WebP；边长不超过3840，像素655360—8294400，比例不超过3:1。
                   <a
                     href={imageModelKnowledge(advanced.modelId)!.source}
@@ -1042,6 +1044,30 @@ export function ModelServicesAdmin() {
                     value={sizes}
                     onChange={setSizes}
                   />
+                  <label className="field">
+                    <span>支持复杂度（留空表示不开放）</span>
+                    <Select
+                      aria-label="支持复杂度"
+                      mode="multiple"
+                      value={advanced.image.complexities ?? []}
+                      options={(
+                        imageModelKnowledge(advanced.modelId)?.complexities ?? [
+                          "low",
+                          "medium",
+                          "high",
+                        ]
+                      ).map((value) => ({
+                        value,
+                        label: value,
+                      }))}
+                      onChange={(v) =>
+                        setAdvanced({
+                          ...advanced,
+                          image: { ...advanced.image!, complexities: v },
+                        })
+                      }
+                    />
+                  </label>
                   <label className="field">
                     <span>支持质量</span>
                     <Select

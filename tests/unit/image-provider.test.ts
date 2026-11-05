@@ -118,3 +118,26 @@ it("retains usage evidence even when the returned image payload is invalid", asy
     expect.objectContaining({ inputTokens: 10, outputTokens: 20 }),
   ]);
 });
+
+it("sends explicit complexity in generation JSON and edit multipart but omits legacy defaults", async () => {
+  for (const editing of [false, true]) {
+    const provider = new CompatibleImageProvider(
+      false,
+      0,
+      async (_url, options) => {
+        if (editing)
+          expect((options!.body as FormData).get("complexity")).toBe("low");
+        else expect(JSON.parse(String(options?.body)).complexity).toBe("low");
+        return new Response(
+          JSON.stringify({ data: [{ b64_json: "aGVsbG8=" }] }),
+        );
+      },
+    );
+    await provider.generate(
+      config,
+      { ...input, complexity: "low" },
+      editing ? [new Uint8Array([0x89, 1])] : [],
+      new AbortController().signal,
+    );
+  }
+});

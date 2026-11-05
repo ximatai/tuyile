@@ -16,4 +16,8 @@
 
 ## 推荐配置
 
+2.6 Sunburst / Flare 的静态 PNG/JPEG/WebP 输出采用当前尺寸边界与应用三档质量，复杂度独立支持 low / medium / high。省略 complexity 时不补写请求字段，由服务默认处理；官方说明2.6默认high。管理员必须显式声明开放复杂度，第三方兼容服务不因同名模型自动开放新参数。核对日期2026-11-05，依据为[图片生成指南](https://developers.openai.com/api/docs/guides/image-generation)及[生成接口](https://developers.openai.com/api/reference/resources/images/methods/generate)，尚未付费实测。SVG与GIF尚未接入。
+
+2.6参考价格使用2026-11-05版本：文字输入5、图片输入8、图片输出30 USD/百万tokens，按当前Images路径保守估算未折扣输入；不据价格目录单独列出的缓存价格推断此次请求获得缓存优惠。旧任务价格快照不重算。
+
 能力设置抽屉的“恢复默认”与新增模型使用同一套系统推荐值，只修改抽屉草稿，应用到待发布配置并发布后才生效。Terra根据[官方模型说明](https://developers.openai.com/api/docs/models/gpt-6.1-terra)默认启用参考图理解；规划推荐输出预算4096 tokens、输入上限32000字符，这些是应用预算，不是模型能力上限。已校准图片模型使用记录内支持的格式、尺寸上限及应用支持的质量档位；未知模型采用保守初值，不能视为已核验。

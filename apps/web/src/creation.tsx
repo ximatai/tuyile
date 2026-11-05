@@ -404,6 +404,7 @@ function CreationEditor({
       (saved.modelSelectionId ?? task.model) === settings.modelKey &&
       saved.width === settings.width &&
       saved.height === settings.height &&
+      saved.complexity === settings.complexity &&
       saved.quality === settings.quality &&
       saved.format === settings.format &&
       saved.style?.name === style?.name.trim() &&
@@ -683,6 +684,9 @@ function CreationEditor({
       ...(usage.modelOptions ? { modelSelectionId: settings.modelKey } : {}),
       width: settings.width,
       height: settings.height,
+      ...(settings.complexity !== undefined
+        ? { complexity: settings.complexity }
+        : {}),
       quality: settings.quality,
       format: settings.format,
       count: settings.count,
