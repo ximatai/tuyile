@@ -1,4 +1,6 @@
 import sharp from "sharp";
+import { rasterizeSvg } from "./svg-render.js";
+import { validateSvg } from "./svg-validation.js";
 import { mkdir, lstat, open, rename, rm, statfs } from "node:fs/promises";
 import { constants } from "node:fs";
 import { resolve, join } from "node:path";
@@ -28,9 +30,39 @@ export class PrivateImageFiles implements ImageFiles {
     if (!/^[a-f0-9-]{36}$/.test(key)) throw new Error("INVALID_FILE_KEY");
     return join(this.root, `${key}.${suffix}`);
   }
-  async inspect(bytes: Uint8Array): Promise<AssetBytes> {
+  async rasterize(bytes: Uint8Array) {
+    return rasterizeSvg(bytes);
+  }
+  async inspect(bytes: Uint8Array, vector = false): Promise<AssetBytes> {
+    if (vector) {
+      const dimensions = validateSvg(bytes);
+      const png = await rasterizeSvg(bytes);
+      const preview = await sharp(png)
+        .resize(480, 480, { fit: "inside", withoutEnlargement: true })
+        .webp({ quality: 72 })
+        .toBuffer();
+      if (preview.length > 1024 * 1024)
+        throw new AppError("SVG_PREVIEW_FAILED", 422);
+      return {
+        original: bytes,
+        preview,
+        mime: "image/svg+xml",
+        ...dimensions,
+        hash: createHash("sha256").update(bytes).digest("hex"),
+      };
+    }
     if (bytes.length > 20 * 1024 * 1024 || !bytes.length)
       throw new AppError("UPLOAD_TOO_LARGE", 413);
+    // Reject other formats before libvips can invoke an SVG or other native loader in the API process.
+    const header = Buffer.from(bytes.subarray(0, 12));
+    const raster =
+      header
+        .subarray(0, 8)
+        .equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) ||
+      (header[0] === 255 && header[1] === 216 && header[2] === 255) ||
+      (header.toString("ascii", 0, 4) === "RIFF" &&
+        header.toString("ascii", 8, 12) === "WEBP");
+    if (!raster) throw new AppError("INVALID_IMAGE", 400);
     if (this.decoding >= 2) throw new AppError("IMAGE_DECODER_BUSY", 503);
     this.decoding++;
     try {

@@ -13,7 +13,7 @@ import type {
 
 export type ImageSettings = Pick<
   ImageInput,
-  "width" | "height" | "quality" | "format" | "count"
+  "width" | "height" | "quality" | "complexity" | "format" | "count"
 > & { modelKey: string };
 const qualityOrder = ["low", "medium", "high"] as const;
 export function selectedCapability(
@@ -149,10 +149,22 @@ export function settingsIssues(
   const cap = selectedCapability(usage, settings.modelKey);
   if (!cap) return ["原模型已不可用，请重新选择图片模型及服务。"];
   const errors: string[] = [];
+  if (
+    settings.format === "svg" &&
+    (settings.count !== 1 || referenceCount !== 0 || !cap.svgAuthor)
+  )
+    errors.push(
+      "SVG 矢量创作仅支持无参考图、单张生成；需管理员开放作者配置。用作参考请先转换栅格副本。",
+    );
   const sizeIssue = imageSizeIssue(usage, cap, settings);
   if (sizeIssue) errors.push(sizeIssue);
   if (!allowedQualities(usage, cap).includes(settings.quality))
     errors.push("当前质量不受支持，请重新选择。");
+  if (
+    settings.complexity !== undefined &&
+    !cap.complexities?.includes(settings.complexity)
+  )
+    errors.push("当前复杂度不受支持，请重新选择或使用模型默认。");
   if (!cap.formats.includes(settings.format))
     errors.push("当前格式不受支持，请重新选择。");
   if (
@@ -182,6 +194,9 @@ export function taskSettings(
   return {
     width: task.settings.width,
     height: task.settings.height,
+    ...(task.settings.complexity !== undefined
+      ? { complexity: task.settings.complexity }
+      : {}),
     quality: task.settings.quality,
     format: task.settings.format,
     count: task.count,
@@ -342,4 +357,25 @@ export function settingsDisplayIssues(
   const cap = usage && selectedCapability(usage, settings.modelKey);
   const sizeIssue = usage && cap && imageSizeIssue(usage, cap, settings);
   return issues.filter((issue) => issue !== sizeIssue);
+}
+
+export function recommendedSettings(
+  usage: ImageUsage,
+  current: ImageSettings,
+  mode: "explore" | "refine",
+): ImageSettings {
+  const cap = selectedCapability(usage, current.modelKey);
+  const qualities = allowedQualities(usage, cap);
+  const complexities = (["low", "medium", "high"] as const).filter((v) =>
+    cap?.complexities?.includes(v),
+  );
+  return {
+    ...current,
+    count: 1,
+    quality:
+      mode === "explore"
+        ? (qualities[0] ?? current.quality)
+        : (qualities.at(-1) ?? current.quality),
+    complexity: mode === "explore" ? complexities[0] : complexities.at(-1),
+  };
 }

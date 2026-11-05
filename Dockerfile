@@ -1,4 +1,5 @@
 FROM node:24.15.0-bookworm-slim@sha256:4e6b70dd6cbfc88c8157ba19aa3d9f9cce6ba4703576d55459e45efcbc9c5f5d
+RUN apt-get update && apt-get install -y --no-install-recommends procps fontconfig fonts-noto-cjk=1:20220127+repack1-1 && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 RUN --mount=type=cache,id=tuyile-corepack,target=/root/.cache/node/corepack corepack enable && corepack prepare pnpm@9.14.2 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
@@ -21,5 +22,8 @@ RUN --mount=type=cache,id=tuyile-corepack,target=/root/.cache/node/corepack pnpm
 ENV NODE_ENV=production
 RUN mkdir -p /app/storage && chown node:node /app/storage && chmod 700 /app/storage
 USER node
+ARG APP_REVISION=unknown
+ARG APP_VERSION=unknown
+LABEL org.opencontainers.image.revision=$APP_REVISION org.opencontainers.image.version=$APP_VERSION
 EXPOSE 8792
 CMD ["node","dist/api/main.js"]

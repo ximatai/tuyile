@@ -81,7 +81,10 @@ export class PgExecutionRepository extends PgCreationContext {
             t.agent_plan_id,
           ])
         ).rows[0];
-        if (plan.document.steps[t.step_index!].usePrevious) {
+        if (
+          plan.document.steps[t.step_index!].usePrevious ||
+          plan.document.steps[t.step_index!].dependsOn
+        ) {
           const output = (
             await c.query(
               "SELECT a.id FROM image_outputs o JOIN image_assets a ON a.id=o.asset_id WHERE o.task_id=$1 AND o.ordinal=0 AND a.state='ready' FOR UPDATE OF a",
@@ -225,13 +228,18 @@ export class PgExecutionRepository extends PgCreationContext {
     );
     return {
       attemptId: row.id,
-      provider: (provider.mode === "fake"
-        ? { mode: "fake" }
-        : {
-            mode: "openai",
-            baseUrl: provider.base_url,
-            apiKey: this.decrypt(provider.secret_cipher),
-          }) satisfies ImageExecutionConfig,
+      provider: {
+        svgAuthor: provider.capabilities.find(
+          (c: { model: string }) => c.model === t.input.model,
+        )?.svgAuthor,
+        ...(provider.mode === "fake"
+          ? { mode: "fake" }
+          : {
+              mode: "openai",
+              baseUrl: provider.base_url,
+              apiKey: this.decrypt(provider.secret_cipher),
+            }),
+      } satisfies ImageExecutionConfig,
     };
   }
   recordUsage(id: string, usage: ModelUsage) {

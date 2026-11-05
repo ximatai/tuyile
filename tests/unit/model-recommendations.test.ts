@@ -37,3 +37,16 @@ it("uses documented image defaults while keeping unknown models conservative", (
       ?.formats,
   ).toHaveLength(3);
 });
+
+it("recommends 2.6 static formats and explicit complexity without inventing support for unknown services", () => {
+  for (const model of ["gpt-image-2.6-sunburst", "gpt-image-2.6-flare"]) {
+    const capability = recommendedModelCapabilities(model, "image").image!;
+    expect(capability.formats).toEqual(["png", "jpeg", "webp"]);
+    expect(capability.svgAuthor).toBeUndefined();
+    expect(capability.complexities).toEqual(["low", "medium", "high"]);
+    expect(imageDeclarationWithinKnownLimits(capability)).toBe(true);
+  }
+  expect(
+    recommendedModelCapabilities("unverified", "image").image?.complexities,
+  ).toBeUndefined();
+});

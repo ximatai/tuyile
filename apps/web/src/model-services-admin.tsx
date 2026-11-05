@@ -851,7 +851,7 @@ export function ModelServicesAdmin() {
                   setAdvanced(null);
                 } catch {
                   setError(
-                    "请检查模型能力：质量和格式至少选择一项，尺寸及上限需符合已校准的能力。",
+                    "请检查模型能力：质量和格式至少选择一项，复杂度、尺寸及上限需符合已校准的能力。",
                   );
                 }
               }}
@@ -869,7 +869,9 @@ export function ModelServicesAdmin() {
                 </p>
               ) : imageModelKnowledge(advanced.modelId) ? (
                 <p className="hint">
-                  已校准官方文档（2026-10-30）：PNG / JPEG /
+                  已校准官方文档（
+                  {imageModelKnowledge(advanced.modelId)!.checkedAt}）：PNG /
+                  JPEG /
                   WebP；边长不超过3840，像素655360—8294400，比例不超过3:1。
                   <a
                     href={imageModelKnowledge(advanced.modelId)!.source}
@@ -992,6 +994,17 @@ export function ModelServicesAdmin() {
                   >
                     支持参考图编辑
                   </Checkbox>
+                  <Checkbox
+                    checked={advanced.image.markup ?? false}
+                    onChange={(e) =>
+                      setAdvanced({
+                        ...advanced,
+                        image: { ...advanced.image!, markup: e.target.checked },
+                      })
+                    }
+                  >
+                    支持标注引导修改
+                  </Checkbox>
                   <div className="parameter-grid">
                     {(["maxEdge", "maxPixels", "maxReferences"] as const).map(
                       (key) => (
@@ -1043,6 +1056,30 @@ export function ModelServicesAdmin() {
                     onChange={setSizes}
                   />
                   <label className="field">
+                    <span>支持复杂度（留空表示不开放）</span>
+                    <Select
+                      aria-label="支持复杂度"
+                      mode="multiple"
+                      value={advanced.image.complexities ?? []}
+                      options={(
+                        imageModelKnowledge(advanced.modelId)?.complexities ?? [
+                          "low",
+                          "medium",
+                          "high",
+                        ]
+                      ).map((value) => ({
+                        value,
+                        label: value,
+                      }))}
+                      onChange={(v) =>
+                        setAdvanced({
+                          ...advanced,
+                          image: { ...advanced.image!, complexities: v },
+                        })
+                      }
+                    />
+                  </label>
+                  <label className="field">
                     <span>支持质量</span>
                     <Select
                       aria-label="支持质量"
@@ -1061,12 +1098,96 @@ export function ModelServicesAdmin() {
                     />
                   </label>
                   <label className="field">
+                    <span>SVG 作者配置</span>
+                    <Select
+                      aria-label="SVG 作者配置"
+                      value={advanced.image.svgAuthor?.mode ?? "disabled"}
+                      options={[
+                        { value: "disabled", label: "未开放" },
+                        { value: "service-default", label: "服务默认作者" },
+                        { value: "explicit", label: "服务允许指定作者" },
+                      ]}
+                      onChange={(mode) =>
+                        setAdvanced({
+                          ...advanced,
+                          image: {
+                            ...advanced.image!,
+                            svgAuthor:
+                              mode === "disabled"
+                                ? undefined
+                                : mode === "explicit"
+                                  ? { mode, model: "" }
+                                  : { mode: "service-default" },
+                          },
+                        })
+                      }
+                    />
+                  </label>
+                  {advanced.image.svgAuthor?.mode === "explicit" && (
+                    <>
+                      <label className="field">
+                        <span>允许的 SVG 作者模型（服务文档确认）</span>
+                        <Input
+                          aria-label="SVG 作者模型"
+                          value={advanced.image.svgAuthor.model}
+                          onChange={(e) =>
+                            setAdvanced({
+                              ...advanced,
+                              image: {
+                                ...advanced.image!,
+                                svgAuthor: {
+                                  ...advanced.image!.svgAuthor!,
+                                  mode: "explicit",
+                                  model: e.target.value,
+                                },
+                              },
+                            })
+                          }
+                        />
+                      </label>
+                      <label className="field">
+                        <span>作者 reasoning</span>
+                        <Select
+                          aria-label="作者 reasoning"
+                          allowClear
+                          value={advanced.image.svgAuthor.reasoning}
+                          options={[
+                            "none",
+                            "minimal",
+                            "low",
+                            "medium",
+                            "high",
+                            "xhigh",
+                          ].map((value) => ({ value, label: value }))}
+                          onChange={(reasoning) =>
+                            setAdvanced({
+                              ...advanced,
+                              image: {
+                                ...advanced.image!,
+                                svgAuthor: {
+                                  ...advanced.image!.svgAuthor!,
+                                  mode: "explicit",
+                                  model:
+                                    advanced.image!.svgAuthor!.mode ===
+                                    "explicit"
+                                      ? advanced.image!.svgAuthor!.model
+                                      : "",
+                                  reasoning,
+                                },
+                              },
+                            })
+                          }
+                        />
+                      </label>
+                    </>
+                  )}
+                  <label className="field">
                     <span>支持格式</span>
                     <Select
                       aria-label="支持格式"
                       mode="multiple"
                       value={advanced.image.formats}
-                      options={["png", "jpeg", "webp"].map((value) => ({
+                      options={["png", "jpeg", "webp", "svg"].map((value) => ({
                         value,
                         label: value,
                       }))}

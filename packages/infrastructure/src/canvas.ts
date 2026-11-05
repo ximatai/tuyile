@@ -80,7 +80,7 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
       [id],
     );
     await this.c.query(
-      "UPDATE image_tasks SET input=jsonb_set(jsonb_set(input - 'textSources' - 'textNodeIds' - 'finalPrompt','{prompt}',to_jsonb(''::text)),'{referenceIds}','[]'::jsonb) WHERE project_id=$1",
+      "UPDATE image_tasks SET input=jsonb_set(jsonb_set(input - 'textSources' - 'textNodeIds' - 'finalPrompt' - 'annotation' - 'preserveRequirements','{prompt}',to_jsonb(''::text)),'{referenceIds}','[]'::jsonb) WHERE project_id=$1",
       [id],
     );
     await this.c.query(
@@ -158,7 +158,22 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
     }
     if ((old?.revision ?? 0) !== input.revision)
       throw new AppError("DRAFT_CONFLICT", 409);
-    const assets = [...input.document.referenceIds].sort();
+    if (
+      input.document.edit?.pendingInput &&
+      input.document.edit.pendingInput.projectId !== project
+    )
+      throw new AppError("NOT_FOUND", 404);
+    const assets = [
+      ...new Set([
+        ...input.document.referenceIds,
+        ...(input.document.edit
+          ? [
+              input.document.edit.baseAssetId,
+              ...(input.document.edit.pendingInput?.referenceIds ?? []),
+            ]
+          : []),
+      ]),
+    ].sort();
     const ready = await this.c.query(
       "SELECT id FROM image_assets WHERE workspace_id=$1 AND id=ANY($2::uuid[]) AND state='ready' ORDER BY id FOR UPDATE",
       [p.workspaceId, assets],
@@ -322,7 +337,7 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
     const rows = (
       await this.c.query(
         `SELECT o.id AS output_id,o.asset_id,o.task_id,a.width,a.height,
-      ARRAY(SELECT s.asset_id FROM image_output_sources s WHERE s.output_id=o.id) AS sources
+      ARRAY(SELECT CASE WHEN EXISTS(SELECT 1 FROM canvas_references visible WHERE visible.workspace_id=$1 AND visible.project_id=$2 AND visible.asset_id=s.asset_id) THEN s.asset_id ELSE coalesce(source.derived_from,s.asset_id) END FROM image_output_sources s JOIN image_assets source ON source.workspace_id=o.workspace_id AND source.id=s.asset_id WHERE s.output_id=o.id) AS sources
       FROM image_outputs o JOIN image_tasks t ON t.id=o.task_id JOIN image_assets a ON a.id=o.asset_id
       WHERE o.workspace_id=$1 AND t.project_id=$2 AND a.state='ready'
       AND NOT EXISTS(SELECT 1 FROM output_placements r WHERE r.project_id=$2 AND r.output_id=o.id)
@@ -343,9 +358,10 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
     await this.project(p, project);
     const generated = (
       await this.c.query(
-        `SELECT o.asset_id, array_agg(s.asset_id) AS sources FROM canvas_references c
-      JOIN image_outputs o ON o.asset_id=c.asset_id JOIN image_output_sources s ON s.output_id=o.id
-      WHERE c.workspace_id=$1 AND c.project_id=$2 GROUP BY o.asset_id`,
+        `SELECT o.asset_id, array_agg(DISTINCT CASE WHEN EXISTS(SELECT 1 FROM canvas_references visible WHERE visible.workspace_id=$1 AND visible.project_id=$2 AND visible.asset_id=s.asset_id) THEN s.asset_id ELSE coalesce(source.derived_from,s.asset_id) END) AS sources FROM canvas_references c
+      JOIN image_outputs o ON o.workspace_id=c.workspace_id AND o.asset_id=c.asset_id JOIN image_output_sources s ON s.output_id=o.id JOIN image_assets source ON source.workspace_id=c.workspace_id AND source.id=s.asset_id
+      WHERE c.workspace_id=$1 AND c.project_id=$2 GROUP BY o.asset_id
+      UNION ALL SELECT a.id,ARRAY[a.derived_from] FROM canvas_references c JOIN image_assets a ON a.workspace_id=c.workspace_id AND a.id=c.asset_id WHERE c.workspace_id=$1 AND c.project_id=$2 AND a.derived_from IS NOT NULL`,
         [p.workspaceId, project],
       )
     ).rows.map((r) => ({ assetId: r.asset_id, sourceIds: r.sources }));

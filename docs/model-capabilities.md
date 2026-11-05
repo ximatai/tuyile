@@ -4,11 +4,11 @@
 
 ## 已知依据
 
-校准日期：2026-10-30。依据为[OpenAI 图片生成官方文档](https://developers.openai.com/api/docs/guides/image-generation#size-and-quality-options)，记录位于 `packages/contracts/src/image-model-knowledge.ts`。本次已核对文档，没有进行付费试调用。
+能力上限于 2026-11-05 按[OpenAI 图片生成官方文档](https://developers.openai.com/api/docs/guides/image-generation#size-and-quality-options)校准，记录位于 `packages/contracts/src/image-model-knowledge.ts`。实际调用覆盖范围见下文。
 
 | 模型 | 格式 | 尺寸边界 |
 | --- | --- | --- |
-| gpt-image-2.5-sunburst、gpt-image-2.5-flare（含2026-09-08快照） | PNG、JPEG、WebP | 边长不超过3840，边长为16的倍数，总像素655360—8294400，长短边比例不超过3:1 |
+| gpt-image-2.5-sunburst、gpt-image-2.5-flare（含2026-09-08快照），gpt-image-2.6-sunburst、gpt-image-2.6-flare | PNG、JPEG、WebP | 边长不超过3840，边长为16的倍数，总像素655360—8294400，长短边比例不超过3:1 |
 
 当前应用只开放 low / medium / high 三档质量，不因文档存在更高档位而自动扩充产品枚举。已知模型上限独立于管理员声明；管理员可以缩小范围，不能扩大上限。旧配置仍可读取，但执行和用户选项受已知上限约束，新发布需通过校准校验。
 
@@ -16,4 +16,18 @@
 
 ## 推荐配置
 
+支持标注编辑的 2.5/2.6 服务需显式声明 markup，标注使用与首张原图方向校正后尺寸一致的透明 PNG。兼容服务需单独确认标注接口及参数支持。
+
+2.6 Sunburst / Flare 的静态 PNG/JPEG/WebP 输出采用当前尺寸边界与应用三档质量，复杂度独立支持 low / medium / high。省略 complexity 时由服务采用默认值，官方说明 2.6 默认为 high。管理员必须显式声明开放复杂度。能力与请求字段以[图片生成指南](https://developers.openai.com/api/docs/guides/image-generation)及[生成接口](https://developers.openai.com/api/reference/resources/images/methods/generate)为准。SVG 生成与导出需管理员显式开放 SVG 格式并配置作者。GIF 尚未接入。
+
+2.6参考价格使用2026-11-05版本：文字输入5、图片输入8、图片输出30 USD/百万tokens，按当前Images路径保守估算未折扣输入；不据价格目录单独列出的缓存价格推断此次请求获得缓存优惠。旧任务价格快照不重算。
+
 能力设置抽屉的“恢复默认”与新增模型使用同一套系统推荐值，只修改抽屉草稿，应用到待发布配置并发布后才生效。Terra根据[官方模型说明](https://developers.openai.com/api/docs/models/gpt-6.1-terra)默认启用参考图理解；规划推荐输出预算4096 tokens、输入上限32000字符，这些是应用预算，不是模型能力上限。已校准图片模型使用记录内支持的格式、尺寸上限及应用支持的质量档位；未知模型采用保守初值，不能视为已核验。
+
+SVG 仅支持单张无参考图生成，不支持 SVG 编辑或将原件直接作为参考。服务默认作者模式省略 svg 参数；显式作者模式仅使用管理员根据服务权限声明的 model/reasoning，不使用普通对话池作为作者目录。实际作者由响应 svg_usage.model 记录，缺失身份不推测价格。安全解析仅开放静态 SVG 子集，不支持 CSS/style、嵌入图片、脚本和外部资源；不符合子集的原件明确失败。下载可在外部工具处理路径，界面使用私有栅格预览；参考转换保留原件及来源，不调用生成模型。
+
+## 真实服务抽样验证
+
+2026-11-06 使用 1.0.0 的请求适配器和 OpenAI 官方 Images API，以合成输入分别实测 `gpt-image-2.6-sunburst` 和 `gpt-image-2.6-flare`。两款模型均通过单张 PNG 生成、PNG 圈注修改和 SVG 生成。三个场景均请求 1024×1024，画质和复杂度均为 low。圈注验证了指定图形变色及相邻图形保留。SVG 使用显式作者 `gpt-6.1-terra`，推理强度为 low，输出通过静态校验和 Linux 镜像预览渲染。
+
+本次结果覆盖上述服务和参数组合。其他尺寸、画质、复杂度、输出格式、作者配置和兼容服务应按实际需求分别验证。

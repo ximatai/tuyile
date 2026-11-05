@@ -1,4 +1,4 @@
-import { composeCreativePrompt } from "@tuyile/contracts";
+import { imageInput, composeCreativePrompt } from "@tuyile/contracts";
 import { createToolRegistry, type ToolRegistry } from "./tools.js";
 import type { ToolBinding } from "@tuyile/contracts";
 import { ImageOperations } from "./image-operations.js";
@@ -73,6 +73,7 @@ export interface StoredAsset {
   previewBytes: number;
   hash: string | null;
   taskId: string | null;
+  derivedFrom?: string | null;
 }
 export interface AssetBytes {
   original: Uint8Array;
@@ -83,7 +84,8 @@ export interface AssetBytes {
   hash: string;
 }
 export interface ImageFiles {
-  inspect(bytes: Uint8Array): Promise<AssetBytes>;
+  inspect(bytes: Uint8Array, vector?: boolean): Promise<AssetBytes>;
+  rasterize?(bytes: Uint8Array): Promise<Uint8Array>;
   write(key: string, image: AssetBytes): Promise<void>;
   read(asset: StoredAsset, preview?: boolean): Promise<Uint8Array>;
   remove(key: string): Promise<void>;
@@ -134,12 +136,37 @@ export class CreationService extends ImageOperations {
       throw e;
     }
   }
-  async bytes(p: Principal, id: string, preview = false) {
+  async rasterCopy(p: Principal, id: string) {
+    if (!this.files.rasterize)
+      throw new AppError("SVG_CONVERSION_UNAVAILABLE", 503);
+    if (!(await this.files.freeSpace())) throw new AppError("DISK_LOW", 507);
+    const target = await this.store.write({ owners: [p.id] }, (r) =>
+      r.assets.reserveDerivative(p, id),
+    );
+    if (target.state === "ready") return target;
+    try {
+      const source = await this.asset(p, id);
+      const png = await this.files.rasterize(await this.files.read(source));
+      const image = await this.files.inspect(png);
+      await this.files.write(target.fileKey, image);
+      await this.commitAsset(target, image);
+      return this.asset(p, target.id);
+    } catch (error) {
+      if (await this.abandonAsset(target)) {
+        await this.files.remove(target.fileKey);
+        await this.finalizeDelete(target);
+      }
+      throw error;
+    }
+  }
+  async bytes(p: Principal, id: string, preview = false, download = false) {
     const asset = await this.asset(p, id);
     if (!asset.mime) throw new AppError("ASSET_UNAVAILABLE", 404);
+    const safePreview =
+      preview || (asset.mime === "image/svg+xml" && !download);
     return {
-      asset: { ...asset, mime: asset.mime },
-      bytes: await this.files.read(asset, preview),
+      asset: { ...asset, mime: safePreview ? "image/webp" : asset.mime },
+      bytes: await this.files.read(asset, safePreview),
     };
   }
   async delete(p: Principal, id: string) {
@@ -156,6 +183,19 @@ export class ImageCallError extends Error {
   ) {
     super(code);
   }
+}
+/** Finalize once, stripping stored composition metadata before the protocol adapter. */
+export function imageDispatchInput(
+  input: ImageInput,
+  finalPrompt?: string,
+): ImageInput {
+  const parsed = imageInput.parse(input);
+  return {
+    ...parsed,
+    prompt: finalPrompt ?? composeCreativePrompt(input),
+    style: undefined,
+    preserveRequirements: undefined,
+  };
 }
 export interface ImageProvider {
   generate(
@@ -183,6 +223,8 @@ export class ImageExecutor {
           break;
         }
         const refs = await this.repo.references(task);
+        if (refs.some((r) => r.mime === "image/svg+xml"))
+          throw new AppError("SVG_RASTER_REFERENCE_REQUIRED", 409);
         const bytes = await Promise.all(refs.map((r) => this.files.read(r)));
         if (refs.length !== new Set(task.input.referenceIds).size)
           throw new AppError("REFERENCE_UNAVAILABLE", 404);
@@ -201,12 +243,7 @@ export class ImageExecutor {
                 generate: () =>
                   this.provider.generate(
                     dispatched.provider,
-                    {
-                      ...task.input,
-                      prompt:
-                        task.finalPrompt ?? composeCreativePrompt(task.input),
-                      style: undefined,
-                    },
+                    imageDispatchInput(task.input, task.finalPrompt),
                     bytes,
                     signal,
                     (usage) =>
@@ -215,12 +252,29 @@ export class ImageExecutor {
               },
             );
             await this.repo.attemptResult(dispatched.attemptId, "received");
-            const image = await this.files.inspect(response);
+            let image: AssetBytes;
+            try {
+              image = await this.files.inspect(
+                response,
+                task.input.format === "svg",
+              );
+            } catch (error) {
+              // Received bytes are discarded locally; never retry a paid generation for a rendering failure.
+              if (task.input.format === "svg")
+                throw new ImageCallError(
+                  "rejected",
+                  error instanceof AppError ? error.code : "SVG_PREVIEW_FAILED",
+                );
+              throw error;
+            }
             if (
               image.width > task.input.width ||
               image.height > task.input.height
             )
-              throw new ImageCallError("unknown", "OUTPUT_SPEC_MISMATCH");
+              throw new ImageCallError(
+                task.input.format === "svg" ? "rejected" : "unknown",
+                "OUTPUT_SPEC_MISMATCH",
+              );
             const asset = await this.repo.outputIntent(task, ordinal);
             try {
               await this.files.write(asset.fileKey, image);

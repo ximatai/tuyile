@@ -61,7 +61,7 @@ unset ADMIN_USERNAME ADMIN_PASSWORD
 
 ## 数据库与配置
 
-PostgreSQL初始化分别建立migrator和runtime角色：前者拥有tuyile schema，后者只有schema usage和业务表DML，不能改schema或迁移记录。迁移显式执行并校验checksum；API/Worker只检查schema兼容性和运行身份，发现缺失、不兼容或过度授权即拒绝启动。当前迁移1—29，实际版本以[migrations](../migrations)和启动校验为准。
+PostgreSQL初始化分别建立migrator和runtime角色：前者拥有tuyile schema，后者只有schema usage和业务表DML，不能改schema或迁移记录。迁移显式执行并校验checksum；API/Worker只检查schema兼容性和运行身份，发现缺失、不兼容或过度授权即拒绝启动。当前迁移1—30，实际版本以[migrations](../migrations)和启动校验为准。
 
 模型服务通过命名连接管理Base URL和加密Key，从GET /models取得候选，也可手动登记；对话/图片分别发布开放池并指定默认项。目录刷新不自动改动开放范围，能力由管理员声明，已接受任务绑定不可变版本。普通用户只收到允许模型与能力，不收到地址或Key；个人策略按池条目ID与全局开放池取交集。
 
@@ -117,6 +117,8 @@ corepack pnpm test:recovery
 数据库测试必须串行，共用`.codex-temp/database-tests.lock`。reset/seed仅允许loopback55440的`tuyile_test`，不得指向开发或Docker验收库。强制中断留下锁时先确认没有存活测试进程，再处理锁；不能靠删锁绕过并发守卫。
 
 专项浏览器测试通过统一入口运行，例如 `corepack pnpm test:e2e -- tests/e2e/text-canvas.spec.ts --grep "text palette"`，同样执行专用数据库准备与串行锁保护。不能绕过该入口直接并发运行会改写测试库的 Playwright。文案测试分为侧栏、配色/操作条边界、直接创作、Agent 四个独立项目场景；触控板模拟单独运行 `corepack pnpm test:e2e -- tests/e2e/canvas-gestures.spec.ts`。
+
+图片修改专项为 `corepack pnpm test:e2e -- tests/e2e/image-edit.spec.ts`。编译版弹窗、标注和CSP检查先完成build，再运行 `corepack pnpm test:e2e -- --config playwright.built.config.ts`（同时覆盖 SVG 生成、下载及参考转换）；入口使用loopback8794及同一专用测试库，仍须串行，不是生产部署或真实模型验收。
 
 触控板人工验收在本地合成数据环境执行：准备一张图片、短便签和可滚动的长便签，分别在图片、便签标题、正文和编辑框上捏合，确认只缩放画布、浏览器页面比例不变；普通双指滚动在长正文和编辑框内只滚动文字（到边界也不带动页面），短正文与图片上的行为一致。缩放后检查可编辑、保存和刷新恢复。记录浏览器、系统及实际触控板结果；Ctrl+wheel 自动化只能模拟 Chromium 捏合事件，不能标记为真实硬件验收通过。
 
@@ -180,3 +182,7 @@ CI复用这些合成验证，不执行公开部署。远程CI是否通过以其�
 主分支执行完整端到端及容器冒烟。`test:docker` 仍包含真实API/Worker、配额、私有文件和双账号隔离，浏览器只验证构建版登录、图片预览、CSP/nonce、弹窗滚动锁/焦点与确认框。此前的广泛构建版业务回归保留为 `corepack pnpm test:docker:full`。UI共享组件、补丁、部署、构建配置等高风险变更在PR执行扩展容器验收；发布前通过 GitHub Actions 的 Verify → Run workflow 手动执行全量（含扩展容器回归）。此次分层接受少量普通界面边角回归到主分支全量时才发现的风险，不自动部署。
 
 迁移0028补齐token记录字段，不重置额度或任务。升级前历史生图未保存用量，无法从图片或提示词准确反推；历史规划只保留已记录token，不补造缓存和费用。用量/费用回归使用合成响应与Provider，不调用付费模型。
+
+连续创作专项使用独立编译版入口：先 build，再运行 `corepack pnpm test:e2e -- --config playwright.upgrade.config.ts`，覆盖探索、圈注、比较、Agent 保持要求/衍生、SVG 下载和跨项目复用。该 fixture 接管模型目录，只在独立重建的 tuyile_test 中运行；默认完整 e2e 仍保留旧配置接入测试的初始状态，不依赖专项测试先运行。导出的合成 SVG 留在忽略目录，可交外部矢量工具检查结构、颜色和编辑互通。
+
+候选镜像离线运行 `node dist/svg/check.js`（Docker 使用 `--network none`），在目标架构验证最大 SVG、真正终止后恢复、队列边界和 Linux 原生分配/CPU 硬限；此命令不加载应用配置、不连接数据库或调用模型。不能从 macOS/arm64 的通过外推 Linux/amd64。

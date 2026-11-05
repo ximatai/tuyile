@@ -22,6 +22,7 @@ export const asset = (r: AssetRow): StoredAsset => ({
   previewBytes: Number(r.preview_bytes),
   hash: r.hash,
   taskId: r.task_id,
+  derivedFrom: r.derived_from,
 });
 export function policy(r: PolicyRow): ImagePolicy {
   return {
@@ -154,8 +155,16 @@ export class PgCreationContext {
       count: r.input.count,
       settings: {
         ...(r.input.style ? { style: r.input.style } : {}),
+        ...(r.input.editSession ? { editSession: true as const } : {}),
+        ...(r.input.annotation ? { annotation: r.input.annotation } : {}),
+        ...(r.input.preserveRequirements
+          ? { preserveRequirements: r.input.preserveRequirements }
+          : {}),
         width: r.input.width,
         height: r.input.height,
+        ...(r.input.complexity !== undefined
+          ? { complexity: r.input.complexity }
+          : {}),
         quality: r.input.quality,
         format: r.input.format,
         referenceIds: [...new Set([...r.input.referenceIds, ...sources])],

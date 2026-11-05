@@ -33,12 +33,16 @@ export function recommendedModelCapabilities(
       model,
       generation: true,
       editing: !!known,
+      ...(known?.markup ? { markup: true } : {}),
+      ...(known?.complexities.length
+        ? { complexities: [...known.complexities] }
+        : {}),
       maxReferences: known ? 4 : 0,
       maxEdge: known?.maxEdge ?? 1024,
       maxPixels: known?.maxPixels ?? 1048576,
       sizes: known ? [] : ["1024x1024"],
       qualities: known ? [...known.qualities] : ["medium"],
-      formats: known ? [...known.formats] : ["png"],
+      formats: known ? known.formats.filter((f) => f !== "svg") : ["png"],
     },
   };
 }

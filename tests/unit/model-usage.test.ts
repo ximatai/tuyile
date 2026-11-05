@@ -114,3 +114,18 @@ it("uses fixed rates above 272K when a model has no long-context tier", () => {
     referenceCost(usage, referencePrice("gpt-4.1", "planning")),
   ).toBeCloseTo(0.60008);
 });
+
+it("prices explicit 2.6 identities with a new immutable reference version", () => {
+  for (const model of ["gpt-image-2.6-sunburst", "gpt-image-2.6-flare"]) {
+    expect(referencePrice(model, "image")).toMatchObject({
+      version: "openai-standard-2026-11-05",
+      input: 5,
+      imageInput: 8,
+      output: 30,
+    });
+  }
+  expect(referencePrice("gpt-image-2.6-flare-custom", "image")).toBeNull();
+  expect(referencePrice("gpt-image-2.5-flare", "image")?.version).toBe(
+    "openai-standard-2026-11-02",
+  );
+});

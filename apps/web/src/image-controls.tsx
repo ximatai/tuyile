@@ -11,9 +11,11 @@ import {
   Upload,
   Tooltip,
   useControlsDisabled,
+  useConfirm,
 } from "@tuyile/ui";
 import {
   allowedQualities,
+  recommendedSettings,
   modelChoices,
   selectedCapability,
   supportedSizePresets,
@@ -46,6 +48,7 @@ export function ImageControls({
   disabled?: boolean;
 }) {
   const disabled = useControlsDisabled(disabledProp);
+  const confirmRecommendation = useConfirm();
   const [editing, setEditing] = useState<"width" | "height" | null>(null);
   const [sizeChange, setSizeChange] = useState("");
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -109,7 +112,7 @@ export function ImageControls({
       (s) => s.width === value.width && s.height === value.height,
     ),
     qualities = usage ? allowedQualities(usage, cap) : [];
-  const formats = (["png", "jpeg", "webp"] as const).filter((format) =>
+  const formats = (["png", "jpeg", "webp", "svg"] as const).filter((format) =>
     cap?.formats.includes(format),
   );
   const ratios = [...new Set(sizes.map((size) => size.ratio))];
@@ -218,6 +221,26 @@ export function ImageControls({
     <div
       className={`image-controls${compact ? " compact-image-controls" : ""}${count ? "" : " image-controls-single-output"}`}
     >
+      {usage && (
+        <div className="parameter-grid" aria-label="创作配置推荐">
+          {(["explore", "refine"] as const).map((mode) => (
+            <Button
+              key={mode}
+              type="button"
+              disabled={disabled || !cap}
+              onClick={async () => {
+                const next = recommendedSettings(usage, value, mode);
+                const accepted = await confirmRecommendation(
+                  `应用${mode === "explore" ? "快速探索" : "精细创作"}配置？保留当前模型、尺寸和格式，质量设为${{ low: "快速草稿", medium: "标准", high: "高质量" }[next.quality]}，复杂度为${next.complexity ?? "模型默认"}，张数为1。`,
+                );
+                if (accepted && !disabled) onChange(next);
+              }}
+            >
+              {mode === "explore" ? "快速探索" : "精细创作"}
+            </Button>
+          ))}
+        </div>
+      )}
       <div className={compact ? "parameter-grid" : "model-control-row"}>
         <ChoiceField
           label={label(modelLabel)}
@@ -343,11 +366,16 @@ export function ImageControls({
             label={label(labelPrefix ? "张数" : "图片张数")}
             value={String(value.count)}
             disabled={
-              disabled || (usage?.policy.maxCount === 1 && value.count === 1)
+              disabled ||
+              ((usage?.policy.maxCount === 1 || value.format === "svg") &&
+                value.count === 1)
             }
             onValueChange={(count) => patch({ count: Number(count) })}
             options={Array.from(
-              { length: usage?.policy.maxCount ?? 16 },
+              {
+                length:
+                  value.format === "svg" ? 1 : (usage?.policy.maxCount ?? 16),
+              },
               (_, i) => ({ value: String(i + 1), label: `${i + 1} 张` }),
             )}
           />
@@ -370,6 +398,46 @@ export function ImageControls({
           }))}
         />
       </div>
+      {value.format === "svg" && (
+        <p className="muted">
+          SVG
+          矢量创作：无参考图、单张输出；可下载原件到外部工具编辑路径。参考图使用需显式转换栅格副本。
+        </p>
+      )}
+      {(!!cap?.complexities?.length || value.complexity !== undefined) && (
+        <Collapse
+          ghost
+          size="small"
+          items={[
+            {
+              key: "complexity",
+              label: "进阶设置",
+              children: (
+                <ChoiceField
+                  label={label("复杂度")}
+                  value={value.complexity ?? "default"}
+                  disabled={disabled}
+                  options={[
+                    { value: "default", label: "模型默认" },
+                    ...(cap?.complexities ?? []).map((v) => ({
+                      value: v,
+                      label: { low: "低", medium: "中", high: "高" }[v],
+                    })),
+                  ]}
+                  onValueChange={(v) =>
+                    patch({
+                      complexity:
+                        v === "default"
+                          ? undefined
+                          : (v as ImageSettings["complexity"]),
+                    })
+                  }
+                />
+              ),
+            },
+          ]}
+        />
+      )}
       {sizeIssue && (!advancedOpen || !!cap?.sizes.length) && (
         <p className="size-field-error" role="status">
           {sizeIssue}

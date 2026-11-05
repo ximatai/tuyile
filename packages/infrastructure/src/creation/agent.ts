@@ -11,6 +11,7 @@ import {
 } from "@tuyile/core";
 import {
   agentPlan,
+  identifyPlan,
   type AgentPlan,
   type Principal,
   type PlanningRequest,
@@ -130,13 +131,14 @@ export class PgAgentRepository
         id: row.id,
         jobId: row.job_id,
         version: row.version,
-        document: agentPlan.parse(row.document),
+        document: identifyPlan(agentPlan.parse(row.document), row.id),
         confirmed: !!row.confirmed_at,
         taskIds,
       },
       projectId: row.project_id,
       skillId: row.skill_id,
       providerId: row.provider_id,
+      preserveRequirements: row.job_input?.preserveRequirements,
       textSources: row.job_input?.textSources ?? [],
     };
   }
@@ -364,7 +366,7 @@ export class PgAgentRepository
       if (
         (
           await this.c.query(
-            "SELECT id FROM image_assets WHERE workspace_id=$1 AND id=ANY($2::uuid[]) AND state='ready' ORDER BY id FOR UPDATE",
+            "SELECT id FROM image_assets WHERE workspace_id=$1 AND id=ANY($2::uuid[]) AND state='ready' AND mime <> 'image/svg+xml' ORDER BY id FOR UPDATE",
             [row.workspace_id, ids],
           )
         ).rowCount !== ids.length
@@ -407,6 +409,7 @@ export class PgAgentRepository
   private async jobDto(row: any, loadedPlans?: any[]): Promise<PlanningJob> {
     const plans = loadedPlans ?? (await this.planRows([row.id]));
     return {
+      preserveRequirements: row.input?.preserveRequirements,
       textSources: row.input?.textSources ?? [],
       id: row.id,
       projectId: row.project_id,
@@ -421,7 +424,7 @@ export class PgAgentRepository
         id: r.id,
         jobId: r.job_id,
         version: r.version,
-        document: agentPlan.parse(r.document),
+        document: identifyPlan(agentPlan.parse(r.document), r.id),
         confirmed: !!r.confirmed_at,
         taskIds: r.task_ids,
       })),
@@ -507,7 +510,7 @@ export class PgAgentRepository
     if (
       (
         await this.c.query(
-          "SELECT id FROM image_assets WHERE workspace_id=$1 AND id=ANY($2::uuid[]) AND state='ready' ORDER BY id FOR UPDATE",
+          "SELECT id FROM image_assets WHERE workspace_id=$1 AND id=ANY($2::uuid[]) AND state='ready' AND mime <> 'image/svg+xml' ORDER BY id FOR UPDATE",
           [p.workspaceId, ids],
         )
       ).rowCount !== ids.length
@@ -600,13 +603,14 @@ export class PgAgentRepository
     ).rows[0];
     if (old && old.input_hash !== hash(input.document))
       throw new AppError("IDEMPOTENCY_CONFLICT", 409);
+    if (old) return (await this.plan(p, old.id)).plan;
     const ids = [
       ...new Set(input.document.steps.flatMap((s) => s.referenceIds)),
     ].sort();
     if (
       (
         await this.c.query(
-          "SELECT id FROM image_assets WHERE workspace_id=$1 AND id=ANY($2::uuid[]) AND state='ready' ORDER BY id FOR UPDATE",
+          "SELECT id FROM image_assets WHERE workspace_id=$1 AND id=ANY($2::uuid[]) AND state='ready' AND mime <> 'image/svg+xml' ORDER BY id FOR UPDATE",
           [p.workspaceId, ids],
         )
       ).rowCount !== ids.length
@@ -634,7 +638,7 @@ export class PgAgentRepository
       id: row.id,
       jobId: job,
       version: row.version,
-      document: agentPlan.parse(row.document),
+      document: identifyPlan(agentPlan.parse(row.document), row.id),
       confirmed: !!row.confirmed_at,
       taskIds: [],
     };

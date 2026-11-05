@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { textNodeIds } from "./creation.js";
+import { imageAnnotation } from "./annotation.js";
+import { imageInput, textNodeIds } from "./creation.js";
 // Drafts accept incomplete input; execution applies the stricter creation schemas.
 const text = (max: number) =>
   z
@@ -12,8 +13,9 @@ export const draftSettings = z
     modelKey: text(200),
     width: z.number().int().min(0).max(8192),
     height: z.number().int().min(0).max(8192),
+    complexity: z.enum(["low", "medium", "high"]).optional(),
     quality: z.enum(["low", "medium", "high"]),
-    format: z.enum(["png", "jpeg", "webp"]),
+    format: z.enum(["png", "jpeg", "webp", "svg"]),
     count: z.number().int().min(1).max(16),
   })
   .strict();
@@ -29,13 +31,31 @@ export const projectDraftDocument = z
     schemaVersion: z.literal(1).default(1),
     direct: draftInput,
     agent: draftInput
-      .extend({ conversationModel: text(200), skillId: text(200) })
+      .extend({
+        conversationModel: text(200),
+        skillId: text(200),
+        preserveRequirements: text(2000).optional(),
+      })
       .strict(),
     referenceIds: z
       .array(z.uuid())
       .max(4)
       .refine((ids) => new Set(ids).size === ids.length),
     textNodeIds: textNodeIds.optional(),
+    edit: z
+      .object({
+        baseAssetId: z.uuid(),
+        prompt: text(12000),
+        style: draftStyle.optional(),
+        preserveRequirements: text(2000).optional(),
+        textNodeIds: textNodeIds.optional(),
+        settings: draftSettings,
+        annotation: imageAnnotation,
+        pendingInput: imageInput.optional(),
+        resultTaskId: z.uuid().optional(),
+      })
+      .strict()
+      .optional(),
     mode: z.enum(["direct", "agent"]),
   })
   .strict();

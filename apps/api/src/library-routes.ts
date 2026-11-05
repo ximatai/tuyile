@@ -149,15 +149,17 @@ export function libraryRoutes(
     const files: Record<string, Uint8Array> = {};
     let size = 0;
     for (const id of ids) {
-      const image = await creation.bytes(p, id);
+      const image = await creation.bytes(p, id, false, true);
       size += image.bytes.length;
       if (size > 50 * 1024 * 1024) throw new AppError("EXPORT_LIMIT", 413);
       const extension =
-        image.asset.mime === "image/jpeg"
-          ? "jpg"
-          : image.asset.mime === "image/webp"
-            ? "webp"
-            : "png";
+        image.asset.mime === "image/svg+xml"
+          ? "svg"
+          : image.asset.mime === "image/jpeg"
+            ? "jpg"
+            : image.asset.mime === "image/webp"
+              ? "webp"
+              : "png";
       files[`${id}.${extension}`] = image.bytes;
     }
     c.header("Content-Type", "application/zip");

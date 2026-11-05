@@ -1,3 +1,5 @@
+import { execFileSync } from "node:child_process";
+import { imageCapabilityDefaults } from "@tuyile/contracts";
 import { chmod, writeFile } from "node:fs/promises";
 import { randomBytes, randomUUID } from "node:crypto";
 import assert from "node:assert/strict";
@@ -60,6 +62,13 @@ await request("/image-admin/providers", {
   baseUrl: "",
   models: ["test-image"],
   preserveKey: false,
+  capabilities: [
+    {
+      ...imageCapabilityDefaults("test-image"),
+      formats: ["png", "svg"],
+      svgAuthor: { mode: "service-default" },
+    },
+  ],
 });
 const policy = await request(`/image-admin/policies/${session.user.id}`);
 await request(`/image-admin/policies/${session.user.id}`, {
@@ -108,6 +117,94 @@ assert.equal(
   (await fetch(`${base}/api/images/assets/${result.outputs[0].id}/original`))
     .status,
   401,
+);
+// Exercise the actual compiled Linux SVG subprocess, private preview and API conversion.
+const vectorProject = await request("/projects", {
+  name: "Docker synthetic SVG acceptance",
+});
+const vectorTask = await request("/images/tasks", {
+  projectId: vectorProject.id,
+  requestKey: randomUUID(),
+  prompt: "Synthetic SVG",
+  model: "test-image",
+  width: 1024,
+  height: 1024,
+  quality: "medium",
+  format: "svg",
+  count: 1,
+  referenceIds: [],
+});
+let vector: any;
+for (let n = 0; n < 100; n++) {
+  vector = await request(`/images/tasks/${vectorTask.id}`);
+  if (!["queued", "running"].includes(vector.state)) break;
+  await new Promise((resolve) => setTimeout(resolve, 100));
+}
+assert.equal(vector.state, "succeeded");
+const vectorId = vector.outputs[0].id;
+const vectorPreview = await fetch(
+  `${base}/api/images/assets/${vectorId}/original`,
+  { headers: { Cookie: cookie } },
+);
+assert.equal(vectorPreview.headers.get("content-type"), "image/webp");
+const vectorOriginal = await fetch(
+  `${base}/api/images/assets/${vectorId}/download`,
+  { headers: { Cookie: cookie } },
+);
+assert.match(await vectorOriginal.text(), /<svg/);
+const raster = await request(`/images/assets/${vectorId}/raster-copy`, {});
+assert.equal(raster.mime, "image/png");
+assert.equal(raster.derivedFrom, vectorId);
+assert.equal(
+  (await request(`/images/assets/${vectorId}/raster-copy`, {})).id,
+  raster.id,
+);
+const limited = execFileSync(
+  "docker",
+  [
+    "compose",
+    "--env-file",
+    ".env.docker",
+    "-p",
+    "tuyile-docker",
+    "exec",
+    "-T",
+    "worker",
+    "sh",
+    "-c",
+    `ulimit -c 0
+ulimit -d 196608
+exec node --jitless --max-old-space-size=64 -e 'try {Buffer.alloc(384*1024*1024).fill(1);process.exitCode=1;} catch {process.stdout.write("NATIVE_LIMIT_OK");}'`,
+  ],
+  { encoding: "utf8", timeout: 15000 },
+);
+assert.equal(limited, "NATIVE_LIMIT_OK");
+const cpuLimited = execFileSync(
+  "docker",
+  [
+    "compose",
+    "--env-file",
+    ".env.docker",
+    "-p",
+    "tuyile-docker",
+    "exec",
+    "-T",
+    "worker",
+    "sh",
+    "-c",
+    `ulimit -c 0
+ulimit -d 196608
+ulimit -t 1
+node --jitless --max-old-space-size=64 -e 'while(true){}' 2>/dev/null
+status=$?
+[ "$status" -eq 137 ] || [ "$status" -eq 152 ] || exit 1
+printf CPU_LIMIT_OK`,
+  ],
+  { encoding: "utf8", timeout: 15000 },
+);
+assert.equal(cpuLimited, "CPU_LIMIT_OK");
+console.log(
+  "Docker SVG generation, safe preview, original export, idempotent raster copy and Linux native/CPU hard limits passed",
 );
 const member = await request("/admin/users", {
     username: `test_${randomBytes(5).toString("hex")}`,

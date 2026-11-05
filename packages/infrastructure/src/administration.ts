@@ -69,9 +69,9 @@ class PgAdministrationRepository
       UNION ALL
       SELECT a.created_at,j.user_id,a.model_usage,a.reference_usd FROM planning_attempts a JOIN planning_jobs j ON j.id=a.job_id
     ), scoped AS (SELECT * FROM calls WHERE ($1::date IS NULL OR created_at >= $1::date::timestamp AT TIME ZONE 'Asia/Shanghai') AND created_at < ($2::date+1)::timestamp AT TIME ZONE 'Asia/Shanghai')`;
-    const totals = `count(s.created_at) calls,coalesce(sum((model_usage->>'inputTokens')::bigint),0) input,coalesce(sum((model_usage->>'outputTokens')::bigint),0) output,coalesce(sum((model_usage->>'cachedInputTokens')::bigint),0) cached,
-      count(*) FILTER(WHERE s.created_at IS NOT NULL AND (model_usage->>'inputTokens' IS NULL OR model_usage->>'outputTokens' IS NULL)) unknown,
-      count(*) FILTER(WHERE s.created_at IS NOT NULL AND model_usage->>'cachedInputTokens' IS NULL) unknown_cached,
+    const totals = `count(s.created_at) calls,coalesce(sum(coalesce((model_usage->>'inputTokens')::bigint,0) + coalesce((model_usage->'svg'->>'inputTokens')::bigint,0)),0) input,coalesce(sum(coalesce((model_usage->>'outputTokens')::bigint,0) + coalesce((model_usage->'svg'->>'outputTokens')::bigint,0)),0) output,coalesce(sum((model_usage->>'cachedInputTokens')::bigint),0) cached,
+      count(*) FILTER(WHERE s.created_at IS NOT NULL AND (model_usage->>'inputTokens' IS NULL OR model_usage->>'outputTokens' IS NULL OR (model_usage ? 'svg' AND (model_usage->'svg'->>'inputTokens' IS NULL OR model_usage->'svg'->>'outputTokens' IS NULL)))) unknown,
+      count(*) FILTER(WHERE s.created_at IS NOT NULL AND (model_usage->>'cachedInputTokens' IS NULL OR model_usage ? 'svg')) unknown_cached,
       count(reference_usd) priced,sum(reference_usd) usd`;
     const dto = (r: any) => ({
       calls: Number(r.calls),

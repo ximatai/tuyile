@@ -94,6 +94,7 @@ type ImageNode = Node<
     rename: (label: string) => void;
     assetId?: string;
     reference?: (id: string) => void;
+    edit?: (id: string) => void;
     reuse?: () => void;
     info?: () => void;
   },
@@ -230,7 +231,11 @@ function ImageCard({
   const canvasHeight = useStore((state) => state.height);
   const compact = width * viewport.zoom < 160 || height * viewport.zoom < 48;
   const actionCount =
-    2 + Number(!!data.reference) + Number(!!data.reuse) + Number(!!data.info);
+    2 +
+    Number(!!data.edit) +
+    Number(!!data.reference) +
+    Number(!!data.reuse) +
+    Number(!!data.info);
   const toolbarWidth = compact ? 28 : actionCount * 28 + (actionCount - 1) * 4;
   const {
     onScreen,
@@ -285,6 +290,7 @@ function ImageCard({
         position={Position.Bottom}
         align="end"
         offset={toolbarOffset}
+        data-side={toolbarOffset < 0 ? "above" : "below"}
         style={{ marginLeft: horizontalInset }}
         className={`canvas-image-actions nodrag nopan${actions.visible || (compact && menuOpen) ? " is-visible" : ""}`}
         {...actions.events}
@@ -320,6 +326,15 @@ function ImageCard({
                     </a>
                   ),
                 },
+                ...(data.edit
+                  ? [
+                      {
+                        key: "edit",
+                        icon: <SlidersHorizontal size={16} />,
+                        label: "修改图片",
+                      },
+                    ]
+                  : []),
                 ...(data.reference
                   ? [
                       {
@@ -345,6 +360,7 @@ function ImageCard({
                 if (key === "preview") setPreview(true);
                 if (key === "reference") data.reference?.(data.assetId!);
                 if (key === "reuse") data.reuse?.();
+                if (key === "edit") data.edit?.(data.assetId!);
               },
             }}
           >
@@ -395,6 +411,17 @@ function ImageCard({
                   onClick={() => data.reference?.(data.assetId!)}
                 >
                   <ImagePlus size={16} aria-hidden="true" />
+                </Button>
+              </Tooltip>
+            )}
+            {data.edit && (
+              <Tooltip title="修改图片">
+                <Button
+                  type="button"
+                  aria-label="修改图片"
+                  onClick={() => data.edit?.(data.assetId!)}
+                >
+                  <SlidersHorizontal size={16} />
                 </Button>
               </Tooltip>
             )}
@@ -570,6 +597,7 @@ function TextCard({
         position={Position.Bottom}
         align="end"
         offset={placement.offset}
+        data-side={placement.offset < 0 ? "above" : "below"}
         style={{ marginLeft: placement.horizontalInset }}
         className={`canvas-image-actions nodrag nopan${actions.visible ? " is-visible" : ""}`}
         {...actions.events}
@@ -594,6 +622,7 @@ const nodeTypes = { image: ImageCard, group: GroupCard, text: TextCard };
 export function CanvasEditor({
   projectId,
   onReference,
+  onEdit,
   onSelectionChange,
   onTextReference,
   onReuse,
@@ -605,6 +634,7 @@ export function CanvasEditor({
   tasks: ImageTask[];
   projectId: string;
   onReference: (id: string) => void;
+  onEdit?: (id: string) => void;
   onTextReference?: (id: string) => void;
   onSelectionChange?: (assets: { id: string; name: string }[]) => void;
   onReuse?: (task: ImageTask) => void;
@@ -640,6 +670,7 @@ export function CanvasEditor({
       tasks={tasks}
       projectId={projectId}
       onReference={onReference}
+      onEdit={onEdit}
       onSelectionChange={onSelectionChange}
       onTextReference={onTextReference}
       onReuse={onReuse}
@@ -655,6 +686,7 @@ function CanvasView({
   store,
   projectId,
   onReference,
+  onEdit,
   onSelectionChange,
   onTextReference,
   onReuse,
@@ -667,6 +699,7 @@ function CanvasView({
   store: EditorStore;
   projectId: string;
   onReference: (id: string) => void;
+  onEdit?: (id: string) => void;
   onTextReference?: (id: string) => void;
   onSelectionChange?: (assets: { id: string; name: string }[]) => void;
   onReuse?: (task: ImageTask) => void;
@@ -813,6 +846,7 @@ function CanvasView({
                 : undefined,
               assetId: n.assetId,
               reference: onReference,
+              edit: onEdit,
               reuse:
                 onReuse &&
                 tasks.some(
@@ -840,6 +874,7 @@ function CanvasView({
       textRefs.ids,
       snap.selected,
       onReference,
+      onEdit,
       onTextReference,
       onReuse,
       tasks,

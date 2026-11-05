@@ -97,8 +97,7 @@ export function ProjectDraftBoundary({
 }) {
   const state = useSessionState(),
     store = state.projectDraft(projectId),
-    snapshot = useSyncExternalStore(store.subscribe, store.get),
-    confirm = useConfirm();
+    snapshot = useSyncExternalStore(store.subscribe, store.get);
   useEffect(() => {
     void store
       .load()
@@ -113,7 +112,32 @@ export function ProjectDraftBoundary({
     document.addEventListener("visibilitychange", hide);
     return () => document.removeEventListener("visibilitychange", hide);
   }, [store]);
+  return (
+    <Context.Provider value={store}>
+      <ProjectDraftProblem store={store} />
+      {snapshot.ready ? (
+        <DraftEpoch key={snapshot.epoch}>{children}</DraftEpoch>
+      ) : !snapshot.error ? (
+        <LoadingState variant="workspace" />
+      ) : null}
+    </Context.Provider>
+  );
+}
+function DraftEpoch({ children }: { children: React.ReactNode }) {
+  return children;
+}
+
+export function ProjectDraftProblem({
+  store,
+  disabled = false,
+}: {
+  store: ProjectDraftStore;
+  disabled?: boolean;
+}) {
+  const snapshot = useSyncExternalStore(store.subscribe, store.get),
+    confirm = useConfirm();
   async function resolve(overwrite: boolean) {
+    if (disabled) return;
     if (
       !(await confirm(
         overwrite
@@ -130,7 +154,7 @@ export function ProjectDraftBoundary({
     }
   }
   return (
-    <Context.Provider value={store}>
+    <>
       {snapshot.error && (
         <Notice error>
           <span>
@@ -139,17 +163,25 @@ export function ProjectDraftBoundary({
           <div className="actions">
             {snapshot.conflict ? (
               <>
-                <Button type="button" onClick={() => void resolve(false)}>
+                <Button
+                  type="button"
+                  disabled={disabled || snapshot.saving}
+                  onClick={() => void resolve(false)}
+                >
                   加载最新草稿
                 </Button>
-                <Button type="button" onClick={() => void resolve(true)}>
+                <Button
+                  type="button"
+                  disabled={disabled || snapshot.saving}
+                  onClick={() => void resolve(true)}
+                >
                   保留当前版本
                 </Button>
               </>
             ) : (
               <Button
                 type="button"
-                disabled={snapshot.saving}
+                disabled={disabled || snapshot.saving}
                 onClick={() =>
                   void (
                     snapshot.ready
@@ -164,14 +196,6 @@ export function ProjectDraftBoundary({
           </div>
         </Notice>
       )}
-      {snapshot.ready ? (
-        <DraftEpoch key={snapshot.epoch}>{children}</DraftEpoch>
-      ) : !snapshot.error ? (
-        <LoadingState variant="workspace" />
-      ) : null}
-    </Context.Provider>
+    </>
   );
-}
-function DraftEpoch({ children }: { children: React.ReactNode }) {
-  return children;
 }

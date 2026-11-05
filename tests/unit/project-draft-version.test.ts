@@ -34,3 +34,15 @@ it("rejects unknown versions and unexpected fields instead of dropping data", ()
     }).success,
   ).toBe(false);
 });
+
+it("preserves optional complexity and keeps legacy drafts unchanged", () => {
+  const legacy = emptyProjectDraft();
+  expect(projectDraftDocument.parse(legacy).direct.settings).not.toHaveProperty(
+    "complexity",
+  );
+  legacy.direct.settings.complexity = "low";
+  legacy.agent.settings.complexity = "high";
+  const saved = projectDraftDocument.parse(legacy);
+  expect(saved.direct.settings.complexity).toBe("low");
+  expect(saved.agent.settings.complexity).toBe("high");
+});

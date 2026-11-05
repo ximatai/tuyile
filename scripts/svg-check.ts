@@ -1,0 +1,80 @@
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { rasterizeSvg } from "../packages/infrastructure/src/svg-render.js";
+
+// Offline target-image acceptance. No config, credentials, database or model call.
+const svg = Buffer.from(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="3840" height="2160"><rect width="3840" height="2160" fill="#0062b0"/><circle cx="1920" cy="1080" r="512" fill="#ffffff"/><text x="40" y="160" font-family="Noto Sans CJK SC" font-size="96" fill="#ffffff">图一乐 SVG 验收</text></svg>',
+);
+async function normal() {
+  const png = Buffer.from(await rasterizeSvg(svg));
+  assert.equal(png.toString("ascii", 1, 4), "PNG");
+  assert.equal(png.readUInt32BE(16), 3840);
+  assert.equal(png.readUInt32BE(20), 2160);
+}
+await normal();
+await assert.rejects(rasterizeSvg(svg, { wallMs: 1 }), {
+  code: "SVG_PREVIEW_FAILED",
+});
+await normal();
+const concurrent = await Promise.allSettled([
+  rasterizeSvg(svg),
+  rasterizeSvg(svg),
+  rasterizeSvg(svg),
+]);
+assert.equal(concurrent.filter((r) => r.status === "fulfilled").length, 2);
+assert.ok(
+  concurrent.some(
+    (r) => r.status === "rejected" && r.reason.code === "SVG_RENDERER_BUSY",
+  ),
+);
+if (process.platform === "linux") {
+  assert.match(
+    execFileSync("fc-match", ["-f", "%{family}", "Noto Sans CJK SC"], {
+      encoding: "utf8",
+    }),
+    /Noto Sans CJK SC/,
+  );
+  const native = execFileSync(
+    "/bin/sh",
+    [
+      "-c",
+      `ulimit -c 0
+ulimit -d 196608
+exec "$1" --jitless --max-old-space-size=64 -e 'try {Buffer.alloc(384*1024*1024).fill(1);process.exitCode=1;} catch {process.stdout.write("NATIVE_LIMIT_OK");}'`,
+      "svg-check",
+      process.execPath,
+    ],
+    { encoding: "utf8", timeout: 15000 },
+  );
+  assert.equal(native, "NATIVE_LIMIT_OK");
+  const cpu = execFileSync(
+    "/bin/sh",
+    [
+      "-c",
+      `ulimit -c 0
+ulimit -d 196608
+ulimit -t 1
+"$1" --jitless --max-old-space-size=64 -e 'while(true){}' 2>/dev/null
+status=$?
+[ "$status" -eq 137 ] || [ "$status" -eq 152 ] || exit 1
+printf CPU_LIMIT_OK`,
+      "svg-check",
+      process.execPath,
+    ],
+    { encoding: "utf8", timeout: 15000 },
+  );
+  assert.equal(cpu, "CPU_LIMIT_OK");
+}
+console.log(
+  JSON.stringify({
+    svgCheck: "passed",
+    platform: process.platform,
+    architecture: process.arch,
+    maximumResolution: [3840, 2160],
+    killAndRecovery: true,
+    boundedAdmission: true,
+    linuxNativeAndCpuLimits: process.platform === "linux",
+    cjkFontAvailable: process.platform === "linux",
+  }),
+);

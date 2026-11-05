@@ -1,3 +1,5 @@
+import packageMetadata from "../../../package.json" with { type: "json" };
+const { version } = packageMetadata;
 import { modelCatalogRoutes } from "./model-catalog-routes.js";
 import { administrationRoutes } from "./administration-routes.js";
 import type { AdministrationService } from "@tuyile/core";
@@ -87,19 +89,21 @@ export function createApp(
     bodyLimit({
       maxSize: /^\/api\/projects\/[^/]+\/canvas(?:\/copy)?$/.test(c.req.path)
         ? CANVAS_REQUEST_MAX_BYTES
-        : c.req.path.startsWith("/api/model-admin/") ||
-            c.req.path.startsWith("/api/agent/") ||
-            /^\/api\/projects\/[^/]+\/(canvas|draft)/.test(c.req.path)
-          ? 1024 * 1024
-          : c.req.path === "/api/images/uploads"
-            ? 20 * 1024 * 1024
-            : c.req.path.startsWith("/api/images/") ||
-                c.req.path.startsWith("/api/image-admin/") ||
-                c.req.path.startsWith("/api/library/") ||
-                c.req.path === "/api/admin/prompts" ||
-                c.req.path === "/api/admin/demo-template"
-              ? 65536
-              : 16384,
+        : c.req.path === "/api/images/tasks"
+          ? 256 * 1024
+          : c.req.path.startsWith("/api/model-admin/") ||
+              c.req.path.startsWith("/api/agent/") ||
+              /^\/api\/projects\/[^/]+\/(canvas|draft)/.test(c.req.path)
+            ? 1024 * 1024
+            : c.req.path === "/api/images/uploads"
+              ? 20 * 1024 * 1024
+              : c.req.path.startsWith("/api/images/") ||
+                  c.req.path.startsWith("/api/image-admin/") ||
+                  c.req.path.startsWith("/api/library/") ||
+                  c.req.path === "/api/admin/prompts" ||
+                  c.req.path === "/api/admin/demo-template"
+                ? 65536
+                : 16384,
       onError: (c) =>
         c.json(
           { error: { code: "BODY_TOO_LARGE", requestId: c.get("requestId") } },
@@ -127,14 +131,14 @@ export function createApp(
     }
     await next();
   });
-  app.get("/api/health", (c) => c.json({ status: "ok" }));
+  app.get("/api/health", (c) => c.json({ status: "ok", version }));
   app.get("/api/ready", async (c) => {
     try {
       await ready();
     } catch {
       throw new AppError("NOT_READY", 503);
     }
-    return c.json({ status: "ready" });
+    return c.json({ status: "ready", version });
   });
   app.use("/api/auth/*", async (c, next) => {
     if (

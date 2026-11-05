@@ -1,5 +1,19 @@
 /** Only bounded numeric usage is retained; provider response bodies never enter the ledger. */
 export interface ModelUsage {
+  svg?: {
+    inputTokens: number | null;
+    outputTokens: number | null;
+    cachedInputTokens: number | null;
+    textInputTokens: number | null;
+    imageInputTokens: number | null;
+    model: string | null;
+    requested: unknown;
+    reasoningTokens: number | null;
+    totalTokens: number | null;
+    priceSnapshot: ReferencePrice | null;
+    referenceUsd: number | null;
+    costBasis: string;
+  };
   inputTokens: number | null;
   outputTokens: number | null;
   cachedInputTokens: number | null;
@@ -78,6 +92,8 @@ export function referencePrice(
   if (kind === "image") {
     if (
       ![
+        "gpt-image-2.6-sunburst",
+        "gpt-image-2.6-flare",
         "gpt-image-2",
         "gpt-image-2.5-sunburst",
         "gpt-image-2.5-flare",
@@ -86,7 +102,16 @@ export function referencePrice(
       ].includes(model)
     )
       return null;
-    return { ...base, input: 5, imageInput: 8, output: 30, cached: 0 };
+    return {
+      ...base,
+      ...(model.startsWith("gpt-image-2.6-")
+        ? { version: "openai-standard-2026-11-05" }
+        : {}),
+      input: 5,
+      imageInput: 8,
+      output: 30,
+      cached: 0,
+    };
   }
   const p = Object.hasOwn(text, model) ? text[model] : undefined;
   return p
@@ -136,4 +161,51 @@ export function referenceCost(
       usage.cachedInputTokens * rates[2]) /
     1e6;
   return Number.isFinite(cost) && cost >= 0 ? cost : null;
+}
+
+export function withSvgUsage(
+  usage: ModelUsage,
+  raw: unknown,
+  requested: unknown,
+): ModelUsage {
+  const u =
+    raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const model =
+    typeof u.model === "string" && /^[a-zA-Z0-9._-]{1,120}$/.test(u.model)
+      ? u.model
+      : null;
+  const tokens: ModelUsage = {
+    inputTokens: count(u.input_tokens),
+    outputTokens: count(u.output_tokens),
+    cachedInputTokens: null,
+    textInputTokens: count(u.input_tokens),
+    imageInputTokens: 0,
+  };
+  const price = model ? referencePrice(model, "planning") : null;
+  // svg_usage does not expose cached input: use the conservative full input rate, explicitly recorded.
+  const usd =
+    price && tokens.inputTokens !== null && tokens.outputTokens !== null
+      ? (tokens.inputTokens *
+          (tokens.inputTokens > 272000 && price.long
+            ? price.long[0]
+            : price.input) +
+          tokens.outputTokens *
+            (tokens.inputTokens > 272000 && price.long
+              ? price.long[1]
+              : price.output)) /
+        1e6
+      : null;
+  return {
+    ...usage,
+    svg: {
+      ...tokens,
+      model,
+      requested,
+      reasoningTokens: count(u.reasoning_tokens),
+      totalTokens: count(u.total_tokens),
+      priceSnapshot: price,
+      referenceUsd: usd,
+      costBasis: "uncached-conservative",
+    },
+  };
 }

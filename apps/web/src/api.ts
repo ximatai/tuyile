@@ -1,5 +1,15 @@
 import type { ErrorResponse } from "@tuyile/contracts";
 const messages: Record<string, string> = {
+  SVG_INVALID_OR_UNSUPPORTED:
+    "SVG 未通过静态格式或复杂度校验，未保存作品；已收到内容已丢弃，不会自动再次生成。",
+  SVG_PREVIEW_FAILED:
+    "SVG 本地预览处理失败，未保存作品；已收到内容已丢弃，不会自动再次生成。",
+  SVG_RENDERER_BUSY: "SVG 本地处理繁忙，本次未保存作品，不会自动再次生成。",
+  SVG_RASTER_REFERENCE_REQUIRED:
+    "SVG 不能直接用于图片编辑，请先显式转换为 PNG 参考副本。",
+  SVG_CONVERSION_PENDING:
+    "同一 SVG 正在转换，请稍后重试找回副本；系统不会重复创建。",
+  SVG_SOURCE_REQUIRED: "仅 SVG 原件可创建栅格参考副本。",
   DRAFT_VERSION_UNSUPPORTED: "草稿由更新版本创建，请升级应用后再打开。",
   DRAFT_CONFLICT: "草稿已在其他页面更新，当前输入已保留。",
   STYLE_CONFLICT: "风格已被修改，请重新打开后编辑。当前输入已保留。",
@@ -46,6 +56,8 @@ const messages: Record<string, string> = {
 
   CANVAS_CONFLICT:
     "画布已在其他页面修改。本地内容已保留，请重新加载或另存副本。",
+  PLAN_SELECTION_INVALID:
+    "请检查所选步骤，为未执行的前置步骤选择已有作品，或一并选择生成该步骤。",
   MODEL_CAPABILITY_UNSUPPORTED:
     "此模型不支持当前尺寸、格式、质量或参考图，请调整参数。",
   TOOL_UNAVAILABLE: "所需工具已停用或撤销，不能提交新的创作。",
