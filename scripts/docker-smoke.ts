@@ -159,52 +159,31 @@ assert.equal(
   (await request(`/images/assets/${vectorId}/raster-copy`, {})).id,
   raster.id,
 );
-const limited = execFileSync(
-  "docker",
-  [
-    "compose",
-    "--env-file",
-    ".env.docker",
-    "-p",
-    "tuyile-docker",
-    "exec",
-    "-T",
-    "worker",
-    "sh",
-    "-c",
-    `ulimit -c 0
-ulimit -d 196608
-exec node --jitless --max-old-space-size=64 -e 'try {Buffer.alloc(384*1024*1024).fill(1);process.exitCode=1;} catch {process.stdout.write("NATIVE_LIMIT_OK");}'`,
-  ],
-  { encoding: "utf8", timeout: 15000 },
+const rendererCheck = JSON.parse(
+  execFileSync(
+    "docker",
+    [
+      "compose",
+      "--env-file",
+      ".env.docker",
+      "-p",
+      "tuyile-docker",
+      "exec",
+      "-T",
+      "worker",
+      "node",
+      "dist/svg/check.js",
+      "--linux-limits-only",
+    ],
+    { encoding: "utf8", timeout: 45000 },
+  ),
 );
-assert.equal(limited, "NATIVE_LIMIT_OK");
-const cpuLimited = execFileSync(
-  "docker",
-  [
-    "compose",
-    "--env-file",
-    ".env.docker",
-    "-p",
-    "tuyile-docker",
-    "exec",
-    "-T",
-    "worker",
-    "sh",
-    "-c",
-    `ulimit -c 0
-ulimit -d 196608
-ulimit -t 1
-node --jitless --max-old-space-size=64 -e 'while(true){}' 2>/dev/null
-status=$?
-[ "$status" -eq 137 ] || [ "$status" -eq 152 ] || exit 1
-printf CPU_LIMIT_OK`,
-  ],
-  { encoding: "utf8", timeout: 15000 },
-);
-assert.equal(cpuLimited, "CPU_LIMIT_OK");
+assert.equal(rendererCheck.svgCheck, "passed");
+assert.equal(rendererCheck.mode, "linux-limits");
+assert.equal(rendererCheck.platform, "linux");
+assert.equal(rendererCheck.linuxNativeAndCpuLimits, true);
 console.log(
-  "Docker SVG generation, safe preview, original export, idempotent raster copy and Linux native/CPU hard limits passed",
+  "Docker SVG generation, safe preview, original export, idempotent raster copy and Linux renderer checks passed",
 );
 const member = await request("/admin/users", {
     username: `test_${randomBytes(5).toString("hex")}`,
