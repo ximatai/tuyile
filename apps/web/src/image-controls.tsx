@@ -11,9 +11,11 @@ import {
   Upload,
   Tooltip,
   useControlsDisabled,
+  useConfirm,
 } from "@tuyile/ui";
 import {
   allowedQualities,
+  recommendedSettings,
   modelChoices,
   selectedCapability,
   supportedSizePresets,
@@ -46,6 +48,7 @@ export function ImageControls({
   disabled?: boolean;
 }) {
   const disabled = useControlsDisabled(disabledProp);
+  const confirmRecommendation = useConfirm();
   const [editing, setEditing] = useState<"width" | "height" | null>(null);
   const [sizeChange, setSizeChange] = useState("");
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -218,6 +221,26 @@ export function ImageControls({
     <div
       className={`image-controls${compact ? " compact-image-controls" : ""}${count ? "" : " image-controls-single-output"}`}
     >
+      {usage && (
+        <div className="parameter-grid" aria-label="创作配置推荐">
+          {(["explore", "refine"] as const).map((mode) => (
+            <Button
+              key={mode}
+              type="button"
+              disabled={disabled || !cap}
+              onClick={async () => {
+                const next = recommendedSettings(usage, value, mode);
+                const accepted = await confirmRecommendation(
+                  `应用${mode === "explore" ? "快速探索" : "精细创作"}配置？保留当前模型、尺寸和格式，质量设为${{ low: "快速草稿", medium: "标准", high: "高质量" }[next.quality]}，复杂度为${next.complexity ?? "模型默认"}，张数为1。`,
+                );
+                if (accepted && !disabled) onChange(next);
+              }}
+            >
+              {mode === "explore" ? "快速探索" : "精细创作"}
+            </Button>
+          ))}
+        </div>
+      )}
       <div className={compact ? "parameter-grid" : "model-control-row"}>
         <ChoiceField
           label={label(modelLabel)}

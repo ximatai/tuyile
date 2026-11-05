@@ -351,3 +351,24 @@ export function settingsDisplayIssues(
   const sizeIssue = usage && cap && imageSizeIssue(usage, cap, settings);
   return issues.filter((issue) => issue !== sizeIssue);
 }
+
+export function recommendedSettings(
+  usage: ImageUsage,
+  current: ImageSettings,
+  mode: "explore" | "refine",
+): ImageSettings {
+  const cap = selectedCapability(usage, current.modelKey);
+  const qualities = allowedQualities(usage, cap);
+  const complexities = (["low", "medium", "high"] as const).filter((v) =>
+    cap?.complexities?.includes(v),
+  );
+  return {
+    ...current,
+    count: 1,
+    quality:
+      mode === "explore"
+        ? (qualities[0] ?? current.quality)
+        : (qualities.at(-1) ?? current.quality),
+    complexity: mode === "explore" ? complexities[0] : complexities.at(-1),
+  };
+}

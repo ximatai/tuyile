@@ -435,7 +435,7 @@ it("bounds history to the latest 50 immutable versions without losing earlier pl
   expect(tasks).toHaveLength(2);
 });
 
-it("retains original requests across clarification and pins inherited reference previews without persisting image bytes", async () => {
+it("retains original requests across clarification and pins explicitly retained reference previews without persisting image bytes", async () => {
   const { PlanningExecutor } = await import("@tuyile/core");
   const { CompatiblePlanningProvider } = await import("@tuyile/infrastructure");
   await new ExtensionService(f.creationStore).savePlanning(
@@ -487,6 +487,7 @@ it("retains original requests across clarification and pins inherited reference 
   const next = await agent.request(f.principal, {
     ...request(),
     prompt: "蓝色",
+    referenceIds: [reference.id],
     previousPlanId: plan.id,
   });
   const second = (await agent.claim([]))!;

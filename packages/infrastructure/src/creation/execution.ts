@@ -81,7 +81,10 @@ export class PgExecutionRepository extends PgCreationContext {
             t.agent_plan_id,
           ])
         ).rows[0];
-        if (plan.document.steps[t.step_index!].usePrevious) {
+        if (
+          plan.document.steps[t.step_index!].usePrevious ||
+          plan.document.steps[t.step_index!].dependsOn
+        ) {
           const output = (
             await c.query(
               "SELECT a.id FROM image_outputs o JOIN image_assets a ON a.id=o.asset_id WHERE o.task_id=$1 AND o.ordinal=0 AND a.state='ready' FOR UPDATE OF a",

@@ -1,3 +1,4 @@
+import { PlanSelection } from "./plan-selection";
 import { TextReferences, useTextReferences } from "./text-references";
 import { modelDisplayName } from "./model-presentation";
 import { ChevronDown, Settings2, Sparkles } from "lucide-react";
@@ -80,12 +81,17 @@ export function AgentPanel({
     api = client(state.session.csrfToken);
   const [prompt, setPrompt] = useDraftValue("agent", "prompt"),
     [style, setStyle] = useDraftValue("agent", "style"),
+    [preserveRequirements, setPreserveRequirements] = useDraftValue(
+      "agent",
+      "preserveRequirements",
+    ),
     [skillId, setSkillId] = useDraftValue("agent", "skillId"),
     [settings, setSettings] = useDraftValue("agent", "settings"),
     [conversationModel, setConversationModel] = useDraftValue(
       "agent",
       "conversationModel",
     ),
+    [versionId, setVersionId] = useState(""),
     [current, setCurrent] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
@@ -145,12 +151,24 @@ export function AgentPanel({
     !!modelPools.data &&
     !modelPools.data.conversation.some((m) => m.id === conversationModel);
   const [planDirty, setPlanDirty] = useState(false);
+  const [selectionPending, setSelectionPending] = useState(false);
   const history = jobs.data?.pages.flatMap((page) => page.jobs) ?? [];
   const awaitingReply = history.some((job) =>
     ["queued", "running"].includes(job.state),
   );
   const selected = history.find((j) => j.id === current) ?? history[0],
-    plan = selected?.plans.at(-1);
+    plan =
+      selected?.plans.find((p) => p.id === versionId) ?? selected?.plans.at(-1);
+  const visiblePlan = useRef<{ jobId: string; planId: string } | null>(null);
+  visiblePlan.current =
+    selected && plan ? { jobId: selected.id, planId: plan.id } : null;
+  useEffect(() => {
+    // Pin only when editing/waiting begins; do not repin during a successful version transition.
+    if (planDirty && visiblePlan.current) {
+      setCurrent(visiblePlan.current.jobId);
+      setVersionId(visiblePlan.current.planId);
+    }
+  }, [planDirty]);
   async function refresh() {
     await Promise.all([
       state.queries.invalidateQueries({
@@ -201,6 +219,9 @@ export function AgentPanel({
       model: usage?.modelOptions?.find((e) => e.id === model)?.modelId ?? model,
       ...(usage?.modelOptions ? { modelSelectionId: model } : {}),
       ...(conversationModel ? { conversationModelId: conversationModel } : {}),
+      ...(preserveRequirements?.trim()
+        ? { preserveRequirements: preserveRequirements.trim() }
+        : {}),
       width: settings.width,
       height: settings.height,
       ...(settings.complexity !== undefined
@@ -253,6 +274,8 @@ export function AgentPanel({
   async function clearHistory() {
     if (
       busy ||
+      planDirty ||
+      !!pending ||
       !(await confirmHistory(
         "清空本项目的规划对话与计划？图片及任务历史保留；活动或待核验任务处理完成后才能清空。",
       ))
@@ -312,7 +335,7 @@ export function AgentPanel({
             <Button
               className="agent-clear-history"
               aria-label="清空规划对话"
-              disabled={busy || !!pending}
+              disabled={busy || !!pending || planDirty}
               onClick={() => void clearHistory()}
             >
               清空
@@ -357,6 +380,9 @@ export function AgentPanel({
                   },
                 ]}
               />
+            )}
+            {job.preserveRequirements && (
+              <p className="hint">保持要求：{job.preserveRequirements}</p>
             )}
             {job.style && (
               <Collapse
@@ -410,6 +436,11 @@ export function AgentPanel({
           <PlanCard
             key={plan.id}
             plan={plan}
+            sourcePlans={selected?.plans ?? []}
+            onVersionChange={setVersionId}
+            onSelectionWaiting={setSelectionPending}
+            preserveRequirements={selected?.preserveRequirements}
+            tasks={tasks}
             visible={visible}
             usage={usage}
             references={references}
@@ -420,7 +451,10 @@ export function AgentPanel({
               if (!planDirty) setComposeOpen(true);
             }}
             onCount={setTotal}
-            onRefresh={refresh}
+            onRefresh={async (id) => {
+              await refresh();
+              setVersionId(id ?? "");
+            }}
           />
         )}
       </div>
@@ -478,6 +512,13 @@ export function AgentPanel({
               rows={4}
               compact
               visible={visible}
+            />
+            <Field
+              label="保持要求"
+              value={preserveRequirements ?? ""}
+              maxLength={2000}
+              placeholder="例如：保持商品外观、品牌配色与指定文案"
+              onChange={(e) => setPreserveRequirements(e.target.value)}
             />
             <div className="agent-references">
               {visible && (
@@ -669,7 +710,7 @@ export function AgentPanel({
                 className="primary"
                 type="submit"
                 form={`confirm-${plan.id}`}
-                disabled={busy || uploadBusy}
+                disabled={busy || uploadBusy || selectionPending}
               >
                 {busy ? "正在处理…" : "确认执行"}
               </Button>
@@ -691,6 +732,11 @@ export function AgentPanel({
 }
 function PlanCard({
   plan,
+  sourcePlans,
+  preserveRequirements,
+  onVersionChange,
+  onSelectionWaiting,
+  tasks,
   visible,
   usage,
   references,
@@ -702,6 +748,11 @@ function PlanCard({
   onRefresh,
 }: {
   plan: AgentPlanVersion;
+  sourcePlans: AgentPlanVersion[];
+  preserveRequirements?: string;
+  onVersionChange: (id: string) => void;
+  onSelectionWaiting: (waiting: boolean) => void;
+  tasks: ImageTask[];
   visible: boolean;
   usage?: ImageUsage;
   references: { id: string; name: string }[];
@@ -710,7 +761,7 @@ function PlanCard({
   onCount: (v: number) => void;
   onDiscuss: () => void;
   onDirtyChange: (dirty: boolean) => void;
-  onRefresh: () => Promise<void>;
+  onRefresh: (id?: string) => Promise<void>;
 }) {
   const state = useSessionState(),
     api = client(state.session.csrfToken);
@@ -725,6 +776,11 @@ function PlanCard({
     [confirmation, setConfirmation] = useState<string | null>(null),
     [locallyConfirmed, setConfirmed] = useState(plan.confirmed);
   const confirmed = locallyConfirmed || plan.confirmed;
+  const [selectionWaiting, setSelectionWaiting] = useState(false);
+  useEffect(() => {
+    onSelectionWaiting(selectionWaiting);
+    return () => onSelectionWaiting(false);
+  }, [selectionWaiting, onSelectionWaiting]);
   const [editing, setEditing] = useState(false);
   const active = useRef(false);
   const card = useRef<HTMLFormElement>(null);
@@ -784,7 +840,7 @@ function PlanCard({
         )
           next.tool = {
             id:
-              next.usePrevious || next.referenceIds.length
+              next.usePrevious || next.dependsOn || next.referenceIds.length
                 ? "image.edit"
                 : "image.generate",
             version: 1,
@@ -794,7 +850,7 @@ function PlanCard({
     }));
   }
   async function saveDraft() {
-    if (active.current || busy) return;
+    if (active.current || busy || selectionWaiting) return;
     active.current = true;
     setBusy(true);
     setError("");
@@ -809,7 +865,8 @@ function PlanCard({
                 ? (step.modelSelectionId ?? `historical:${plan.id}`)
                 : step.model,
             },
-            step.referenceIds.length + (step.usePrevious ? 1 : 0),
+            step.referenceIds.length +
+              (step.usePrevious || step.dependsOn ? 1 : 0),
           ).map((issue) => `步骤 ${index + 1}：${issue}`),
         );
         if (issues.length) throw new Error(issues.join(" "));
@@ -839,7 +896,7 @@ function PlanCard({
   }
   async function confirm(event: React.FormEvent) {
     event.preventDefault();
-    if (active.current || busy) return;
+    if (active.current || busy || selectionWaiting) return;
     active.current = true;
     setBusy(true);
     setError("");
@@ -854,7 +911,8 @@ function PlanCard({
                 ? (step.modelSelectionId ?? `historical:${plan.id}`)
                 : step.model,
             },
-            step.referenceIds.length + (step.usePrevious ? 1 : 0),
+            step.referenceIds.length +
+              (step.usePrevious || step.dependsOn ? 1 : 0),
           ).map((issue) => `步骤 ${index + 1}：${issue}`),
         );
         if (issues.length) throw new Error(issues.join(" "));
@@ -899,28 +957,14 @@ function PlanCard({
     }
   }
   function removeStep(index: number) {
+    const target = document.steps[index];
+    if (document.steps.some((s) => s.dependsOn === target.id)) {
+      setError("此步骤仍被后续步骤引用，请先调整依赖。");
+      return;
+    }
     setDocument((old) => ({
       ...old,
-      steps: old.steps
-        .filter((_, i) => i !== index)
-        .map((step, i) =>
-          i === 0
-            ? {
-                ...step,
-                usePrevious: false,
-                tool:
-                  step.tool.version === 1 &&
-                  ["image.generate", "image.edit"].includes(step.tool.id)
-                    ? {
-                        id: step.referenceIds.length
-                          ? "image.edit"
-                          : "image.generate",
-                        version: 1,
-                      }
-                    : step.tool,
-              }
-            : step,
-        ),
+      steps: old.steps.filter((_, i) => i !== index),
     }));
   }
   function addStep() {
@@ -932,6 +976,8 @@ function PlanCard({
           ...old.steps,
           {
             ...last,
+            id: crypto.randomUUID(),
+            dependsOn: undefined,
             title: `步骤 ${old.steps.length + 1}`,
             referenceIds: [...last.referenceIds],
             usePrevious: false,
@@ -950,7 +996,8 @@ function PlanCard({
       };
     });
   }
-  const locked = busy || (!confirmed && (!!pending || !!confirmation));
+  const locked =
+    busy || selectionWaiting || (!confirmed && (!!pending || !!confirmation));
   const dirty = JSON.stringify(document) !== JSON.stringify(plan.document);
   const discardConfirm = useConfirm();
   const leaveConfirm = useRef(discardConfirm);
@@ -985,7 +1032,10 @@ function PlanCard({
     [state],
   );
 
-  useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
+  useEffect(
+    () => onDirtyChange(dirty || selectionWaiting),
+    [dirty, selectionWaiting, onDirtyChange],
+  );
   return (
     <form
       ref={card}
@@ -1002,7 +1052,25 @@ function PlanCard({
           {confirmed ? "已确认" : "待确认"}
         </span>
       </div>
+      {sourcePlans.length > 1 && (
+        <ChoiceField
+          label="方案版本"
+          value={plan.id}
+          disabled={locked || dirty}
+          onValueChange={onVersionChange}
+          options={sourcePlans.map((p) => ({
+            value: p.id,
+            label: `版本 ${p.version} · ${p.confirmed ? "已确认" : "待确认"}`,
+          }))}
+        />
+      )}
       <p className="agent-proposal-description">{document.message}</p>
+      {preserveRequirements && (
+        <div className="hint">
+          <strong>本方案保持要求</strong>
+          <p>{preserveRequirements}</p>
+        </div>
+      )}
       <div className="agent-proposal-actions">
         {!confirmed && (
           <Tooltip title={dirty ? "先保存修改，再继续沟通" : undefined}>
@@ -1026,6 +1094,14 @@ function PlanCard({
           {editing ? "返回方案" : confirmed ? "查看提示词" : "编辑提示词"}
         </Button>
       </div>
+      <PlanSelection
+        plan={plan}
+        sourcePlans={sourcePlans}
+        tasks={tasks}
+        disabled={!visible || busy || dirty || !!pending || !!confirmation}
+        onWaitingChange={setSelectionWaiting}
+        onRefresh={onRefresh}
+      />
       <ControlScope componentDisabled={!visible || locked || confirmed}>
         <fieldset>
           <ol className="agent-plan-summary" aria-label="计划步骤摘要">
@@ -1132,7 +1208,7 @@ function PlanCard({
                                 : step.model,
                             },
                             step.referenceIds.length +
-                              (step.usePrevious ? 1 : 0),
+                              (step.usePrevious || step.dependsOn ? 1 : 0),
                           ),
                         ).map((issue) => (
                           <Notice key={issue} error>
@@ -1165,9 +1241,14 @@ function PlanCard({
                       </label>
                       {index > 0 && (
                         <Checkbox
-                          checked={step.usePrevious}
+                          checked={!!(step.usePrevious || step.dependsOn)}
                           onChange={(e) =>
-                            patch(index, { usePrevious: e.target.checked })
+                            patch(index, {
+                              usePrevious: false,
+                              dependsOn: e.target.checked
+                                ? document.steps[index - 1]?.id
+                                : undefined,
+                            })
                           }
                         >
                           使用上一步第一张图片
@@ -1175,9 +1256,12 @@ function PlanCard({
                       )}
                     </PlanStepParameters>
                   </div>
-                  {step.usePrevious && (
+                  {(step.usePrevious || step.dependsOn) && (
                     <small className="plan-dependency">
-                      使用上一步第一张结果
+                      使用前置作品：
+                      {document.steps.find((s) => s.id === step.dependsOn)
+                        ?.title ?? "上一步"}{" "}
+                      第一张结果
                     </small>
                   )}
                   {!!step.referenceIds.length && (

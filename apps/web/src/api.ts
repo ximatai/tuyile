@@ -46,6 +46,8 @@ const messages: Record<string, string> = {
 
   CANVAS_CONFLICT:
     "画布已在其他页面修改。本地内容已保留，请重新加载或另存副本。",
+  PLAN_SELECTION_INVALID:
+    "请检查所选步骤，为未执行的前置步骤选择已有作品，或一并选择生成该步骤。",
   MODEL_CAPABILITY_UNSUPPORTED:
     "此模型不支持当前尺寸、格式、质量或参考图，请调整参数。",
   TOOL_UNAVAILABLE: "所需工具已停用或撤销，不能提交新的创作。",

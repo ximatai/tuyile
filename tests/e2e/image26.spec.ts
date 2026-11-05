@@ -79,10 +79,18 @@ test("2.6 complexity survives draft reload and generation", async ({
     ).json();
     await page.goto(`/projects/${project.id}`);
     await page.getByLabel("创作需求", { exact: true }).fill("合成的商品展示图");
+    await page.getByRole("button", { name: "快速探索", exact: true }).click();
+    const recommendation = page.getByRole("dialog", { name: "请确认" });
+    await expect(recommendation).toContainText("保留当前模型、尺寸和格式");
+    await recommendation
+      .getByRole("button", { name: "确认", exact: true })
+      .click();
     await page.getByText("进阶设置", { exact: true }).click();
     await page.getByLabel("复杂度", { exact: true }).click();
-    await page.getByLabel("复杂度", { exact: true }).press("ArrowDown");
-    await page.getByLabel("复杂度", { exact: true }).press("Enter");
+    await page
+      .locator(".ant-select-dropdown:visible .ant-select-item-option-content")
+      .getByText("低", { exact: true })
+      .click();
     await expect
       .poll(
         async () =>

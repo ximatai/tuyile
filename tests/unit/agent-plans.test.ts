@@ -48,3 +48,47 @@ it("rejects missing previous outputs and executable fields in a declarative plan
       .success,
   ).toBe(false);
 });
+
+it("keeps dependency identity across subset selection and binds existing assets without rerunning ancestors", async () => {
+  const { identifyPlan, selectPlan } = await import("@tuyile/contracts");
+  const plan = identifyPlan(
+    agentPlan.parse({
+      message: "方向",
+      steps: [
+        { ...step(), count: 1 },
+        {
+          ...step(),
+          count: 1,
+          usePrevious: true,
+          tool: { id: "image.edit", version: 1 },
+        },
+        { ...step(), count: 1 },
+      ],
+    }),
+    "stable",
+  );
+  const [a, b, c] = plan.steps;
+  expect(b.dependsOn).toBe(a.id);
+  expect(() =>
+    selectPlan(plan, { requestKey: "unused", stepIds: [b.id!], bindings: [] }),
+  ).toThrow("MISSING_DEPENDENCY");
+  const result = selectPlan(plan, {
+    requestKey: "unused",
+    stepIds: [c.id!, b.id!],
+    bindings: [
+      { stepId: a.id!, assetId: "00000000-0000-4000-8000-000000000001" },
+    ],
+  });
+  expect(result.steps.map((s) => s.id)).toEqual([b.id, c.id]);
+  expect(result.steps[0].referenceIds).toEqual([
+    "00000000-0000-4000-8000-000000000001",
+  ]);
+  expect(result.steps[0].dependsOn).toBeUndefined();
+  expect(
+    selectPlan(plan, {
+      requestKey: "unused",
+      stepIds: [a.id!, b.id!],
+      bindings: [],
+    }).steps[1].dependsOn,
+  ).toBe(a.id);
+});

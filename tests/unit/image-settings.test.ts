@@ -371,3 +371,35 @@ it("uses known model edge ceilings even when declarations and policy are broader
     ).toEqual([{ width: 640, height: 1024 }]);
   }
 });
+
+it("recommends exploration and refinement within policy without switching models or sizes", async () => {
+  const { recommendedSettings } =
+    await import("../../apps/web/src/image-settings");
+  const current = { ...initialSettings(usage), count: 4 };
+  const fast = recommendedSettings(usage, current, "explore");
+  const fine = recommendedSettings(usage, current, "refine");
+  expect(fast).toMatchObject({
+    modelKey: current.modelKey,
+    width: current.width,
+    height: current.height,
+    count: 1,
+    quality: "medium",
+  });
+  expect(fine.quality).toBe("medium");
+  expect(current.count).toBe(4);
+  expect(fine.complexity).toBeUndefined();
+});
+
+it("orders complexity semantically even when the administrator declares levels in reverse order", async () => {
+  const { recommendedSettings } =
+    await import("../../apps/web/src/image-settings");
+  const values = structuredClone(usage);
+  values.modelOptions![0].image!.complexities = ["high", "low"];
+  const current = initialSettings(values);
+  expect(recommendedSettings(values, current, "explore").complexity).toBe(
+    "low",
+  );
+  expect(recommendedSettings(values, current, "refine").complexity).toBe(
+    "high",
+  );
+});

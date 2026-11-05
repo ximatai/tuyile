@@ -4,6 +4,7 @@ import {
   id,
   z,
   planningRequest,
+  planSelectionInput,
   planRevisionInput,
   pageOffset,
 } from "@tuyile/contracts";
@@ -63,6 +64,16 @@ export function agentRoutes(app: Hono<ApiEnv>, service: AgentService) {
         c.get("session").user,
         id.parse(c.req.param("id")),
         planRevisionInput.parse(await c.req.json()),
+      ),
+      201,
+    ),
+  );
+  app.post("/api/agent/plans/:id/selection", async (c) =>
+    c.json(
+      await service.select(
+        c.get("session").user,
+        id.parse(c.req.param("id")),
+        planSelectionInput.parse(await c.req.json()),
       ),
       201,
     ),

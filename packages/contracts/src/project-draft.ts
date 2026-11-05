@@ -30,7 +30,11 @@ export const projectDraftDocument = z
     schemaVersion: z.literal(1).default(1),
     direct: draftInput,
     agent: draftInput
-      .extend({ conversationModel: text(200), skillId: text(200) })
+      .extend({
+        conversationModel: text(200),
+        skillId: text(200),
+        preserveRequirements: text(2000).optional(),
+      })
       .strict(),
     referenceIds: z
       .array(z.uuid())
