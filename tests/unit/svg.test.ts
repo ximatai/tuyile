@@ -61,8 +61,13 @@ it("renders in a separate bounded process and remains usable after rejected work
   await expect(rasterizeSvg(bytes(svg), { rssKiB: 1 })).rejects.toMatchObject({
     code: "SVG_PREVIEW_FAILED",
   });
-  const result = await rasterizeSvg(bytes(svg));
-  expect((await sharp(result).metadata()).format).toBe("png");
+  const { png, width, height } = await rasterizeSvg(bytes(svg));
+  expect([width, height]).toEqual([256, 256]);
+  expect(await sharp(png).metadata()).toMatchObject({
+    format: "png",
+    width,
+    height,
+  });
   const results = await Promise.allSettled([
     rasterizeSvg(bytes(svg)),
     rasterizeSvg(bytes(svg)),

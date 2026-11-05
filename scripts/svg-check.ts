@@ -7,7 +7,9 @@ const svg = Buffer.from(
   '<svg xmlns="http://www.w3.org/2000/svg" width="3840" height="2160"><rect width="3840" height="2160" fill="#0062b0"/><circle cx="1920" cy="1080" r="512" fill="#ffffff"/><text x="40" y="160" font-family="Noto Sans CJK SC" font-size="96" fill="#ffffff">图一乐 SVG 验收</text></svg>',
 );
 async function normal() {
-  const png = Buffer.from(await rasterizeSvg(svg));
+  const rendered = await rasterizeSvg(svg);
+  assert.deepEqual([rendered.width, rendered.height], [3840, 2160]);
+  const png = Buffer.from(rendered.png);
   assert.equal(png.toString("ascii", 1, 4), "PNG");
   assert.equal(png.readUInt32BE(16), 3840);
   assert.equal(png.readUInt32BE(20), 2160);

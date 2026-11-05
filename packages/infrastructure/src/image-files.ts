@@ -1,6 +1,5 @@
 import sharp from "sharp";
 import { rasterizeSvg } from "./svg-render.js";
-import { validateSvg } from "./svg-validation.js";
 import { mkdir, lstat, open, rename, rm, statfs } from "node:fs/promises";
 import { constants } from "node:fs";
 import { resolve, join } from "node:path";
@@ -31,12 +30,12 @@ export class PrivateImageFiles implements ImageFiles {
     return join(this.root, `${key}.${suffix}`);
   }
   async rasterize(bytes: Uint8Array) {
-    return rasterizeSvg(bytes);
+    const { png } = await rasterizeSvg(bytes);
+    return png;
   }
   async inspect(bytes: Uint8Array, vector = false): Promise<AssetBytes> {
     if (vector) {
-      const dimensions = validateSvg(bytes);
-      const png = await rasterizeSvg(bytes);
+      const { png, width, height } = await rasterizeSvg(bytes);
       const preview = await sharp(png)
         .resize(480, 480, { fit: "inside", withoutEnlargement: true })
         .webp({ quality: 72 })
@@ -47,7 +46,8 @@ export class PrivateImageFiles implements ImageFiles {
         original: bytes,
         preview,
         mime: "image/svg+xml",
-        ...dimensions,
+        width,
+        height,
         hash: createHash("sha256").update(bytes).digest("hex"),
       };
     }

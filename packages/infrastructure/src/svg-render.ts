@@ -8,8 +8,8 @@ let renderTail: Promise<void> = Promise.resolve();
 export async function rasterizeSvg(
   bytes: Uint8Array,
   limits: { wallMs?: number; rssKiB?: number } = {},
-): Promise<Uint8Array> {
-  validateSvg(bytes);
+) {
+  const dimensions = validateSvg(bytes);
   if (active >= 2) throw new AppError("SVG_RENDERER_BUSY", 503);
   active++;
   const previous = renderTail;
@@ -19,7 +19,7 @@ export async function rasterizeSvg(
   });
   await previous;
   try {
-    return await new Promise<Uint8Array>((resolve, reject) => {
+    const png = await new Promise<Uint8Array>((resolve, reject) => {
       const source = import.meta.url.endsWith(".ts");
       const entry = fileURLToPath(
         new URL(
@@ -102,6 +102,7 @@ export async function rasterizeSvg(
       });
       child.stdin.end(bytes);
     });
+    return { png, ...dimensions };
   } finally {
     release();
     active--;
