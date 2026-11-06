@@ -89,9 +89,34 @@ test("SVG generation exports the original, previews safely, and converts referen
     });
     await page.goto(`/projects/${project.id}`);
     await page.getByLabel("创作需求", { exact: true }).fill("合成矢量图标");
-    await page
-      .getByRole("button", { name: "矢量创作（SVG）", exact: true })
-      .click();
+    const shortcuts = page.getByRole("group", { name: "创作快捷操作" });
+    const vector = shortcuts.getByRole("button", {
+      name: "矢量创作（SVG）",
+      exact: true,
+    });
+    await expect(vector).toBeVisible();
+    expect(
+      await shortcuts.getByRole("button").evaluateAll((buttons) => {
+        const [first] = buttons;
+        return {
+          count: buttons.length,
+          aligned: buttons.every(
+            (button) =>
+              button.getBoundingClientRect().top ===
+              first?.getBoundingClientRect().top,
+          ),
+          fits: buttons.every(
+            (button) => button.scrollWidth <= button.clientWidth,
+          ),
+        };
+      }),
+    ).toEqual({ count: 3, aligned: true, fits: true });
+    await vector.click();
+    await expect(vector).toHaveAttribute("aria-pressed", "true");
+    await expect(vector).toBeEnabled();
+    await expect(vector).toHaveCSS("background-color", "rgb(234, 244, 255)");
+    await vector.click();
+    await expect(vector).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByText(/矢量创作：无参考图、单张输出/)).toBeVisible();
     await page
       .getByRole("button", { name: "提交图片任务", exact: true })
@@ -134,6 +159,26 @@ test("SVG generation exports the original, previews safely, and converts referen
       return page.getByRole("dialog", { name: "SVG 修订与交付", exact: true });
     };
     const revisionDialog = await openRevisions();
+    const originalCard = revisionDialog.getByRole("region", { name: "原稿" });
+    const revisionCard = revisionDialog.getByRole("region", { name: "修订稿" });
+    await expect(
+      originalCard.getByRole("link", { name: "下载原稿 SVG" }),
+    ).toBeVisible();
+    const exportOriginal = originalCard.getByRole("button", {
+      name: "导出原稿 PNG",
+    });
+    await expect(exportOriginal).toBeEnabled();
+    const importRevision = revisionCard.getByRole("button", {
+      name: "导入修订稿",
+    });
+    await expect(importRevision).toBeVisible();
+    await exportOriginal.click();
+    const exportConfirm = page.getByRole("dialog", { name: "请确认" });
+    await expect(exportConfirm).toContainText("将「原稿」导出为 PNG");
+    await exportConfirm
+      .getByRole("button", { name: "取消", exact: true })
+      .click();
+    await expect(exportConfirm).toBeHidden();
     const revisionFile = Buffer.from(
       '<svg version="1.1" xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024"><g style="mix-blend-mode: normal"><rect width="1024" height="1024" fill="#0062b0"/><circle cx="576" cy="512" r="256" fill="#e8b844"/></g></svg>',
     );
@@ -142,7 +187,12 @@ test("SVG generation exports the original, previews safely, and converts referen
         r.url().endsWith(`/api/images/assets/${assetId}/svg-revisions`) &&
         r.request().method() === "POST",
     );
-    await revisionDialog.locator('input[type="file"]').setInputFiles({
+    await importRevision.focus();
+    const [fileChooser] = await Promise.all([
+      page.waitForEvent("filechooser"),
+      importRevision.press("Enter"),
+    ]);
+    await fileChooser.setFiles({
       name: "refined-icon.svg",
       mimeType: "image/svg+xml",
       buffer: revisionFile,
@@ -152,10 +202,14 @@ test("SVG generation exports the original, previews safely, and converts referen
     const revision = await importResponse.json();
     await expect(revisionDialog.getByAltText("SVG 原稿预览")).toBeVisible();
     await expect(revisionDialog.getByAltText("SVG 修订稿预览")).toBeVisible();
-    await expect(revisionDialog.locator("figcaption").last()).toContainText(
-      "修订稿 1",
-    );
-    await revisionDialog
+    await expect(
+      revisionCard.getByRole("combobox", { name: "比较修订稿" }),
+    ).toBeFocused();
+    await expect(revisionCard).toContainText("修订稿 1");
+    await expect(
+      revisionCard.getByRole("button", { name: "导入新稿" }),
+    ).toBeVisible();
+    await revisionCard
       .getByRole("button", { name: "将这稿加入画布", exact: true })
       .click();
     await expect(revisionDialog.getByRole("status")).toHaveText(
@@ -163,15 +217,14 @@ test("SVG generation exports the original, previews safely, and converts referen
     );
     const [revisedDownload] = await Promise.all([
       page.waitForEvent("download"),
-      revisionDialog
+      revisionCard
         .getByRole("link", { name: "下载这稿 SVG", exact: true })
         .click(),
     ]);
     expect(revisedDownload.suggestedFilename()).toBe(`${revision.id}.svg`);
-    await revisionDialog
+    await revisionCard
       .getByRole("button", { name: "导出这稿 PNG", exact: true })
       .click();
-    const exportConfirm = page.getByRole("dialog", { name: "请确认" });
     await expect(exportConfirm).toContainText(/将「修订稿 1 · .*」导出为 PNG/);
     const [pngDownload, rasterCopy] = await Promise.all([
       page.waitForEvent("download"),
@@ -274,6 +327,7 @@ test("SVG generation exports the original, previews safely, and converts referen
       .locator(".ant-select-dropdown:visible .ant-select-item-option-content")
       .getByText("PNG", { exact: true })
       .click();
+    await expect(vector).toHaveAttribute("aria-pressed", "false");
     await expect(
       page.getByRole("button", { name: "提交图片任务", exact: true }),
     ).toBeEnabled();

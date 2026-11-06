@@ -585,6 +585,14 @@ form {
   gap: 10px;
   min-width: 0;
 }
+.parameter-grid.image-preset-actions-svg {
+  grid-template-columns: minmax(0, 1.25fr) repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.image-preset-actions-svg > .button {
+  min-width: 0;
+  padding-inline: 6px;
+}
 .task-result {
   padding: 22px;
   background: #fff;
@@ -2684,7 +2692,8 @@ h3 {
 }
 
 /* Canvas navigation uses React Flow's native drag and keyboard handling. */
-.canvas-toolbar .button[aria-pressed="true"] {
+.canvas-toolbar .button[aria-pressed="true"],
+.image-preset-actions-svg > .button[aria-pressed="true"]:not(:disabled) {
   color: var(--brand-blue);
   background: #eaf4ff;
   border-color: #b7d9f4;
@@ -4373,6 +4382,88 @@ h3 {
 .image-edit-comparison figcaption {
   text-align: center;
   margin-top: 8px;
+}
+
+.svg-revisions-intro {
+  margin: 0 0 16px;
+  color: var(--muted);
+}
+.svg-revisions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.svg-revision-card {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.svg-revision-header,
+.svg-revision-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: var(--control-height);
+}
+.svg-revision-header {
+  margin-bottom: 12px;
+}
+.svg-revision-header h3 {
+  margin: 0;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.svg-revision-header .field {
+  flex: 1;
+}
+.svg-revision-preview {
+  display: grid;
+  place-items: center;
+  height: clamp(180px, 34vh, 300px);
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--paper);
+}
+.svg-revision-preview img {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: contain;
+}
+.svg-revision-empty {
+  align-content: center;
+  gap: 8px;
+  border: 1px dashed var(--line);
+  color: var(--muted);
+  text-align: center;
+}
+.svg-revision-empty > svg {
+  color: var(--brand-blue);
+}
+.svg-revision-empty strong {
+  color: var(--ink);
+}
+.svg-revision-empty p,
+.svg-revision-status {
+  margin: 0;
+}
+.svg-revision-empty small {
+  font-size: var(--text-small);
+}
+.svg-revision-actions {
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.svg-revision-actions a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: var(--control-height);
+}
+.svg-revision-status {
+  padding-top: 6px;
+  color: var(--muted);
 }
 
 /* Keep the short pointer corridor to a portal toolbar interactive while it is shown. */

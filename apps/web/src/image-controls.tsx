@@ -35,6 +35,7 @@ export function ImageControls({
   modelLabel = "图片模型",
   count = true,
   compact = false,
+  svgShortcut = false,
   labelPrefix = "",
   disabled: disabledProp = false,
 }: {
@@ -44,6 +45,7 @@ export function ImageControls({
   modelLabel?: string;
   count?: boolean;
   compact?: boolean;
+  svgShortcut?: boolean;
   labelPrefix?: string;
   disabled?: boolean;
 }) {
@@ -115,6 +117,7 @@ export function ImageControls({
   const formats = (["png", "jpeg", "webp", "svg"] as const).filter((format) =>
     cap?.formats.includes(format),
   );
+  const showSvgShortcut = svgShortcut && formats.includes("svg");
   const ratios = [...new Set(sizes.map((size) => size.ratio))];
   const sameRatioSizes = sizes.filter(
     (size) => !currentSize || size.ratio === currentSize.ratio,
@@ -222,7 +225,23 @@ export function ImageControls({
       className={`image-controls${compact ? " compact-image-controls" : ""}${count ? "" : " image-controls-single-output"}`}
     >
       {usage && (
-        <div className="parameter-grid" aria-label="创作配置推荐">
+        <div
+          className={`parameter-grid${showSvgShortcut ? " image-preset-actions-svg" : ""}`}
+          role="group"
+          aria-label="创作快捷操作"
+        >
+          {showSvgShortcut && (
+            <Button
+              type="button"
+              aria-pressed={value.format === "svg"}
+              disabled={disabled}
+              onClick={() => {
+                if (value.format !== "svg") patch({ format: "svg", count: 1 });
+              }}
+            >
+              矢量创作（SVG）
+            </Button>
+          )}
           {(["explore", "refine"] as const).map((mode) => (
             <Button
               key={mode}

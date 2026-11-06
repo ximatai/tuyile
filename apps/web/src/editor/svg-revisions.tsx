@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { Download, FileUp } from "lucide-react";
 import { SVG_REVISION_MAX_BYTES, type SvgRevision } from "@tuyile/contracts";
 import {
   Button,
@@ -33,6 +34,8 @@ export function SvgRevisions({
   const [selectedId, setSelectedId] = useState(initialRevisionId);
   const [error, setError] = useState("");
   const [placed, setPlaced] = useState("");
+  const revisionHeader = useRef<HTMLDivElement>(null);
+  const focusFirstRevision = useRef(false);
   const revisions = useQuery({
     queryKey,
     queryFn: ({ signal }) =>
@@ -101,11 +104,45 @@ export function SvgRevisions({
   });
   const busy = upload.isPending || exportPng.isPending || place.isPending;
   const selectionMissing = !!selectedId && !selected;
+  useEffect(() => {
+    if (busy || !focusFirstRevision.current) return;
+    focusFirstRevision.current = false;
+    if (
+      upload.isSuccess &&
+      selected?.id &&
+      document.activeElement === document.body
+    )
+      revisionHeader.current
+        ?.querySelector<HTMLElement>('[role="combobox"]')
+        ?.focus();
+  }, [busy, selected?.id, upload.isSuccess]);
+  const uploadAction = (
+    <Upload
+      accept=".svg,image/svg+xml"
+      showUploadList={false}
+      disabled={busy}
+      beforeUpload={(file) => {
+        setError("");
+        focusFirstRevision.current = items.length === 0;
+        upload.mutate(file);
+        return false;
+      }}
+    >
+      <Button
+        className={items.length ? undefined : "primary"}
+        disabled={busy}
+        loading={upload.isPending}
+      >
+        {items.length ? "导入新稿" : "导入修订稿"}
+      </Button>
+    </Upload>
+  );
   return (
     <Modal
       open
+      centered
       title="SVG 修订与交付"
-      width={840}
+      width={920}
       onCancel={busy ? undefined : onClose}
       closable={!busy}
       mask={{ closable: !busy }}
@@ -115,106 +152,124 @@ export function SvgRevisions({
         </Button>
       }
     >
-      <div className="actions">
-        <a className="button" href={`/api/images/assets/${sourceId}/download`}>
-          下载原稿 SVG
-        </a>
-        <Upload
-          accept=".svg,image/svg+xml"
-          showUploadList={false}
-          disabled={busy}
-          beforeUpload={(file) => {
-            setError("");
-            upload.mutate(file);
-            return false;
-          }}
-        >
-          <Button disabled={busy} loading={upload.isPending}>
-            导入 SVG 修订版
-          </Button>
-        </Upload>
-      </div>
-      <p className="muted">
-        在外部工具精修后导入静态 SVG，最大 1
-        MiB。每份修订单独保存，可以选择其中一稿交付。
+      <p className="svg-revisions-intro">
+        下载原稿到外部工具精修，再导回这里比较。每份稿件独立保存，选定后即可交付。
       </p>
       {revisions.error && <Notice error>{revisions.error.message}</Notice>}
       {error && <Notice error>{error}</Notice>}
       {selectionMissing && revisions.data && !busy && (
         <Notice error>所选修订稿已不可用，请重新选择或导入修订稿。</Notice>
       )}
-      {items.length > 0 && (
-        <ChoiceField
-          label="比较修订稿"
-          value={selected?.id}
-          disabled={busy}
-          onValueChange={(id) => {
-            setSelectedId(id);
-            setError("");
-          }}
-          options={items.map((item) => ({
-            value: item.id,
-            label: item.label,
-          }))}
-        />
-      )}
-      <div className="image-edit-comparison">
-        <figure>
-          <img
-            alt="SVG 原稿预览"
-            src={`/api/images/assets/${sourceId}/preview`}
-          />
-          <figcaption>原稿</figcaption>
-        </figure>
-        <figure>
-          {selected ? (
+      <div className="svg-revisions-grid">
+        <section className="svg-revision-card" aria-label="原稿">
+          <div className="svg-revision-header">
+            <h3>原稿</h3>
+          </div>
+          <div className="svg-revision-preview">
             <img
-              alt="SVG 修订稿预览"
-              src={`/api/images/assets/${selected.id}/preview`}
+              alt="SVG 原稿预览"
+              src={`/api/images/assets/${sourceId}/preview`}
             />
+          </div>
+          <div className="svg-revision-actions">
+            <a href={`/api/images/assets/${sourceId}/download`}>
+              <Download size={14} aria-hidden="true" />
+              下载原稿 SVG
+            </a>
+            {!selected && (
+              <Button
+                disabled={busy || selectionMissing || revisions.isPending}
+                onClick={() => {
+                  setError("");
+                  exportPng.mutate({ id: sourceId, label: "原稿" });
+                }}
+              >
+                导出原稿 PNG
+              </Button>
+            )}
+          </div>
+        </section>
+        <section className="svg-revision-card" aria-label="修订稿">
+          <div className="svg-revision-header" ref={revisionHeader}>
+            <h3>修订稿</h3>
+            {items.length > 0 && (
+              <>
+                <ChoiceField
+                  label="比较修订稿"
+                  hideLabel
+                  value={selected?.id}
+                  disabled={busy}
+                  onValueChange={(id) => {
+                    setSelectedId(id);
+                    setError("");
+                  }}
+                  options={items.map((item) => ({
+                    value: item.id,
+                    label: item.label,
+                  }))}
+                />
+                {uploadAction}
+              </>
+            )}
+          </div>
+          {selected ? (
+            <>
+              <div className="svg-revision-preview">
+                <img
+                  alt="SVG 修订稿预览"
+                  src={`/api/images/assets/${selected.id}/preview`}
+                />
+              </div>
+              <div className="svg-revision-actions">
+                <Button
+                  disabled={busy}
+                  onClick={() => {
+                    setError("");
+                    place.mutate(selected);
+                  }}
+                >
+                  将这稿加入画布
+                </Button>
+                <a href={`/api/images/assets/${selected.id}/download`}>
+                  <Download size={14} aria-hidden="true" />
+                  下载这稿 SVG
+                </a>
+                <Button
+                  className="primary"
+                  disabled={busy}
+                  onClick={() => {
+                    setError("");
+                    exportPng.mutate(selected);
+                  }}
+                >
+                  导出这稿 PNG
+                </Button>
+              </div>
+            </>
           ) : (
-            <p className="muted">
-              {revisions.isPending
-                ? "正在查找修订稿…"
-                : "导入精修后的 SVG 后可并排比较。"}
+            <div className="svg-revision-preview svg-revision-empty">
+              {revisions.isPending ? (
+                <p role="status">正在加载修订稿…</p>
+              ) : items.length > 0 ? (
+                <p>请选择一份修订稿进行比较。</p>
+              ) : (
+                <>
+                  <FileUp size={28} aria-hidden="true" />
+                  <strong>导回精修后的 SVG</strong>
+                  <p>导入后可与原稿并排比较。</p>
+                  {uploadAction}
+                  <small>静态 SVG · 最大 1 MiB</small>
+                </>
+              )}
+            </div>
+          )}
+          {selected && placed === selected.id && (
+            <p className="svg-revision-status" role="status">
+              已将这稿加入画布
             </p>
           )}
-          <figcaption>{selected?.label ?? "修订稿"}</figcaption>
-        </figure>
+        </section>
       </div>
-      <div className="actions">
-        {selected && (
-          <>
-            <Button
-              disabled={busy}
-              onClick={() => {
-                setError("");
-                place.mutate(selected);
-              }}
-            >
-              将这稿加入画布
-            </Button>
-            <a
-              className="button"
-              href={`/api/images/assets/${selected.id}/download`}
-            >
-              下载这稿 SVG
-            </a>
-          </>
-        )}
-        <Button
-          disabled={busy || selectionMissing}
-          onClick={() => {
-            setError("");
-            exportPng.mutate(selected ?? { id: sourceId, label: "原稿" });
-          }}
-        >
-          {selected ? "导出这稿 PNG" : "导出原稿 PNG"}
-        </Button>
-      </div>
-      {selected && placed === selected.id && (
-        <p role="status">已将这稿加入画布</p>
-      )}
     </Modal>
   );
 }
