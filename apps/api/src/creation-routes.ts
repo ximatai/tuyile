@@ -92,8 +92,17 @@ export function creationRoutes(app: Hono<ApiEnv>, service: CreationService) {
       width: a.width,
       height: a.height,
       derivedFrom: a.derivedFrom,
+      taskId: a.taskId,
     });
   });
+  app.get("/api/images/assets/:id/svg-revisions", async (c) =>
+    c.json({
+      revisions: await service.svgRevisions(
+        c.get("session").user,
+        id.parse(c.req.param("id")),
+      ),
+    }),
+  );
   app.get("/api/images/assets/:id/:variant", async (c) => {
     const variant = c.req.param("variant");
     if (!["original", "preview", "download"].includes(variant))
@@ -128,6 +137,14 @@ export function creationRoutes(app: Hono<ApiEnv>, service: CreationService) {
       },
       201,
     );
+  });
+  app.post("/api/images/assets/:id/svg-revisions", async (c) => {
+    const a = await service.importSvgRevision(
+      c.get("session").user,
+      id.parse(c.req.param("id")),
+      new Uint8Array(await c.req.arrayBuffer()),
+    );
+    return c.json({ id: a.id, width: a.width, height: a.height }, 201);
   });
   app.post("/api/images/assets/:id/delete", async (c) => {
     await service.delete(c.get("session").user, id.parse(c.req.param("id")));

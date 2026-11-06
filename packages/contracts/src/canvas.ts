@@ -88,6 +88,7 @@ export interface CanvasOutput {
 }
 export interface CanvasSources {
   textNodeIds?: string[];
+  svg?: true;
   assetId: string;
   sourceIds: string[];
 }

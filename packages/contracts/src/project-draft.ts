@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { imageAnnotation } from "./annotation.js";
 import { imageInput, textNodeIds } from "./creation.js";
+import { agentDerivation } from "./agent.js";
 // Drafts accept incomplete input; execution applies the stricter creation schemas.
 const text = (max: number) =>
   z
@@ -35,6 +36,7 @@ export const projectDraftDocument = z
         conversationModel: text(200),
         skillId: text(200),
         preserveRequirements: text(2000).optional(),
+        derivation: agentDerivation.optional(),
       })
       .strict(),
     referenceIds: z

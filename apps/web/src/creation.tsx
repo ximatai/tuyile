@@ -35,6 +35,7 @@ import {
   taskSettings,
 } from "./image-settings";
 import { AgentPanel } from "./agent-panel";
+import { AgentHandoff, type AgentHandoffSource } from "./agent-handoff";
 import { lazy, Suspense, useCallback } from "react";
 const CanvasEditor = lazy(() =>
   import("./editor/canvas").then((m) => ({ default: m.CanvasEditor })),
@@ -310,6 +311,8 @@ function CreationEditor({
     draftStore.get,
   );
   const [editOpen, setEditOpen] = useState(false);
+  const [handoff, setHandoff] = useState<AgentHandoffSource>();
+  const [agentHandoffBlocked, setAgentHandoffBlocked] = useState(false);
   const sessionState = useSessionState();
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
@@ -437,9 +440,12 @@ function CreationEditor({
       referenceAlive.current = false;
     };
   }, []);
-  async function resolveReferenceAssets(ids: string[]) {
+  async function resolveReferenceAssets(
+    ids: string[],
+    reportError: (message: string) => void = setError,
+  ) {
     if (active.current || busy || pending) {
-      setError("请先确认当前提交结果，再修改参考图。");
+      reportError("请先确认当前提交结果，再修改参考图。");
       return null;
     }
     const before = draftStore.get();
@@ -457,7 +463,7 @@ function CreationEditor({
         return null;
       return result;
     } catch (error) {
-      if (referenceAlive.current) setError((error as Error).message);
+      if (referenceAlive.current) reportError((error as Error).message);
       return null;
     } finally {
       active.current = false;
@@ -520,6 +526,110 @@ function CreationEditor({
     );
   });
   const running = tasks.some((t) => t.state === "running");
+  async function beginHandoff(
+    assetId: string,
+    label: string,
+    task?: ImageTask,
+  ) {
+    if (agentHandoffBlocked || active.current || busy || pending)
+      throw new Error("请先完成当前提交或保存 Agent 方案，再开始新的衍生。");
+    let sourceTask =
+      task ??
+      tasks.find((item) =>
+        item.outputs.some((output) => output.id === assetId),
+      );
+    if (!sourceTask) {
+      const before = draftStore.get();
+      const api = client(csrfToken);
+      active.current = true;
+      setBusy(true);
+      try {
+        const asset = await api<{ taskId: string | null }>(
+          `/images/assets/${assetId}`,
+          undefined,
+          AbortSignal.timeout(10000),
+        );
+        if (asset.taskId) {
+          try {
+            sourceTask = await api<ImageTask>(
+              `/images/tasks/${asset.taskId}`,
+              undefined,
+              AbortSignal.timeout(10000),
+            );
+          } catch (error) {
+            if (!(error instanceof ApiError && error.code === "NOT_FOUND"))
+              throw error;
+          }
+        }
+      } finally {
+        active.current = false;
+        if (referenceAlive.current) setBusy(false);
+      }
+      const current = draftStore.get();
+      if (
+        !referenceAlive.current ||
+        liveDraftStore.current !== draftStore ||
+        current.document !== before.document ||
+        current.epoch !== before.epoch
+      )
+        return;
+    }
+    setHandoff({
+      key: crypto.randomUUID(),
+      assetId,
+      label,
+      preserveRequirements: sourceTask?.settings?.preserveRequirements ?? "",
+      textNodeIds: sourceTask?.textSources?.map((item) => item.nodeId) ?? [],
+    });
+  }
+  async function acceptHandoff(
+    preserveRequirements: string,
+    textNodeIds: string[],
+  ) {
+    if (!handoff || agentHandoffBlocked)
+      throw new Error("请先保存当前 Agent 方案，再开始新的衍生。");
+    const ids = await resolveReferenceAssets([handoff.assetId], (message) => {
+      throw new Error(message);
+    });
+    if (!ids) return;
+    const current = draftStore.get().document;
+    const nodes = textRefs.store?.get().document.nodes ?? [];
+    if (
+      textNodeIds.some(
+        (id) =>
+          !nodes.some(
+            (node) =>
+              node.id === id && node.kind === "text" && node.text?.trim(),
+          ),
+      )
+    )
+      throw new Error("所选文案已删除或清空，请重新选择。");
+    const assetId = ids[0]!;
+    draftStore.edit({
+      mode: "agent",
+      referenceIds: [assetId],
+      textNodeIds,
+      agent: {
+        ...current.agent,
+        prompt: "",
+        style: undefined,
+        skillId: "",
+        preserveRequirements,
+        settings:
+          current.agent.settings.format === "svg"
+            ? { ...current.agent.settings, format: "png" }
+            : current.agent.settings,
+        derivation: { id: handoff.key, assetId },
+      },
+    });
+    await draftStore.flush();
+    if (!referenceAlive.current || liveDraftStore.current !== draftStore)
+      return;
+    setHandoff(undefined);
+    setEditOpen(false);
+    panel.show();
+    setMobile("create");
+  }
   function showTasks() {
     setHistoryOpen(true);
     requestAnimationFrame(() =>
@@ -833,6 +943,16 @@ function CreationEditor({
           usage={usage}
           onClose={() => setEditOpen(false)}
           onRefresh={refresh}
+          onDerive={(task, assetId) => beginHandoff(assetId, "修改稿", task)}
+        />
+      )}
+      {handoff && (
+        <AgentHandoff
+          key={handoff.key}
+          source={handoff}
+          nodes={textRefs.nodes}
+          onCancel={() => setHandoff(undefined)}
+          onAccept={acceptHandoff}
         />
       )}
       <div className="mobile-creation-switch">
@@ -896,6 +1016,7 @@ function CreationEditor({
               statusStale={!!taskQuery.error}
               projectId={projectId}
               onEdit={(id) => void openImageEdit(id)}
+              onDerive={(assetId, label) => beginHandoff(assetId, label)}
               onReference={chooseReference}
               onTextReference={(id) => {
                 if (busy || pending)
@@ -1083,6 +1204,28 @@ function CreationEditor({
                       prompt={prompt}
                       style={style}
                     />
+                    {usage &&
+                      selectedCapability(
+                        usage,
+                        settings.modelKey,
+                      )?.formats.includes("svg") && (
+                        <Button
+                          type="button"
+                          aria-pressed={settings.format === "svg"}
+                          disabled={
+                            busy || !!pending || settings.format === "svg"
+                          }
+                          onClick={() =>
+                            setSettings((old) => ({
+                              ...old,
+                              format: "svg",
+                              count: 1,
+                            }))
+                          }
+                        >
+                          矢量创作（SVG）
+                        </Button>
+                      )}
                     <ImageControls
                       disabled={busy || !!pending}
                       compact
@@ -1192,6 +1335,7 @@ function CreationEditor({
                 }
                 onUpload={(file) => void upload(file)}
                 uploadBusy={busy || !!pending}
+                onHandoffBlocked={setAgentHandoffBlocked}
               />
             </div>
           </aside>

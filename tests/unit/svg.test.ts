@@ -10,6 +10,19 @@ const svg =
 const bytes = (s: string) => Buffer.from(s);
 it("validates static SVG structure and rejects external resources, scripts, styles, entities and reference expansion", () => {
   expect(validateSvg(bytes(svg))).toEqual({ width: 256, height: 256 });
+  expect(
+    validateSvg(
+      bytes(
+        svg
+          .replace("<svg ", '<svg version="1.1" ')
+          .replace("<rect", '<g style="mix-blend-mode: normal"><rect')
+          .replace("</svg>", "</g></svg>"),
+      ),
+    ),
+  ).toEqual({ width: 256, height: 256 });
+  expect(() =>
+    validateSvg(bytes('<?xml version="1.0" encoding="UTF-7"?>' + svg)),
+  ).toThrow();
   for (const content of [
     "<script/>",
     '<image href="file:///etc/passwd"/>',
@@ -17,6 +30,7 @@ it("validates static SVG structure and rejects external resources, scripts, styl
     "<style>path{fill:red}</style>",
     '<use href="https://example.com/a"/>',
     '<path style="fill:red"/>',
+    '<g style="mix-blend-mode: normal; fill: url(file:///a)"/>',
     '<g id="a"><use href="#a"/></g>',
     '<path fill="url(file:///a)"/>',
   ])

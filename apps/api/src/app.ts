@@ -30,6 +30,7 @@ import {
   id,
   publishDemoInput,
   CANVAS_REQUEST_MAX_BYTES,
+  SVG_REVISION_MAX_BYTES,
   type SessionView,
 } from "@tuyile/contracts";
 import { AppError, type Workbench, type Store } from "@tuyile/core";
@@ -40,6 +41,7 @@ export type ApiEnv = {
   Variables: { session: SessionView; requestId: string; styleNonce: string };
 };
 const cookieName = "tuyile_session";
+const svgRevisionPath = /^\/api\/images\/assets\/[^/]+\/svg-revisions$/;
 const equal = (a: string, b: string) =>
   Buffer.byteLength(a) === Buffer.byteLength(b) &&
   timingSafeEqual(Buffer.from(a), Buffer.from(b));
@@ -95,15 +97,17 @@ export function createApp(
               c.req.path.startsWith("/api/agent/") ||
               /^\/api\/projects\/[^/]+\/(canvas|draft)/.test(c.req.path)
             ? 1024 * 1024
-            : c.req.path === "/api/images/uploads"
-              ? 20 * 1024 * 1024
-              : c.req.path.startsWith("/api/images/") ||
-                  c.req.path.startsWith("/api/image-admin/") ||
-                  c.req.path.startsWith("/api/library/") ||
-                  c.req.path === "/api/admin/prompts" ||
-                  c.req.path === "/api/admin/demo-template"
-                ? 65536
-                : 16384,
+            : svgRevisionPath.test(c.req.path)
+              ? SVG_REVISION_MAX_BYTES
+              : c.req.path === "/api/images/uploads"
+                ? 20 * 1024 * 1024
+                : c.req.path.startsWith("/api/images/") ||
+                    c.req.path.startsWith("/api/image-admin/") ||
+                    c.req.path.startsWith("/api/library/") ||
+                    c.req.path === "/api/admin/prompts" ||
+                    c.req.path === "/api/admin/demo-template"
+                  ? 65536
+                  : 16384,
       onError: (c) =>
         c.json(
           { error: { code: "BODY_TOO_LARGE", requestId: c.get("requestId") } },
@@ -120,7 +124,10 @@ export function createApp(
         ?.toLowerCase()
         .split(";")[0]
         .trim();
-      if (
+      if (svgRevisionPath.test(c.req.path)) {
+        if (mime !== "image/svg+xml")
+          throw new AppError("SVG_REVISION_FILE_REQUIRED", 415);
+      } else if (
         mime !== "application/json" &&
         !(
           c.req.path === "/api/images/uploads" &&

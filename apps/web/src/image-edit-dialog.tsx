@@ -33,11 +33,13 @@ export function ImageEditDialog({
   usage,
   onClose,
   onRefresh,
+  onDerive,
 }: {
   projectId: string;
   usage?: ImageUsage;
   onClose: () => void;
   onRefresh: () => Promise<void>;
+  onDerive?: (task: ImageTask, assetId: string) => Promise<void>;
 }) {
   const store = useProjectDraft(),
     state = useSessionState(),
@@ -47,7 +49,9 @@ export function ImageEditDialog({
   const [kind, setKind] = useState<AnnotationStroke["kind"]>("ellipse");
   const [drawing, setDrawing] = useState<AnnotationStroke | null>(null),
     stroke = useRef<AnnotationStroke | null>(null);
-  const [view, setView] = useState<"annotate" | "compare">("annotate");
+  const [view, setView] = useState<"annotate" | "compare">(
+    edit.resultTaskId && !edit.pendingInput ? "compare" : "annotate",
+  );
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const [baseReady, setBaseReady] = useState(false);
@@ -89,6 +93,12 @@ export function ImageEditDialog({
     active ||
     !!task?.pendingReview ||
     (!!edit.resultTaskId && (!task || !!result.error));
+  const adoptable =
+    !locked &&
+    task?.projectId === projectId &&
+    task.settings?.referenceIds[0] === edit.baseAssetId
+      ? output
+      : undefined;
   const cap = usage && selectedCapability(usage, edit.settings.modelKey);
   const errors = usage
     ? settingsIssues(usage, edit.settings, 1)
@@ -118,6 +128,32 @@ export function ImageEditDialog({
       if (alive.current) onClose();
     } catch (e) {
       setError((e as Error).message);
+    }
+  }
+  async function continueWithResult() {
+    if (!adoptable || inFlight.current) return;
+    const current = store.get().document.edit;
+    if (current !== edit) return;
+    inFlight.current = true;
+    setBusy(true);
+    setError("");
+    setBaseReady(false);
+    stroke.current = null;
+    setDrawing(null);
+    patch({
+      baseAssetId: adoptable.id,
+      prompt: "",
+      annotation: { version: 1, strokes: [] },
+      resultTaskId: undefined,
+    });
+    setView("annotate");
+    try {
+      await store.flush();
+    } catch (e) {
+      if (alive.current) setError((e as Error).message);
+    } finally {
+      inFlight.current = false;
+      if (alive.current) setBusy(false);
     }
   }
   function point(e: React.PointerEvent<SVGSVGElement>): [number, number] {
@@ -258,24 +294,53 @@ export function ImageEditDialog({
           <Button disabled={busy} onClick={() => void close()}>
             保存并关闭
           </Button>
-          <Button
-            className="primary"
-            disabled={
-              busy ||
-              (!edit.pendingInput &&
-                (locked ||
-                  !!errors.length ||
-                  !edit.prompt.trim() ||
-                  !baseReady))
-            }
-            onClick={() => void submit()}
-          >
-            {edit.pendingInput
-              ? "找回／重试原提交"
-              : active
-                ? "正在修改…"
-                : "生成修改结果"}
-          </Button>
+          {view === "compare" && adoptable ? (
+            <>
+              <Button onClick={() => setView("annotate")}>基于原图再试</Button>
+              <a
+                className="button"
+                href={`/api/images/assets/${adoptable.id}/download`}
+              >
+                下载修改稿
+              </a>
+              {onDerive && task && (
+                <Button
+                  onClick={() =>
+                    void onDerive(task, adoptable.id).catch((cause: Error) =>
+                      setError(cause.message),
+                    )
+                  }
+                >
+                  用修改稿做 Agent 衍生
+                </Button>
+              )}
+              <Button
+                className="primary"
+                onClick={() => void continueWithResult()}
+              >
+                用修改稿继续修改
+              </Button>
+            </>
+          ) : (
+            <Button
+              className="primary"
+              disabled={
+                busy ||
+                (!edit.pendingInput &&
+                  (locked ||
+                    !!errors.length ||
+                    !edit.prompt.trim() ||
+                    !baseReady))
+              }
+              onClick={() => void submit()}
+            >
+              {edit.pendingInput
+                ? "找回／重试原提交"
+                : active
+                  ? "正在修改…"
+                  : "生成修改结果"}
+            </Button>
+          )}
         </>
       }
     >

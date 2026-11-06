@@ -7,7 +7,7 @@ import {
   type StoredAsset,
   type AssetBytes,
 } from "@tuyile/core";
-import type { Principal } from "@tuyile/contracts";
+import type { Principal, SvgRevision } from "@tuyile/contracts";
 import { PgCreationContext, asset } from "./context.js";
 export class PgAssetsRepository extends PgCreationContext {
   async uploads(p: Principal, offset = 0) {
@@ -44,7 +44,54 @@ export class PgAssetsRepository extends PgCreationContext {
     ]);
     return { ...target, derivedFrom: sourceId };
   }
-  async reserveUpload(p: Principal) {
+  async svgRevisions(p: Principal, sourceId: string): Promise<SvgRevision[]> {
+    const source = await this.asset(p, sourceId);
+    if (source.mime !== "image/svg+xml" || source.revisionOf)
+      throw new AppError("SVG_REVISION_SOURCE_REQUIRED", 409);
+    const { rows } = await this.c.query<AssetRow>(
+      "SELECT id,width,height,created_at FROM image_assets WHERE workspace_id=$1 AND revision_of=$2 AND state='ready' ORDER BY created_at DESC,id",
+      [p.workspaceId, sourceId],
+    );
+    return rows.map((row) => ({
+      id: row.id,
+      width: row.width!,
+      height: row.height!,
+      createdAt: row.created_at.toISOString(),
+    }));
+  }
+  async reserveSvgRevision(p: Principal, sourceId: string, image: AssetBytes) {
+    await this.auth(this.c, p);
+    const source = await this.asset(p, sourceId);
+    if (
+      source.mime !== "image/svg+xml" ||
+      source.revisionOf ||
+      image.mime !== "image/svg+xml"
+    )
+      throw new AppError("SVG_REVISION_SOURCE_REQUIRED", 409);
+    if (source.hash === image.hash)
+      throw new AppError("SVG_REVISION_UNCHANGED", 409);
+    const { rows } = await this.c.query<AssetRow>(
+      "SELECT * FROM image_assets WHERE workspace_id=$1 AND revision_of=$2 AND state IN ('staging','ready')",
+      [p.workspaceId, sourceId],
+    );
+    const existing = rows.find((row) => row.hash === image.hash);
+    if (existing) {
+      if (existing.state !== "ready")
+        throw new AppError("SVG_REVISION_PENDING", 409);
+      return asset(existing);
+    }
+    if (rows.length >= 50) throw new AppError("SVG_REVISION_LIMIT", 409);
+    const target = await this.reserveUpload(
+      p,
+      image.original.length + image.preview.length,
+    );
+    await this.c.query(
+      "UPDATE image_assets SET revision_of=$2,mime=$3,hash=$4 WHERE id=$1",
+      [target.id, sourceId, image.mime, image.hash],
+    );
+    return target;
+  }
+  async reserveUpload(p: Principal, reservedBytes = ASSET_RESERVE) {
     const c = this.c;
 
     await this.auth(c, p);
@@ -52,19 +99,19 @@ export class PgAssetsRepository extends PgCreationContext {
     if (
       Number(limits.storage_used) +
         Number(limits.storage_reserved) +
-        ASSET_RESERVE >
+        reservedBytes >
       Number(limits.storage_limit)
     )
       throw new AppError("STORAGE_QUOTA", 409);
     await c.query(
       "UPDATE image_policies SET storage_reserved=storage_reserved+$2 WHERE user_id=$1",
-      [p.id, ASSET_RESERVE],
+      [p.id, reservedBytes],
     );
     return asset(
       (
         await c.query<AssetRow>(
           "INSERT INTO image_assets(workspace_id,user_id,state,reserved_bytes) VALUES($1,$2,'staging',$3) RETURNING *",
-          [p.workspaceId, p.id, ASSET_RESERVE],
+          [p.workspaceId, p.id, reservedBytes],
         )
       ).rows[0],
     );
@@ -163,8 +210,8 @@ export class PgAssetsRepository extends PgCreationContext {
     if (
       (
         await c.query(
-          "SELECT 1 FROM image_assets WHERE derived_from=$1 AND state IN ('staging','ready','deleting') UNION ALL SELECT 1 FROM demo_projects WHERE images @> jsonb_build_array(jsonb_build_object('assetId',$1::uuid)) UNION ALL SELECT 1 FROM demo_template_assets WHERE asset_id=$1 UNION ALL SELECT 1 FROM image_references WHERE asset_id=$1 UNION ALL SELECT 1 FROM draft_references WHERE asset_id=$1 UNION ALL SELECT 1 FROM canvas_references WHERE asset_id=$1 UNION ALL SELECT 1 FROM agent_references WHERE asset_id=$1 UNION ALL SELECT 1 FROM library_favorites WHERE asset_id=$1 UNION ALL SELECT 1 FROM image_outputs o JOIN image_tasks d ON d.depends_on=o.task_id WHERE o.asset_id=$1 AND o.ordinal=0 AND (d.state IN ('queued','running') OR d.pending_review) LIMIT 1",
-          [id],
+          "SELECT 1 FROM image_assets WHERE workspace_id=$2 AND (derived_from=$1 OR revision_of=$1) AND state IN ('staging','ready','deleting') UNION ALL SELECT 1 FROM demo_projects WHERE images @> jsonb_build_array(jsonb_build_object('assetId',$1::uuid)) UNION ALL SELECT 1 FROM demo_template_assets WHERE asset_id=$1 UNION ALL SELECT 1 FROM image_references WHERE asset_id=$1 UNION ALL SELECT 1 FROM draft_references WHERE asset_id=$1 UNION ALL SELECT 1 FROM canvas_references WHERE asset_id=$1 UNION ALL SELECT 1 FROM agent_references WHERE asset_id=$1 UNION ALL SELECT 1 FROM library_favorites WHERE asset_id=$1 UNION ALL SELECT 1 FROM image_outputs o JOIN image_tasks d ON d.depends_on=o.task_id WHERE o.asset_id=$1 AND o.ordinal=0 AND (d.state IN ('queued','running') OR d.pending_review) LIMIT 1",
+          [id, p.workspaceId],
         )
       ).rowCount
     )

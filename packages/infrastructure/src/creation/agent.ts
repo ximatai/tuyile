@@ -40,7 +40,7 @@ export class PgAgentRepository
   }
 
   async context(p: Principal, id: string) {
-    const { plan } = await this.plan(p, id);
+    const { plan, derivation } = await this.plan(p, id);
     const row = (
       await this.c.query("SELECT messages FROM planning_jobs WHERE id=$1", [
         plan.jobId,
@@ -56,6 +56,7 @@ export class PgAgentRepository
       document: plan.document,
       messages: row.messages as PlanningMessages[],
       referenceIds,
+      derivation,
     };
   }
   async clearHistory(p: Principal, project: string) {
@@ -139,8 +140,30 @@ export class PgAgentRepository
       skillId: row.skill_id,
       providerId: row.provider_id,
       preserveRequirements: row.job_input?.preserveRequirements,
+      derivation: row.job_input?.derivation,
       textSources: row.job_input?.textSources ?? [],
     };
+  }
+  async derivationOutputs(
+    p: Principal,
+    projectId: string,
+    derivation: import("@tuyile/contracts").AgentDerivation,
+    candidates: string[],
+  ) {
+    if (!candidates.length) return [];
+    const { rows } = await this.c.query<{ asset_id: string }>(
+      `SELECT DISTINCT o.asset_id
+      FROM image_outputs o
+      JOIN image_assets a ON a.workspace_id=o.workspace_id AND a.id=o.asset_id
+      JOIN image_tasks t ON t.workspace_id=o.workspace_id AND t.id=o.task_id
+      JOIN agent_plans ap ON ap.workspace_id=t.workspace_id AND ap.id=t.agent_plan_id
+      JOIN planning_jobs j ON j.workspace_id=ap.workspace_id AND j.id=ap.job_id
+      WHERE o.workspace_id=$1 AND t.project_id=$2 AND j.project_id=$2
+        AND a.state='ready' AND j.input->'derivation'=$3::jsonb
+        AND o.asset_id=ANY($4::uuid[])`,
+      [p.workspaceId, projectId, derivation, candidates],
+    );
+    return rows.map((row) => row.asset_id);
   }
   async attach(
     plan: string,
@@ -410,6 +433,7 @@ export class PgAgentRepository
     const plans = loadedPlans ?? (await this.planRows([row.id]));
     return {
       preserveRequirements: row.input?.preserveRequirements,
+      derivation: row.input?.derivation,
       textSources: row.input?.textSources ?? [],
       id: row.id,
       projectId: row.project_id,

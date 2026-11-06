@@ -4378,3 +4378,17 @@ h3 {
 /* Keep the short pointer corridor to a portal toolbar interactive while it is shown. */
 .canvas-image-actions::before { content: ""; position: absolute; left: 0; right: 0; height: 8px; top: -8px; }
 .canvas-image-actions[data-side="above"]::before { top: auto; bottom: -8px; }
+
+.agent-handoff-source {
+  margin: 0 0 12px;
+}
+.agent-handoff-source img {
+  display: block;
+  width: 100%;
+  max-height: 160px;
+  object-fit: contain;
+  background: var(--canvas-bg, #f5f7fb);
+}
+.agent-handoff-source figcaption {
+  margin-top: 4px;
+}

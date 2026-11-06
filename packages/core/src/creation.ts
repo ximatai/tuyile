@@ -74,6 +74,7 @@ export interface StoredAsset {
   hash: string | null;
   taskId: string | null;
   derivedFrom?: string | null;
+  revisionOf?: string | null;
 }
 export interface AssetBytes {
   original: Uint8Array;
@@ -148,6 +149,31 @@ export class CreationService extends ImageOperations {
       const source = await this.asset(p, id);
       const png = await this.files.rasterize(await this.files.read(source));
       const image = await this.files.inspect(png);
+      await this.files.write(target.fileKey, image);
+      await this.commitAsset(target, image);
+      return this.asset(p, target.id);
+    } catch (error) {
+      if (await this.abandonAsset(target)) {
+        await this.files.remove(target.fileKey);
+        await this.finalizeDelete(target);
+      }
+      throw error;
+    }
+  }
+  svgRevisions(p: Principal, id: string) {
+    return this.store.read((r) => r.assets.svgRevisions(p, id));
+  }
+  async importSvgRevision(p: Principal, id: string, bytes: Uint8Array) {
+    const source = await this.asset(p, id);
+    if (source.mime !== "image/svg+xml" || source.revisionOf)
+      throw new AppError("SVG_REVISION_SOURCE_REQUIRED", 409);
+    if (!(await this.files.freeSpace())) throw new AppError("DISK_LOW", 507);
+    const image = await this.files.inspect(bytes, true);
+    const target = await this.store.write({ owners: [p.id] }, (r) =>
+      r.assets.reserveSvgRevision(p, id, image),
+    );
+    if (target.state === "ready") return target;
+    try {
       await this.files.write(target.fileKey, image);
       await this.commitAsset(target, image);
       return this.asset(p, target.id);
