@@ -113,6 +113,10 @@ test("SVG generation exports the original, previews safely, and converts referen
     ).toEqual({ count: 3, aligned: true, fits: true });
     await vector.click();
     await expect(vector).toHaveAttribute("aria-pressed", "true");
+    await expect(vector).toBeEnabled();
+    await expect(vector).toHaveCSS("background-color", "rgb(234, 244, 255)");
+    await vector.click();
+    await expect(vector).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByText(/矢量创作：无参考图、单张输出/)).toBeVisible();
     await page
       .getByRole("button", { name: "提交图片任务", exact: true })
@@ -323,6 +327,7 @@ test("SVG generation exports the original, previews safely, and converts referen
       .locator(".ant-select-dropdown:visible .ant-select-item-option-content")
       .getByText("PNG", { exact: true })
       .click();
+    await expect(vector).toHaveAttribute("aria-pressed", "false");
     await expect(
       page.getByRole("button", { name: "提交图片任务", exact: true }),
     ).toBeEnabled();

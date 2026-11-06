@@ -2692,7 +2692,8 @@ h3 {
 }
 
 /* Canvas navigation uses React Flow's native drag and keyboard handling. */
-.canvas-toolbar .button[aria-pressed="true"] {
+.canvas-toolbar .button[aria-pressed="true"],
+.image-preset-actions-svg > .button[aria-pressed="true"]:not(:disabled) {
   color: var(--brand-blue);
   background: #eaf4ff;
   border-color: #b7d9f4;

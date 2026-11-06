@@ -234,8 +234,10 @@ export function ImageControls({
             <Button
               type="button"
               aria-pressed={value.format === "svg"}
-              disabled={disabled || value.format === "svg"}
-              onClick={() => patch({ format: "svg", count: 1 })}
+              disabled={disabled}
+              onClick={() => {
+                if (value.format !== "svg") patch({ format: "svg", count: 1 });
+              }}
             >
               矢量创作（SVG）
             </Button>
