@@ -134,6 +134,25 @@ test("SVG generation exports the original, previews safely, and converts referen
       return page.getByRole("dialog", { name: "SVG 修订与交付", exact: true });
     };
     const revisionDialog = await openRevisions();
+    const originalCard = revisionDialog.getByRole("region", { name: "原稿" });
+    const revisionCard = revisionDialog.getByRole("region", { name: "修订稿" });
+    await expect(
+      originalCard.getByRole("link", { name: "下载原稿 SVG" }),
+    ).toBeVisible();
+    const exportOriginal = originalCard.getByRole("button", {
+      name: "导出原稿 PNG",
+    });
+    await expect(exportOriginal).toBeEnabled();
+    await expect(
+      revisionCard.getByRole("button", { name: "导入修订稿" }),
+    ).toBeVisible();
+    await exportOriginal.click();
+    const exportConfirm = page.getByRole("dialog", { name: "请确认" });
+    await expect(exportConfirm).toContainText("将「原稿」导出为 PNG");
+    await exportConfirm
+      .getByRole("button", { name: "取消", exact: true })
+      .click();
+    await expect(exportConfirm).toBeHidden();
     const revisionFile = Buffer.from(
       '<svg version="1.1" xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024"><g style="mix-blend-mode: normal"><rect width="1024" height="1024" fill="#0062b0"/><circle cx="576" cy="512" r="256" fill="#e8b844"/></g></svg>',
     );
@@ -152,10 +171,14 @@ test("SVG generation exports the original, previews safely, and converts referen
     const revision = await importResponse.json();
     await expect(revisionDialog.getByAltText("SVG 原稿预览")).toBeVisible();
     await expect(revisionDialog.getByAltText("SVG 修订稿预览")).toBeVisible();
-    await expect(revisionDialog.locator("figcaption").last()).toContainText(
-      "修订稿 1",
-    );
-    await revisionDialog
+    await expect(
+      revisionCard.getByRole("combobox", { name: "比较修订稿" }),
+    ).toBeVisible();
+    await expect(revisionCard).toContainText("修订稿 1");
+    await expect(
+      revisionCard.getByRole("button", { name: "导入新稿" }),
+    ).toBeVisible();
+    await revisionCard
       .getByRole("button", { name: "将这稿加入画布", exact: true })
       .click();
     await expect(revisionDialog.getByRole("status")).toHaveText(
@@ -163,15 +186,14 @@ test("SVG generation exports the original, previews safely, and converts referen
     );
     const [revisedDownload] = await Promise.all([
       page.waitForEvent("download"),
-      revisionDialog
+      revisionCard
         .getByRole("link", { name: "下载这稿 SVG", exact: true })
         .click(),
     ]);
     expect(revisedDownload.suggestedFilename()).toBe(`${revision.id}.svg`);
-    await revisionDialog
+    await revisionCard
       .getByRole("button", { name: "导出这稿 PNG", exact: true })
       .click();
-    const exportConfirm = page.getByRole("dialog", { name: "请确认" });
     await expect(exportConfirm).toContainText(/将「修订稿 1 · .*」导出为 PNG/);
     const [pngDownload, rasterCopy] = await Promise.all([
       page.waitForEvent("download"),
