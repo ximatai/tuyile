@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Download, FileUp } from "lucide-react";
 import { SVG_REVISION_MAX_BYTES, type SvgRevision } from "@tuyile/contracts";
@@ -34,6 +34,8 @@ export function SvgRevisions({
   const [selectedId, setSelectedId] = useState(initialRevisionId);
   const [error, setError] = useState("");
   const [placed, setPlaced] = useState("");
+  const revisionHeader = useRef<HTMLDivElement>(null);
+  const focusFirstRevision = useRef(false);
   const revisions = useQuery({
     queryKey,
     queryFn: ({ signal }) =>
@@ -102,6 +104,18 @@ export function SvgRevisions({
   });
   const busy = upload.isPending || exportPng.isPending || place.isPending;
   const selectionMissing = !!selectedId && !selected;
+  useEffect(() => {
+    if (busy || !focusFirstRevision.current) return;
+    focusFirstRevision.current = false;
+    if (
+      upload.isSuccess &&
+      selected?.id &&
+      document.activeElement === document.body
+    )
+      revisionHeader.current
+        ?.querySelector<HTMLElement>('[role="combobox"]')
+        ?.focus();
+  }, [busy, selected?.id, upload.isSuccess]);
   const uploadAction = (
     <Upload
       accept=".svg,image/svg+xml"
@@ -109,6 +123,7 @@ export function SvgRevisions({
       disabled={busy}
       beforeUpload={(file) => {
         setError("");
+        focusFirstRevision.current = items.length === 0;
         upload.mutate(file);
         return false;
       }}
@@ -175,7 +190,7 @@ export function SvgRevisions({
           </div>
         </section>
         <section className="svg-revision-card" aria-label="修订稿">
-          <div className="svg-revision-header">
+          <div className="svg-revision-header" ref={revisionHeader}>
             <h3>修订稿</h3>
             {items.length > 0 && (
               <>

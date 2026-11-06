@@ -164,9 +164,10 @@ test("SVG generation exports the original, previews safely, and converts referen
       name: "导出原稿 PNG",
     });
     await expect(exportOriginal).toBeEnabled();
-    await expect(
-      revisionCard.getByRole("button", { name: "导入修订稿" }),
-    ).toBeVisible();
+    const importRevision = revisionCard.getByRole("button", {
+      name: "导入修订稿",
+    });
+    await expect(importRevision).toBeVisible();
     await exportOriginal.click();
     const exportConfirm = page.getByRole("dialog", { name: "请确认" });
     await expect(exportConfirm).toContainText("将「原稿」导出为 PNG");
@@ -182,7 +183,12 @@ test("SVG generation exports the original, previews safely, and converts referen
         r.url().endsWith(`/api/images/assets/${assetId}/svg-revisions`) &&
         r.request().method() === "POST",
     );
-    await revisionDialog.locator('input[type="file"]').setInputFiles({
+    await importRevision.focus();
+    const [fileChooser] = await Promise.all([
+      page.waitForEvent("filechooser"),
+      importRevision.press("Enter"),
+    ]);
+    await fileChooser.setFiles({
       name: "refined-icon.svg",
       mimeType: "image/svg+xml",
       buffer: revisionFile,
@@ -194,7 +200,7 @@ test("SVG generation exports the original, previews safely, and converts referen
     await expect(revisionDialog.getByAltText("SVG 修订稿预览")).toBeVisible();
     await expect(
       revisionCard.getByRole("combobox", { name: "比较修订稿" }),
-    ).toBeVisible();
+    ).toBeFocused();
     await expect(revisionCard).toContainText("修订稿 1");
     await expect(
       revisionCard.getByRole("button", { name: "导入新稿" }),
