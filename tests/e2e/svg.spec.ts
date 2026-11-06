@@ -89,10 +89,8 @@ test("SVG generation exports the original, previews safely, and converts referen
     });
     await page.goto(`/projects/${project.id}`);
     await page.getByLabel("创作需求", { exact: true }).fill("合成矢量图标");
-    await page.getByLabel("格式", { exact: true }).click();
     await page
-      .locator(".ant-select-dropdown:visible .ant-select-item-option-content")
-      .getByText("SVG", { exact: true })
+      .getByRole("button", { name: "矢量创作（SVG）", exact: true })
       .click();
     await expect(page.getByText(/矢量创作：无参考图、单张输出/)).toBeVisible();
     await page
@@ -119,6 +117,84 @@ test("SVG generation exports the original, previews safely, and converts referen
     );
     expect(original.headers()["content-disposition"]).toContain(".svg");
     expect(await original.text()).toContain("<circle");
+    const sourceNode = page
+      .locator(".react-flow__node-image")
+      .filter({
+        has: page.locator(`img[src='/api/images/assets/${assetId}/preview']`),
+      })
+      .first();
+    const openRevisions = async () => {
+      await sourceNode.hover();
+      const nodeId = await sourceNode.getAttribute("data-id");
+      expect(nodeId).toBeTruthy();
+      await page
+        .locator(`.react-flow__node-toolbar[data-id="${nodeId}"]`)
+        .getByRole("button", { name: "SVG 修订与交付", exact: true })
+        .click();
+      return page.getByRole("dialog", { name: "SVG 修订与交付", exact: true });
+    };
+    const revisionDialog = await openRevisions();
+    const revisionFile = Buffer.from(
+      '<svg version="1.1" xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024"><g style="mix-blend-mode: normal"><rect width="1024" height="1024" fill="#0062b0"/><circle cx="576" cy="512" r="256" fill="#e8b844"/></g></svg>',
+    );
+    const imported = page.waitForResponse(
+      (r) =>
+        r.url().endsWith(`/api/images/assets/${assetId}/svg-revisions`) &&
+        r.request().method() === "POST",
+    );
+    await revisionDialog.locator('input[type="file"]').setInputFiles({
+      name: "refined-icon.svg",
+      mimeType: "image/svg+xml",
+      buffer: revisionFile,
+    });
+    const importResponse = await imported;
+    expect(importResponse.status()).toBe(201);
+    const revision = await importResponse.json();
+    await expect(revisionDialog.getByAltText("SVG 原稿预览")).toBeVisible();
+    await expect(revisionDialog.getByAltText("SVG 修订稿预览")).toBeVisible();
+    await revisionDialog
+      .getByRole("button", { name: "将这稿加入画布", exact: true })
+      .click();
+    await expect(revisionDialog.getByRole("status")).toHaveText(
+      "已将这稿加入画布",
+    );
+    const [revisedDownload] = await Promise.all([
+      page.waitForEvent("download"),
+      revisionDialog
+        .getByRole("link", { name: "下载这稿 SVG", exact: true })
+        .click(),
+    ]);
+    expect(revisedDownload.suggestedFilename()).toBe(`${revision.id}.svg`);
+    await revisionDialog
+      .getByRole("button", { name: "导出这稿 PNG", exact: true })
+      .click();
+    const [pngDownload] = await Promise.all([
+      page.waitForEvent("download"),
+      page
+        .getByRole("dialog", { name: "请确认" })
+        .getByRole("button", { name: "确认", exact: true })
+        .click(),
+    ]);
+    expect(pngDownload.suggestedFilename()).toMatch(/\.png$/);
+    await revisionDialog
+      .getByRole("button", { name: "关闭", exact: true })
+      .last()
+      .click();
+    await page.reload();
+    await expect(
+      page.locator(
+        `.react-flow__node img[src='/api/images/assets/${revision.id}/preview']`,
+      ),
+    ).toBeVisible();
+    const reopened = await openRevisions();
+    await expect(reopened.getByAltText("SVG 修订稿预览")).toHaveAttribute(
+      "src",
+      `/api/images/assets/${revision.id}/preview`,
+    );
+    await reopened
+      .getByRole("button", { name: "关闭", exact: true })
+      .last()
+      .click();
     await page.goto("/gallery");
     const card = page.locator("article").filter({
       has: page.locator(`a[href='/api/images/assets/${assetId}/download']`),

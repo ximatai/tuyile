@@ -10,6 +10,11 @@ const messages: Record<string, string> = {
   SVG_CONVERSION_PENDING:
     "同一 SVG 正在转换，请稍后重试找回副本；系统不会重复创建。",
   SVG_SOURCE_REQUIRED: "仅 SVG 原件可创建栅格参考副本。",
+  SVG_REVISION_SOURCE_REQUIRED: "请选择 SVG 矢量作品作为修订的原稿。",
+  SVG_REVISION_FILE_REQUIRED: "请选择 SVG 文件。",
+  SVG_REVISION_UNCHANGED: "所选文件与原稿相同，请选择精修后的 SVG。",
+  SVG_REVISION_PENDING: "同一份修订稿正在导入，请稍后重试。",
+  SVG_REVISION_LIMIT: "这份原稿已有 50 份修订，请先清理未使用的稿件。",
   DRAFT_VERSION_UNSUPPORTED: "草稿由更新版本创建，请升级应用后再打开。",
   DRAFT_CONFLICT: "草稿已在其他页面更新，当前输入已保留。",
   STYLE_CONFLICT: "风格已被修改，请重新打开后编辑。当前输入已保留。",
@@ -120,6 +125,7 @@ export function client(csrfToken = "") {
     signal?: AbortSignal,
   ): Promise<T> {
     let response: Response;
+    const binary = data instanceof Blob;
     try {
       response = await fetch(`/api${path}`, {
         method: data === undefined ? "GET" : "POST",
@@ -127,8 +133,15 @@ export function client(csrfToken = "") {
         headers:
           data === undefined
             ? undefined
-            : { "Content-Type": "application/json", "X-CSRF-Token": csrfToken },
-        body: data === undefined ? undefined : JSON.stringify(data),
+            : {
+                "Content-Type": binary ? data.type : "application/json",
+                "X-CSRF-Token": csrfToken,
+              },
+        body: binary
+          ? data
+          : data === undefined
+            ? undefined
+            : JSON.stringify(data),
         signal,
       });
     } catch (e) {

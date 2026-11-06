@@ -67,6 +67,15 @@ export interface TasksRepository {
 }
 export interface AssetsRepository {
   reserveDerivative(p: Principal, sourceId: string): Promise<StoredAsset>;
+  reserveSvgRevision(
+    p: Principal,
+    sourceId: string,
+    image: AssetBytes,
+  ): Promise<StoredAsset>;
+  svgRevisions(
+    p: Principal,
+    sourceId: string,
+  ): Promise<import("@tuyile/contracts").SvgRevision[]>;
   uploads(p: Principal, offset?: number): Promise<StoredAsset[]>;
   reserveUpload(p: Principal): Promise<StoredAsset>;
   prepareCommit(

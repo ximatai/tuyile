@@ -37,6 +37,13 @@ export function validateSvg(bytes: Uint8Array) {
     width = 0,
     height = 0;
   const parser = new SaxesParser({ xmlns: true });
+  parser.on("xmldecl", (decl) => {
+    if (
+      decl.version !== "1.0" ||
+      (decl.encoding && !/^utf-8$/i.test(decl.encoding))
+    )
+      fail();
+  });
   parser.on("error", fail);
   parser.on("doctype", fail);
   parser.on("processinginstruction", fail);
@@ -58,6 +65,17 @@ export function validateSvg(bytes: Uint8Array) {
           fail();
         continue;
       }
+      // Paper.js adds an SVG version and the default blend mode on export.
+      if (!a.uri && nodes === 1 && a.local === "version" && a.value === "1.1")
+        continue;
+      if (
+        !a.uri &&
+        tag.local === "g" &&
+        a.local === "style" &&
+        (a.value === "mix-blend-mode: normal" ||
+          a.value === "mix-blend-mode: normal;")
+      )
+        continue;
       if (
         (a.uri &&
           !(a.uri === "http://www.w3.org/1999/xlink" && a.local === "href")) ||

@@ -65,6 +65,13 @@ export const imageInput = z.object({
   textCanvasRevision: z.number().int().min(0).max(2147483647).optional(),
 });
 export type ImageInput = z.infer<typeof imageInput>;
+export const SVG_REVISION_MAX_BYTES = 1024 * 1024;
+export interface SvgRevision {
+  id: string;
+  width: number;
+  height: number;
+  createdAt: string;
+}
 export const policyInput = z.object({
   imageLimit: z.number().int().min(-1).max(10000),
   attemptsLimit: z.number().int().min(0).max(10000),

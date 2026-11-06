@@ -358,13 +358,18 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
     await this.project(p, project);
     const generated = (
       await this.c.query(
-        `SELECT o.asset_id, array_agg(DISTINCT CASE WHEN EXISTS(SELECT 1 FROM canvas_references visible WHERE visible.workspace_id=$1 AND visible.project_id=$2 AND visible.asset_id=s.asset_id) THEN s.asset_id ELSE coalesce(source.derived_from,s.asset_id) END) AS sources FROM canvas_references c
+        `SELECT o.asset_id, array_agg(DISTINCT CASE WHEN EXISTS(SELECT 1 FROM canvas_references visible WHERE visible.workspace_id=$1 AND visible.project_id=$2 AND visible.asset_id=s.asset_id) THEN s.asset_id ELSE coalesce(source.derived_from,s.asset_id) END) AS sources, false AS svg FROM canvas_references c
       JOIN image_outputs o ON o.workspace_id=c.workspace_id AND o.asset_id=c.asset_id JOIN image_output_sources s ON s.output_id=o.id JOIN image_assets source ON source.workspace_id=c.workspace_id AND source.id=s.asset_id
       WHERE c.workspace_id=$1 AND c.project_id=$2 GROUP BY o.asset_id
-      UNION ALL SELECT a.id,ARRAY[a.derived_from] FROM canvas_references c JOIN image_assets a ON a.workspace_id=c.workspace_id AND a.id=c.asset_id WHERE c.workspace_id=$1 AND c.project_id=$2 AND a.derived_from IS NOT NULL`,
+      UNION ALL SELECT a.id,ARRAY[a.derived_from],false FROM canvas_references c JOIN image_assets a ON a.workspace_id=c.workspace_id AND a.id=c.asset_id WHERE c.workspace_id=$1 AND c.project_id=$2 AND a.derived_from IS NOT NULL
+      UNION ALL SELECT a.id,array_remove(ARRAY[a.revision_of],NULL),true FROM canvas_references c JOIN image_assets a ON a.workspace_id=c.workspace_id AND a.id=c.asset_id WHERE c.workspace_id=$1 AND c.project_id=$2 AND a.mime='image/svg+xml'`,
         [p.workspaceId, project],
       )
-    ).rows.map((r) => ({ assetId: r.asset_id, sourceIds: r.sources }));
+    ).rows.map((r) => ({
+      assetId: r.asset_id,
+      sourceIds: r.sources,
+      ...(r.svg ? { svg: true as const } : {}),
+    }));
     const textGenerated = (
       await this.c.query(
         "SELECT DISTINCT o.asset_id,t.input->'textSources' AS texts FROM canvas_references c JOIN image_outputs o ON o.workspace_id=c.workspace_id AND o.asset_id=c.asset_id JOIN image_tasks t ON t.workspace_id=o.workspace_id AND t.id=o.task_id WHERE c.workspace_id=$1 AND c.project_id=$2 AND jsonb_array_length(coalesce(t.input->'textSources','[]'::jsonb))>0",

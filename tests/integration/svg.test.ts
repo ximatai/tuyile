@@ -52,6 +52,66 @@ it("creates a private vector with safe preview, idempotent raster lineage, quota
     await expect(
       f.creation.submit(f.principal, f.input({ referenceIds: [id] })),
     ).rejects.toMatchObject({ code: "REFERENCE_UNAVAILABLE" });
+    const svg = (await f.creation.bytes(f.principal, id, false, true)).bytes;
+    const revisionBytes = Buffer.from(
+      Buffer.from(svg).toString().replace("#ffffff", "#e8b844"),
+    );
+    const beforeRevision = await f.creation.usage(f.principal);
+    await expect(
+      f.creation.upload(f.principal, revisionBytes),
+    ).rejects.toMatchObject({
+      code: "INVALID_IMAGE",
+    });
+    await expect(
+      f.creation.importSvgRevision(other, id, revisionBytes),
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+    await expect(
+      f.creation.importSvgRevision(
+        f.principal,
+        id,
+        Buffer.from(
+          '<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256"><script/></svg>',
+        ),
+      ),
+    ).rejects.toMatchObject({ code: "SVG_INVALID_OR_UNSUPPORTED" });
+    const revision = await f.creation.importSvgRevision(
+      f.principal,
+      id,
+      revisionBytes,
+    );
+    expect(revision).toMatchObject({ mime: "image/svg+xml", revisionOf: id });
+    expect(
+      (await f.creation.importSvgRevision(f.principal, id, revisionBytes)).id,
+    ).toBe(revision.id);
+    expect(await f.creation.svgRevisions(f.principal, id)).toMatchObject([
+      { id: revision.id },
+    ]);
+    expect((await f.creation.bytes(f.principal, revision.id)).asset.mime).toBe(
+      "image/webp",
+    );
+    expect(
+      Buffer.from(
+        (await f.creation.bytes(f.principal, revision.id, false, true)).bytes,
+      ),
+    ).toEqual(revisionBytes);
+    expect(
+      (await f.creation.bytes(f.principal, id, false, true)).bytes,
+    ).toEqual(svg);
+    const afterRevision = await f.creation.usage(f.principal);
+    expect(afterRevision).toMatchObject({
+      used: beforeRevision.used,
+      attempts: beforeRevision.attempts,
+      held: beforeRevision.held,
+    });
+    expect(afterRevision.storageUsed - beforeRevision.storageUsed).toBe(
+      revision.bytes + revision.previewBytes,
+    );
+    await expect(f.creation.delete(f.principal, id)).rejects.toMatchObject({
+      code: "ASSET_REFERENCED",
+    });
+    await f.creation.delete(f.principal, revision.id);
     const copy = await f.creation.rasterCopy(f.principal, id);
     expect(copy.mime).toBe("image/png");
     expect(copy.derivedFrom).toBe(id);

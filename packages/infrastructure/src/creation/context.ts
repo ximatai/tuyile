@@ -23,6 +23,7 @@ export const asset = (r: AssetRow): StoredAsset => ({
   hash: r.hash,
   taskId: r.task_id,
   derivedFrom: r.derived_from,
+  revisionOf: r.revision_of,
 });
 export function policy(r: PolicyRow): ImagePolicy {
   return {

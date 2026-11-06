@@ -29,7 +29,7 @@ export interface GalleryAsset {
   height: number;
   bytes: number;
   createdAt: string;
-  origin: "upload" | "generated" | "demo" | "derivative";
+  origin: "upload" | "generated" | "demo" | "derivative" | "svg-revision";
   derivedFrom?: string;
 }
 export interface AssetReference {

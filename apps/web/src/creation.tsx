@@ -1083,6 +1083,28 @@ function CreationEditor({
                       prompt={prompt}
                       style={style}
                     />
+                    {usage &&
+                      selectedCapability(
+                        usage,
+                        settings.modelKey,
+                      )?.formats.includes("svg") && (
+                        <Button
+                          type="button"
+                          aria-pressed={settings.format === "svg"}
+                          disabled={
+                            busy || !!pending || settings.format === "svg"
+                          }
+                          onClick={() =>
+                            setSettings((old) => ({
+                              ...old,
+                              format: "svg",
+                              count: 1,
+                            }))
+                          }
+                        >
+                          矢量创作（SVG）
+                        </Button>
+                      )}
                     <ImageControls
                       disabled={busy || !!pending}
                       compact

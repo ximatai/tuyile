@@ -72,6 +72,7 @@ import { EditorStore } from "./store";
 import { GenerationFeedback } from "../generation-feedback";
 import { useSessionState } from "../session-state";
 import { client, ApiError } from "../api";
+import { SvgRevisions } from "./svg-revisions";
 const canvasClipboardType = "application/x-tuyile-canvas";
 const canvasClipboardPrefix = "Tuyile canvas:";
 function canvasEventTarget(surface: HTMLElement, target: EventTarget | null) {
@@ -95,6 +96,7 @@ type ImageNode = Node<
     assetId?: string;
     reference?: (id: string) => void;
     edit?: (id: string) => void;
+    svgRevisions?: () => void;
     reuse?: () => void;
     info?: () => void;
   },
@@ -233,6 +235,7 @@ function ImageCard({
   const actionCount =
     2 +
     Number(!!data.edit) +
+    Number(!!data.svgRevisions) +
     Number(!!data.reference) +
     Number(!!data.reuse) +
     Number(!!data.info);
@@ -335,6 +338,15 @@ function ImageCard({
                       },
                     ]
                   : []),
+                ...(data.svgRevisions
+                  ? [
+                      {
+                        key: "svg-revisions",
+                        icon: <FileText size={16} />,
+                        label: "SVG 修订与交付",
+                      },
+                    ]
+                  : []),
                 ...(data.reference
                   ? [
                       {
@@ -361,6 +373,7 @@ function ImageCard({
                 if (key === "reference") data.reference?.(data.assetId!);
                 if (key === "reuse") data.reuse?.();
                 if (key === "edit") data.edit?.(data.assetId!);
+                if (key === "svg-revisions") data.svgRevisions?.();
               },
             }}
           >
@@ -422,6 +435,17 @@ function ImageCard({
                   onClick={() => data.edit?.(data.assetId!)}
                 >
                   <SlidersHorizontal size={16} />
+                </Button>
+              </Tooltip>
+            )}
+            {data.svgRevisions && (
+              <Tooltip title="SVG 修订与交付">
+                <Button
+                  type="button"
+                  aria-label="SVG 修订与交付"
+                  onClick={data.svgRevisions}
+                >
+                  <FileText size={16} aria-hidden="true" />
                 </Button>
               </Tooltip>
             )}
@@ -748,6 +772,19 @@ function CanvasView({
         signal,
       ),
   });
+  const svgSources = useMemo(
+    () =>
+      new Map(
+        sources.data
+          ?.filter((row) => row.svg)
+          .map((row) => [row.assetId, row.sourceIds[0]]),
+      ),
+    [sources.data],
+  );
+  const [svgRevisions, setSvgRevisions] = useState<{
+    sourceId: string;
+    initialRevisionId?: string;
+  }>();
   useEffect(() => {
     if (
       outputs.data &&
@@ -847,6 +884,16 @@ function CanvasView({
               assetId: n.assetId,
               reference: onReference,
               edit: onEdit,
+              svgRevisions:
+                n.assetId && svgSources.has(n.assetId)
+                  ? () => {
+                      const source = svgSources.get(n.assetId!);
+                      setSvgRevisions({
+                        sourceId: source ?? n.assetId!,
+                        initialRevisionId: source ? n.assetId : undefined,
+                      });
+                    }
+                  : undefined,
               reuse:
                 onReuse &&
                 tasks.some(
@@ -880,6 +927,7 @@ function CanvasView({
       tasks,
       store,
       demo.data,
+      svgSources,
     ],
   );
   const [nodes, setNodes] = useState<Node[]>(display);
@@ -1265,6 +1313,17 @@ function CanvasView({
             </div>
           )}
         </div>
+      )}
+      {svgRevisions && (
+        <SvgRevisions
+          key={svgRevisions.sourceId}
+          {...svgRevisions}
+          onClose={() => setSvgRevisions(undefined)}
+          onPlace={async (asset) => {
+            store.addUploadedImage(asset, "SVG 修订稿");
+            await store.flush();
+          }}
+        />
       )}
       <ReactFlow
         nodes={focused.nodes}
