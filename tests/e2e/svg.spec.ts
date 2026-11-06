@@ -89,9 +89,30 @@ test("SVG generation exports the original, previews safely, and converts referen
     });
     await page.goto(`/projects/${project.id}`);
     await page.getByLabel("创作需求", { exact: true }).fill("合成矢量图标");
-    await page
-      .getByRole("button", { name: "矢量创作（SVG）", exact: true })
-      .click();
+    const shortcuts = page.getByRole("group", { name: "创作快捷操作" });
+    const vector = shortcuts.getByRole("button", {
+      name: "矢量创作（SVG）",
+      exact: true,
+    });
+    await expect(vector).toBeVisible();
+    expect(
+      await shortcuts.getByRole("button").evaluateAll((buttons) => {
+        const [first] = buttons;
+        return {
+          count: buttons.length,
+          aligned: buttons.every(
+            (button) =>
+              button.getBoundingClientRect().top ===
+              first?.getBoundingClientRect().top,
+          ),
+          fits: buttons.every(
+            (button) => button.scrollWidth <= button.clientWidth,
+          ),
+        };
+      }),
+    ).toEqual({ count: 3, aligned: true, fits: true });
+    await vector.click();
+    await expect(vector).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByText(/矢量创作：无参考图、单张输出/)).toBeVisible();
     await page
       .getByRole("button", { name: "提交图片任务", exact: true })
