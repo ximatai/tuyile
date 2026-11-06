@@ -71,15 +71,15 @@ export function SvgRevisions({
     },
   });
   const exportPng = useMutation({
-    mutationFn: async (assetId: string) => {
+    mutationFn: async (target: { id: string; label: string }) => {
       if (
         !(await confirm(
-          "导出 PNG 会创建或复用栅格副本。副本占用存储，保留 SVG 原件。继续？",
+          `将「${target.label}」导出为 PNG？导出会创建或复用栅格副本，占用存储并保留 SVG 原件。`,
         ))
       )
         return;
       const asset = await api<{ id: string }>(
-        `/images/assets/${assetId}/raster-copy`,
+        `/images/assets/${target.id}/raster-copy`,
         {},
         AbortSignal.timeout(15000),
       );
@@ -87,7 +87,10 @@ export function SvgRevisions({
     },
     onError: (cause) => setError(cause.message),
   });
-  const items = revisions.data?.revisions ?? [];
+  const items = (revisions.data?.revisions ?? []).map((item, index, all) => ({
+    ...item,
+    label: `修订稿 ${all.length - index} · ${new Date(item.createdAt).toLocaleString("zh-CN")}`,
+  }));
   const selected = selectedId
     ? items.find((item) => item.id === selectedId)
     : items[0];
@@ -149,9 +152,9 @@ export function SvgRevisions({
             setSelectedId(id);
             setError("");
           }}
-          options={items.map((item, i) => ({
+          options={items.map((item) => ({
             value: item.id,
-            label: `修订稿 ${items.length - i} · ${new Date(item.createdAt).toLocaleString("zh-CN")}`,
+            label: item.label,
           }))}
         />
       )}
@@ -176,7 +179,7 @@ export function SvgRevisions({
                 : "导入精修后的 SVG 后可并排比较。"}
             </p>
           )}
-          <figcaption>修订稿</figcaption>
+          <figcaption>{selected?.label ?? "修订稿"}</figcaption>
         </figure>
       </div>
       <div className="actions">
@@ -203,7 +206,7 @@ export function SvgRevisions({
           disabled={busy || selectionMissing}
           onClick={() => {
             setError("");
-            exportPng.mutate(selected?.id ?? sourceId);
+            exportPng.mutate(selected ?? { id: sourceId, label: "原稿" });
           }}
         >
           {selected ? "导出这稿 PNG" : "导出原稿 PNG"}

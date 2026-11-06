@@ -182,7 +182,9 @@ test("an exploration becomes a marked revision, an Agent derivative, a vector ex
       .getByRole("button", { name: "生成修改结果", exact: true })
       .click();
     await expect(edit.getByAltText("修改结果", { exact: true })).toBeVisible();
-    await expect(edit.getByAltText("比较原图", { exact: true })).toBeVisible();
+    await expect(
+      edit.getByAltText("本轮底图预览", { exact: true }),
+    ).toBeVisible();
     const modified = (await tasks()).find((t: any) => t.id !== explored.id);
     expect(modified.settings.referenceIds).toEqual([explored.outputs[0].id]);
     expect(modified.settings.preserveRequirements).toBe(
