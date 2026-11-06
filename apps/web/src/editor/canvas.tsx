@@ -46,6 +46,7 @@ import {
   Download,
   ImagePlus,
   SlidersHorizontal,
+  SquarePen,
   Hand,
   MousePointer2,
   Undo2,
@@ -336,7 +337,7 @@ function ImageCard({
                   ? [
                       {
                         key: "edit",
-                        icon: <SlidersHorizontal size={16} />,
+                        icon: <SquarePen size={16} />,
                         label: "修改图片",
                       },
                     ]
@@ -447,7 +448,7 @@ function ImageCard({
                   aria-label="修改图片"
                   onClick={() => data.edit?.(data.assetId!)}
                 >
-                  <SlidersHorizontal size={16} />
+                  <SquarePen size={16} aria-hidden="true" />
                 </Button>
               </Tooltip>
             )}
