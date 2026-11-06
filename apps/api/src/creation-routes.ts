@@ -92,6 +92,7 @@ export function creationRoutes(app: Hono<ApiEnv>, service: CreationService) {
       width: a.width,
       height: a.height,
       derivedFrom: a.derivedFrom,
+      taskId: a.taskId,
     });
   });
   app.get("/api/images/assets/:id/svg-revisions", async (c) =>

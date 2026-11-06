@@ -10,6 +10,9 @@ const messages: Record<string, string> = {
   SVG_CONVERSION_PENDING:
     "同一 SVG 正在转换，请稍后重试找回副本；系统不会重复创建。",
   SVG_SOURCE_REQUIRED: "仅 SVG 原件可创建栅格参考副本。",
+  DERIVATION_SOURCE_REQUIRED:
+    "请让每条独立衍生步骤引用基准稿或本次衍生已完成的作品。",
+  DERIVATION_CONTEXT_MISMATCH: "所选历史方案不属于本次衍生，请回到当前基准稿。",
   SVG_REVISION_SOURCE_REQUIRED: "请选择 SVG 矢量作品作为修订的原稿。",
   SVG_REVISION_FILE_REQUIRED: "请选择 SVG 文件。",
   SVG_REVISION_UNCHANGED: "所选文件与原稿相同，请选择精修后的 SVG。",

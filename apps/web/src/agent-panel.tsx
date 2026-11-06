@@ -63,6 +63,7 @@ export function AgentPanel({
   onUpload,
   uploadBusy,
   tasks,
+  onHandoffBlocked,
 }: {
   visible: boolean;
   autoFocusComposer?: boolean;
@@ -75,11 +76,13 @@ export function AgentPanel({
   onUpload: (file: File) => void;
   uploadBusy: boolean;
   tasks: ImageTask[];
+  onHandoffBlocked?: (blocked: boolean) => void;
 }) {
   const textRefs = useTextReferences();
   const state = useSessionState(),
     api = client(state.session.csrfToken);
   const [prompt, setPrompt] = useDraftValue("agent", "prompt"),
+    [derivation, setDerivation] = useDraftValue("agent", "derivation"),
     [style, setStyle] = useDraftValue("agent", "style"),
     [preserveRequirements, setPreserveRequirements] = useDraftValue(
       "agent",
@@ -156,10 +159,23 @@ export function AgentPanel({
   const awaitingReply = history.some((job) =>
     ["queued", "running"].includes(job.state),
   );
-  const selected = history.find((j) => j.id === current) ?? history[0],
+  const isCurrentContext = (job: PlanningJob) =>
+    !derivation ||
+    (job.derivation?.id === derivation.id &&
+      job.derivation.assetId === derivation.assetId);
+  const contextJobs = derivation ? history.filter(isCurrentContext) : history;
+  const selected = contextJobs.find((j) => j.id === current) ?? contextJobs[0],
     plan =
       selected?.plans.find((p) => p.id === versionId) ?? selected?.plans.at(-1);
   const visiblePlan = useRef<{ jobId: string; planId: string } | null>(null);
+  const derivationMissing =
+    !!derivation && !references.some((ref) => ref.id === derivation.assetId);
+  const handoffBlocked =
+    busy || !!pending || planDirty || selectionPending || awaitingReply;
+  useEffect(
+    () => onHandoffBlocked?.(handoffBlocked),
+    [handoffBlocked, onHandoffBlocked],
+  );
   visiblePlan.current =
     selected && plan ? { jobId: selected.id, planId: plan.id } : null;
   useEffect(() => {
@@ -193,6 +209,10 @@ export function AgentPanel({
       return;
     if (planDirty) {
       setError("请先保存方案修改，再继续沟通。");
+      return;
+    }
+    if (!pending && derivationMissing) {
+      setError("请恢复衍生基准稿，或结束本次衍生后重新规划。");
       return;
     }
     if (!pending && (!usage || issues.length)) {
@@ -232,6 +252,7 @@ export function AgentPanel({
       referenceIds: references.map((r) => r.id),
       textNodeIds: textRefs.ids,
       ...(skillId ? { skillId } : {}),
+      ...(derivation ? { derivation } : {}),
       ...(plan ? { previousPlanId: plan.id } : {}),
     };
     let submitted = false;
@@ -412,6 +433,7 @@ export function AgentPanel({
                   </p>
                 )}
                 {job.id !== selected?.id &&
+                  isCurrentContext(job) &&
                   !!job.plans.at(-1)!.document.steps.length && (
                     <Button
                       disabled={busy || !!pending || planDirty}
@@ -520,6 +542,20 @@ export function AgentPanel({
               placeholder="例如：保持商品外观、品牌配色与指定文案"
               onChange={(e) => setPreserveRequirements(e.target.value)}
             />
+            {derivation && (
+              <Notice error={derivationMissing}>
+                {derivationMissing
+                  ? "衍生基准稿已从引用中移除。请恢复引用，或结束本次衍生。"
+                  : "已绑定选中的稿件作为衍生基准。确认方案后执行新增步骤。"}
+                <Button
+                  type="button"
+                  disabled={handoffBlocked}
+                  onClick={() => setDerivation(undefined)}
+                >
+                  结束本次衍生
+                </Button>
+              </Notice>
+            )}
             <div className="agent-references">
               {visible && (
                 <ReferenceAttachments
@@ -672,6 +708,7 @@ export function AgentPanel({
                 !!jobs.error ||
                 !prompt.trim() ||
                 issues.length > 0 ||
+                derivationMissing ||
                 conversationUnavailable ||
                 (style && !style.text.trim()) ||
                 !!textRefs.issue ||

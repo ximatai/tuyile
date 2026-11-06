@@ -54,6 +54,7 @@ export interface AgentRepository {
     document: AgentPlan;
     messages: PlanningMessages[];
     referenceIds: string[];
+    derivation?: import("@tuyile/contracts").AgentDerivation;
   }>;
   clearHistory(p: Principal, project: string): Promise<void>;
   cancelJob(p: Principal, id: string): Promise<void>;
@@ -66,8 +67,15 @@ export interface AgentRepository {
     skillId: string | null;
     providerId: string;
     preserveRequirements?: string;
+    derivation?: import("@tuyile/contracts").AgentDerivation;
     textSources?: import("@tuyile/contracts").TextSource[];
   }>;
+  derivationOutputs(
+    p: Principal,
+    projectId: string,
+    derivation: import("@tuyile/contracts").AgentDerivation,
+    candidates: string[],
+  ): Promise<string[]>;
   attach(
     planId: string,
     taskId: string,
@@ -173,6 +181,34 @@ export class AgentService {
       const document = agentPlan.parse(binding.plan.document);
       if (!document.steps.length)
         throw new AppError("PLAN_NOT_EXECUTABLE", 409);
+      if (binding.derivation) {
+        const source = binding.derivation.assetId;
+        const unanchored = document.steps.filter(
+          (step) =>
+            !step.dependsOn &&
+            !step.usePrevious &&
+            !step.referenceIds.includes(source),
+        );
+        if (unanchored.length) {
+          const candidates = [
+            ...new Set(unanchored.flatMap((step) => step.referenceIds)),
+          ];
+          const outputs = new Set(
+            await r.agent.derivationOutputs(
+              p,
+              binding.projectId,
+              binding.derivation,
+              candidates,
+            ),
+          );
+          if (
+            unanchored.some(
+              (step) => !step.referenceIds.some((ref) => outputs.has(ref)),
+            )
+          )
+            throw new AppError("DERIVATION_SOURCE_REQUIRED", 409);
+        }
+      }
       const skill = binding.skillId
         ? await r.extensions.skill(binding.skillId)
         : undefined;
@@ -203,9 +239,11 @@ export class AgentService {
         const input = {
           ...spec,
           ...(binding.preserveRequirements
-            ? {
-                prompt: `${spec.prompt}\n\n保持要求：${binding.preserveRequirements}`,
-              }
+            ? binding.derivation
+              ? { preserveRequirements: binding.preserveRequirements }
+              : {
+                  prompt: `${spec.prompt}\n\n保持要求：${binding.preserveRequirements}`,
+                }
             : {}),
           projectId: binding.projectId,
           requestKey: randomUUID(),
@@ -351,6 +389,11 @@ export class AgentService {
   }
   request(p: Principal, input: PlanningRequest) {
     const parsed = planningRequest.parse(input);
+    if (
+      parsed.derivation &&
+      !parsed.referenceIds.includes(parsed.derivation.assetId)
+    )
+      throw new AppError("DERIVATION_SOURCE_REQUIRED", 409);
     if (composeCreativePrompt(parsed).length > 12000)
       throw new AppError("PROMPT_TOO_LONG", 400);
     return this.store.write({ owners: [p.id], queue: true }, async (r) => {
@@ -397,6 +440,13 @@ export class AgentService {
       const previous = parsed.previousPlanId
         ? await r.agent.context(p, parsed.previousPlanId)
         : undefined;
+      if (
+        parsed.derivation &&
+        previous &&
+        (previous.derivation?.id !== parsed.derivation.id ||
+          previous.derivation.assetId !== parsed.derivation.assetId)
+      )
+        throw new AppError("DERIVATION_CONTEXT_MISMATCH", 409);
       const referenceIds = [...new Set(parsed.referenceIds)];
       if (
         skill?.requiredInputs.includes("referenceImages") &&
@@ -415,6 +465,9 @@ export class AgentService {
             "\n沟通原则：先帮助用户做创作决策，不复述需求或罗列参数。用途、版式或关键内容缺失且会影响设计时，message 只问一至两个关键问题，给出一个可采用的默认方向，steps 为空；不要一次询问所有细节。用户明确要求先看草稿、自行决定或已补齐关键用途时，直接形成方案，不反复追问。店名、日期、地址等真实信息缺失时预留信息区，不编造事实。形成方案时，message 简洁说明主体、配色、布局、信息层级及默认处理或待补内容；title 使用简短作品名，prompt 承载详细生图指令。结合历史需求与最新反馈修改同一方案，不丢失原目标。默认沿用输入的模型、尺寸、质量、复杂度和格式；complexity仅在用户输入提供时保留，未提供则省略，不自行添加；不编造支持规格。需要澄清时不返回占位生成步骤。" +
             "\n创作推进：优先给出可用作品方向；需要探索时先提出一张主视觉，选定后再建议配套素材，不擅自扩大量。preserveRequirements是用户明确要求保留的元素，当前referenceIds是本轮明确选择的作品，结合风格和textSources解释本轮如何延续方向。历史参考不代表用户本轮仍选择。" +
             "\n确认协议：steps 只是待用户确认的声明，不会自行调用工具或生成图片。用户说‘先给计划’‘暂不生成’‘先看方案’时，只要设计信息已足够，就必须返回非空 steps 供界面确认；不能因此返回空步骤或要求用户再口头确认一次。执行确认只由界面按钮和服务端完成。只有确实缺少影响设计的关键信息、需要用户回答时，才返回空 steps。" +
+            (parsed.derivation
+              ? "\n衍生任务：derivation.assetId 是已完成的基准稿，无需生成该稿。只规划用户要求的新增素材，每个无前置依赖的步骤都使用基准稿作参考并选择图片编辑工具。"
+              : "") +
             (skill ? `\n创作指导：${skill.instructions}` : "") +
             `\n只允许这些工具版本：${JSON.stringify(tools)}`,
         },

@@ -33,11 +33,13 @@ export function ImageEditDialog({
   usage,
   onClose,
   onRefresh,
+  onDerive,
 }: {
   projectId: string;
   usage?: ImageUsage;
   onClose: () => void;
   onRefresh: () => Promise<void>;
+  onDerive?: (task: ImageTask, assetId: string) => Promise<void>;
 }) {
   const store = useProjectDraft(),
     state = useSessionState(),
@@ -301,6 +303,17 @@ export function ImageEditDialog({
               >
                 下载修改稿
               </a>
+              {onDerive && task && (
+                <Button
+                  onClick={() =>
+                    void onDerive(task, adoptable.id).catch((cause: Error) =>
+                      setError(cause.message),
+                    )
+                  }
+                >
+                  用修改稿做 Agent 衍生
+                </Button>
+              )}
               <Button
                 className="primary"
                 onClick={() => void continueWithResult()}

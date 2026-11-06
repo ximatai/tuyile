@@ -63,12 +63,17 @@ export const agentPlan = z
   });
 export type AgentStep = z.infer<typeof agentStep>;
 export type AgentPlan = z.infer<typeof agentPlan>;
+export const agentDerivation = z
+  .object({ id: z.uuid(), assetId: z.uuid() })
+  .strict();
+export type AgentDerivation = z.infer<typeof agentDerivation>;
 export const planningRequest = imageInput
   .omit({ count: true, annotation: true, editSession: true })
   .extend({
     skillId: z.uuid().optional(),
     conversationModelId: z.uuid().optional(),
     previousPlanId: z.uuid().optional(),
+    derivation: agentDerivation.optional(),
     preserveRequirements: z.string().trim().max(2000).optional(),
   })
   .strict();
@@ -89,6 +94,7 @@ export interface AgentPlanVersion {
   taskIds: string[];
 }
 export interface PlanningJob {
+  derivation?: AgentDerivation;
   preserveRequirements?: string;
   textSources?: import("./creation.js").TextSource[];
   id: string;

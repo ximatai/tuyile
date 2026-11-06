@@ -55,6 +55,7 @@ import {
   Group,
   Ungroup,
   AlignStartVertical,
+  Bot,
 } from "lucide-react";
 import {
   Button,
@@ -96,6 +97,7 @@ type ImageNode = Node<
     assetId?: string;
     reference?: (id: string) => void;
     edit?: (id: string) => void;
+    derive?: () => void;
     svgRevisions?: () => void;
     reuse?: () => void;
     info?: () => void;
@@ -235,6 +237,7 @@ function ImageCard({
   const actionCount =
     2 +
     Number(!!data.edit) +
+    Number(!!data.derive) +
     Number(!!data.svgRevisions) +
     Number(!!data.reference) +
     Number(!!data.reuse) +
@@ -347,6 +350,15 @@ function ImageCard({
                       },
                     ]
                   : []),
+                ...(data.derive
+                  ? [
+                      {
+                        key: "derive",
+                        icon: <Bot size={16} />,
+                        label: "用这稿做 Agent 衍生",
+                      },
+                    ]
+                  : []),
                 ...(data.reference
                   ? [
                       {
@@ -374,6 +386,7 @@ function ImageCard({
                 if (key === "reuse") data.reuse?.();
                 if (key === "edit") data.edit?.(data.assetId!);
                 if (key === "svg-revisions") data.svgRevisions?.();
+                if (key === "derive") data.derive?.();
               },
             }}
           >
@@ -446,6 +459,17 @@ function ImageCard({
                   onClick={data.svgRevisions}
                 >
                   <FileText size={16} aria-hidden="true" />
+                </Button>
+              </Tooltip>
+            )}
+            {data.derive && (
+              <Tooltip title="用这稿做 Agent 衍生">
+                <Button
+                  type="button"
+                  aria-label="用这稿做 Agent 衍生"
+                  onClick={data.derive}
+                >
+                  <Bot size={16} aria-hidden="true" />
                 </Button>
               </Tooltip>
             )}
@@ -647,6 +671,7 @@ export function CanvasEditor({
   projectId,
   onReference,
   onEdit,
+  onDerive,
   onSelectionChange,
   onTextReference,
   onReuse,
@@ -659,6 +684,7 @@ export function CanvasEditor({
   projectId: string;
   onReference: (id: string) => void;
   onEdit?: (id: string) => void;
+  onDerive?: (assetId: string, label: string) => Promise<void>;
   onTextReference?: (id: string) => void;
   onSelectionChange?: (assets: { id: string; name: string }[]) => void;
   onReuse?: (task: ImageTask) => void;
@@ -695,6 +721,7 @@ export function CanvasEditor({
       projectId={projectId}
       onReference={onReference}
       onEdit={onEdit}
+      onDerive={onDerive}
       onSelectionChange={onSelectionChange}
       onTextReference={onTextReference}
       onReuse={onReuse}
@@ -711,6 +738,7 @@ function CanvasView({
   projectId,
   onReference,
   onEdit,
+  onDerive,
   onSelectionChange,
   onTextReference,
   onReuse,
@@ -724,6 +752,7 @@ function CanvasView({
   projectId: string;
   onReference: (id: string) => void;
   onEdit?: (id: string) => void;
+  onDerive?: (assetId: string, label: string) => Promise<void>;
   onTextReference?: (id: string) => void;
   onSelectionChange?: (assets: { id: string; name: string }[]) => void;
   onReuse?: (task: ImageTask) => void;
@@ -884,6 +913,13 @@ function CanvasView({
               assetId: n.assetId,
               reference: onReference,
               edit: onEdit,
+              derive:
+                n.assetId && onDerive
+                  ? () =>
+                      void onDerive(n.assetId!, n.label || "画布选稿").catch(
+                        (cause: Error) => setOperationError(cause.message),
+                      )
+                  : undefined,
               svgRevisions:
                 n.assetId && svgSources.has(n.assetId)
                   ? () => {
@@ -922,6 +958,7 @@ function CanvasView({
       snap.selected,
       onReference,
       onEdit,
+      onDerive,
       onTextReference,
       onReuse,
       tasks,

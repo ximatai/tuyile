@@ -3,7 +3,7 @@ const { version } = packageMetadata;
 import { test, expect } from "@playwright/test";
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
-import { imageCapabilityDefaults } from "@tuyile/contracts";
+import { emptyCanvas, imageCapabilityDefaults } from "@tuyile/contracts";
 import { loginAdmin } from "./admin-session";
 
 test("an exploration becomes a marked revision, an Agent derivative, a vector export and a reusable project work", async ({
@@ -81,6 +81,56 @@ test("an exploration becomes a marked revision, an Agent derivative, a vector ex
     const project = await post("/projects", {
       name: `Journey-${randomUUID().slice(0, 6)}`,
     });
+    const spec = {
+      model,
+      modelSelectionId: imageId,
+      width: 1024,
+      height: 1024,
+      quality: "high",
+      complexity: "high",
+      format: "png",
+      referenceIds: [],
+    };
+    const oldJob = await post("/agent/planning", {
+      ...spec,
+      projectId: project.id,
+      requestKey: randomUUID(),
+      conversationModelId: plannerId,
+      prompt: "旧方案：另一款商品",
+    });
+    const jobs = async () =>
+      (
+        await (
+          await page.request.get(`/api/agent/jobs?projectId=${project.id}`)
+        ).json()
+      ).jobs;
+    await expect
+      .poll(
+        async () =>
+          (await jobs()).find((job: any) => job.id === oldJob.id)?.state,
+      )
+      .toBe("succeeded");
+    const textId = randomUUID();
+    await post(`/projects/${project.id}/canvas`, {
+      revision: 0,
+      requestKey: randomUUID(),
+      placements: [],
+      document: {
+        ...emptyCanvas(),
+        nodes: [
+          {
+            id: textId,
+            kind: "text",
+            label: "品牌文案",
+            text: "山间咖啡",
+            x: 24,
+            y: 24,
+            width: 240,
+            height: 100,
+          },
+        ],
+      },
+    });
     const before = await (await page.request.get("/api/images/usage")).json();
     await page.goto(`/projects/${project.id}`);
     await page.getByLabel("创作需求", { exact: true }).fill("合成商品的主视觉");
@@ -133,30 +183,60 @@ test("an exploration becomes a marked revision, an Agent derivative, a vector ex
       .click();
     await expect(edit.getByAltText("修改结果", { exact: true })).toBeVisible();
     await expect(edit.getByAltText("比较原图", { exact: true })).toBeVisible();
-    await edit.getByRole("button", { name: "保存并关闭", exact: true }).click();
     const modified = (await tasks()).find((t: any) => t.id !== explored.id);
     expect(modified.settings.referenceIds).toEqual([explored.outputs[0].id]);
     expect(modified.settings.preserveRequirements).toBe(
       "保留商品轮廓与品牌文字",
     );
-    const spec = {
-      model,
-      modelSelectionId: imageId,
-      width: 1024,
-      height: 1024,
-      quality: "high",
-      complexity: "high",
-      format: "png",
-      referenceIds: [modified.outputs[0].id],
-    };
-    const job = await post("/agent/planning", {
-      ...spec,
-      projectId: project.id,
-      requestKey: randomUUID(),
-      conversationModelId: plannerId,
-      prompt: "基于选定作品衍生横版陈列",
-      preserveRequirements: modified.settings.preserveRequirements,
+    await edit
+      .getByRole("button", { name: "用修改稿做 Agent 衍生", exact: true })
+      .click();
+    const handoff = page.getByRole("dialog", {
+      name: "用这稿做 Agent 衍生",
+      exact: true,
     });
+    await expect(handoff.getByAltText("衍生基准稿预览")).toHaveAttribute(
+      "src",
+      `/api/images/assets/${modified.outputs[0].id}/preview`,
+    );
+    await expect(
+      handoff.getByLabel("衍生保持要求", { exact: true }),
+    ).toHaveValue("保留商品轮廓与品牌文字");
+    await handoff
+      .getByRole("combobox", { name: "衍生引用文案", exact: true })
+      .click();
+    await page
+      .locator(".ant-select-dropdown:visible .ant-select-item-option")
+      .filter({ hasText: "品牌文案" })
+      .click();
+    await handoff
+      .getByRole("button", { name: "带入 Agent 草稿", exact: true })
+      .click();
+    await expect(handoff).toBeHidden();
+    expect(await tasks()).toHaveLength(2);
+    expect(await jobs()).toHaveLength(1);
+    await page.reload();
+    await page
+      .getByLabel("告诉 Agent 你的想法", { exact: true })
+      .fill("基于选定作品衍生横版陈列");
+    const planningResponse = page.waitForResponse(
+      (res) =>
+        res.url().endsWith("/api/agent/planning") &&
+        res.request().method() === "POST",
+    );
+    await page.getByRole("button", { name: "生成计划", exact: true }).click();
+    const response = await planningResponse;
+    expect(response.status(), await response.text()).toBe(202);
+    expect(response.request().postDataJSON()).toMatchObject({
+      derivation: { assetId: modified.outputs[0].id },
+      referenceIds: [modified.outputs[0].id],
+      textNodeIds: [textId],
+      preserveRequirements: "保留商品轮廓与品牌文字",
+    });
+    expect(response.request().postDataJSON()).not.toHaveProperty(
+      "previousPlanId",
+    );
+    const job = await response.json();
     await expect
       .poll(async () => {
         const { jobs } = await (
@@ -165,10 +245,10 @@ test("an exploration becomes a marked revision, an Agent derivative, a vector ex
         return jobs.find((j: any) => j.id === job.id)?.state;
       })
       .toBe("succeeded");
-    await page.getByRole("button", { name: "Agent 面板", exact: true }).click();
     await expect(
       page.getByText("本方案保持要求", { exact: true }),
     ).toBeVisible();
+    expect(await tasks()).toHaveLength(2);
     await page.getByRole("button", { name: "确认执行", exact: true }).click();
     await expect
       .poll(
@@ -180,6 +260,10 @@ test("an exploration becomes a marked revision, an Agent derivative, a vector ex
       (t: any) => ![explored.id, modified.id].includes(t.id),
     );
     expect(derived.finalPrompt).toContain("保留商品轮廓与品牌文字");
+    expect(derived.settings.preserveRequirements).toBe(
+      "保留商品轮廓与品牌文字",
+    );
+    expect(derived.finalPrompt).toContain("山间咖啡");
     expect(derived.settings.referenceIds).toEqual([modified.outputs[0].id]);
     await expect
       .poll(async () => {
@@ -193,6 +277,24 @@ test("an exploration becomes a marked revision, an Agent derivative, a vector ex
         );
       })
       .toBe(true);
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    const derivativeNode = page.locator(".react-flow__node-image").filter({
+      has: page.locator(
+        `img[src='/api/images/assets/${derived.outputs[0].id}/preview']`,
+      ),
+    });
+    await derivativeNode.hover();
+    const derivativeNodeId = await derivativeNode.getAttribute("data-id");
+    await page
+      .locator(`.react-flow__node-toolbar[data-id="${derivativeNodeId}"]`)
+      .getByRole("button", { name: "用这稿做 Agent 衍生", exact: true })
+      .click();
+    await expect(
+      handoff.getByLabel("衍生保持要求", { exact: true }),
+    ).toHaveValue("保留商品轮廓与品牌文字");
+    await expect(handoff).toContainText("品牌文案");
+    await handoff.getByRole("button", { name: "取消", exact: true }).click();
+    expect(await tasks()).toHaveLength(3);
     const vector = await post("/images/tasks", {
       ...spec,
       format: "svg",
