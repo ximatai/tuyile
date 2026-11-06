@@ -223,9 +223,50 @@ test("mark an original, restore editing draft and recover a lost submission into
     expect(tasks).toHaveLength(1);
     expect(tasks[0].settings.annotation.strokes).toHaveLength(1);
     expect(tasks[0].settings.referenceIds).toEqual([source.id]);
+    const output = tasks[0].outputs[0];
+    const [download] = await Promise.all([
+      page.waitForEvent("download"),
+      dialog.getByRole("link", { name: "下载修改稿", exact: true }).click(),
+    ]);
+    expect(download.suggestedFilename()).toBe(`${output.id}.png`);
+    await dialog
+      .getByRole("button", { name: "基于原图再试", exact: true })
+      .click();
+    await expect(dialog.getByAltText("待修改原图")).toHaveAttribute(
+      "src",
+      `/api/images/assets/${source.id}/original`,
+    );
+    await expect(dialog.locator("ellipse")).toHaveCount(1);
+    await dialog.getByText("前后比较", { exact: true }).click();
+    await dialog
+      .getByRole("button", { name: "用修改稿继续修改", exact: true })
+      .click();
+    await expect(dialog.getByAltText("待修改原图")).toHaveAttribute(
+      "src",
+      `/api/images/assets/${output.id}/original`,
+    );
+    await expect(
+      dialog.getByRole("textbox", { name: "修改需求", exact: true }),
+    ).toHaveValue("");
+    await expect(dialog.getByLabel("保持要求", { exact: true })).toHaveValue(
+      "保持主体位置",
+    );
+    await expect(dialog.locator("ellipse")).toHaveCount(0);
     await dialog
       .getByRole("button", { name: "保存并关闭", exact: true })
       .click();
+    await page.reload();
+    await page
+      .getByRole("button", { name: "继续图片修改", exact: true })
+      .click();
+    await expect(dialog.getByAltText("待修改原图")).toHaveAttribute(
+      "src",
+      `/api/images/assets/${output.id}/original`,
+    );
+    const finalTasks = await (
+      await page.request.get(`/api/images/tasks?projectId=${project.id}`)
+    ).json();
+    expect(finalTasks.tasks).toHaveLength(1);
   } finally {
     const latest = await (
       await page.request.get("/api/model-admin/catalog")
