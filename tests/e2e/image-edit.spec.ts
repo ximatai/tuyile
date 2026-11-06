@@ -215,7 +215,7 @@ test("mark an original, restore editing draft and recover a lost submission into
       dialog.getByAltText("修改结果", { exact: true }),
     ).toBeVisible();
     await expect(
-      dialog.getByAltText("比较原图", { exact: true }),
+      dialog.getByAltText("本轮底图预览", { exact: true }),
     ).toBeVisible();
     const { tasks } = await (
       await page.request.get(`/api/images/tasks?projectId=${project.id}`)
@@ -230,9 +230,9 @@ test("mark an original, restore editing draft and recover a lost submission into
     ]);
     expect(download.suggestedFilename()).toBe(`${output.id}.png`);
     await dialog
-      .getByRole("button", { name: "基于原图再试", exact: true })
+      .getByRole("button", { name: "基于本轮底图再试", exact: true })
       .click();
-    await expect(dialog.getByAltText("待修改原图")).toHaveAttribute(
+    await expect(dialog.getByAltText("当前修改底图")).toHaveAttribute(
       "src",
       `/api/images/assets/${source.id}/original`,
     );
@@ -241,7 +241,10 @@ test("mark an original, restore editing draft and recover a lost submission into
     await dialog
       .getByRole("button", { name: "用修改稿继续修改", exact: true })
       .click();
-    await expect(dialog.getByAltText("待修改原图")).toHaveAttribute(
+    await expect(
+      dialog.getByText("标注当前底图", { exact: true }),
+    ).toBeVisible();
+    await expect(dialog.getByAltText("当前修改底图")).toHaveAttribute(
       "src",
       `/api/images/assets/${output.id}/original`,
     );
@@ -259,7 +262,7 @@ test("mark an original, restore editing draft and recover a lost submission into
     await page
       .getByRole("button", { name: "继续图片修改", exact: true })
       .click();
-    await expect(dialog.getByAltText("待修改原图")).toHaveAttribute(
+    await expect(dialog.getByAltText("当前修改底图")).toHaveAttribute(
       "src",
       `/api/images/assets/${output.id}/original`,
     );

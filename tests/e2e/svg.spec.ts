@@ -152,6 +152,9 @@ test("SVG generation exports the original, previews safely, and converts referen
     const revision = await importResponse.json();
     await expect(revisionDialog.getByAltText("SVG 原稿预览")).toBeVisible();
     await expect(revisionDialog.getByAltText("SVG 修订稿预览")).toBeVisible();
+    await expect(revisionDialog.locator("figcaption").last()).toContainText(
+      "修订稿 1",
+    );
     await revisionDialog
       .getByRole("button", { name: "将这稿加入画布", exact: true })
       .click();
@@ -168,13 +171,20 @@ test("SVG generation exports the original, previews safely, and converts referen
     await revisionDialog
       .getByRole("button", { name: "导出这稿 PNG", exact: true })
       .click();
-    const [pngDownload] = await Promise.all([
+    const exportConfirm = page.getByRole("dialog", { name: "请确认" });
+    await expect(exportConfirm).toContainText(/将「修订稿 1 · .*」导出为 PNG/);
+    const [pngDownload, rasterCopy] = await Promise.all([
       page.waitForEvent("download"),
-      page
-        .getByRole("dialog", { name: "请确认" })
-        .getByRole("button", { name: "确认", exact: true })
-        .click(),
+      page.waitForResponse(
+        (response) =>
+          response
+            .url()
+            .endsWith(`/api/images/assets/${revision.id}/raster-copy`) &&
+          response.request().method() === "POST",
+      ),
+      exportConfirm.getByRole("button", { name: "确认", exact: true }).click(),
     ]);
+    expect(rasterCopy.ok()).toBe(true);
     expect(pngDownload.suggestedFilename()).toMatch(/\.png$/);
     await revisionDialog
       .getByRole("button", { name: "关闭", exact: true })

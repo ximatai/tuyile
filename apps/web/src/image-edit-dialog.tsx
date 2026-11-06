@@ -296,7 +296,9 @@ export function ImageEditDialog({
           </Button>
           {view === "compare" && adoptable ? (
             <>
-              <Button onClick={() => setView("annotate")}>基于原图再试</Button>
+              <Button onClick={() => setView("annotate")}>
+                基于本轮底图再试
+              </Button>
               <a
                 className="button"
                 href={`/api/images/assets/${adoptable.id}/download`}
@@ -351,7 +353,7 @@ export function ImageEditDialog({
             onChange={(e) => setView(e.target.value)}
             optionType="button"
             options={[
-              { value: "annotate", label: "标注原图" },
+              { value: "annotate", label: "标注当前底图" },
               { value: "compare", label: "前后比较" },
             ]}
           />
@@ -393,11 +395,11 @@ export function ImageEditDialog({
               <div className="annotation-surface">
                 <img
                   src={`/api/images/assets/${edit.baseAssetId}/original`}
-                  alt="待修改原图"
+                  alt="当前修改底图"
                   onLoad={() => setBaseReady(true)}
                   onError={() => {
                     setBaseReady(false);
-                    setError("原图无法读取，请重试或从图库重新选择。");
+                    setError("当前底图无法读取，请重试或从图库重新选择。");
                   }}
                 />
                 <svg
@@ -447,9 +449,9 @@ export function ImageEditDialog({
               <figure>
                 <img
                   src={`/api/images/assets/${edit.baseAssetId}/original`}
-                  alt="比较原图"
+                  alt="本轮底图预览"
                 />
-                <figcaption>原图</figcaption>
+                <figcaption>本轮底图</figcaption>
               </figure>
               <figure>
                 {output ? (
