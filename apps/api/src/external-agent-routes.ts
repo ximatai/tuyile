@@ -3,8 +3,20 @@ import type { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { externalCanvasEdit, id, z } from "@tuyile/contracts";
-import { AppError, type CanvasService, type Workbench } from "@tuyile/core";
+import {
+  externalCanvasEdit,
+  id,
+  imageInput,
+  z,
+  type ExternalAgentScope,
+  type ImageTask,
+} from "@tuyile/contracts";
+import {
+  AppError,
+  type CanvasService,
+  type CreationService,
+  type Workbench,
+} from "@tuyile/core";
 import type { PgExternalAgentTokens } from "@tuyile/infrastructure";
 import type { ApiEnv } from "./app.js";
 
@@ -14,6 +26,7 @@ export function externalAgentRoutes(
   canvas: CanvasService,
   tokens: PgExternalAgentTokens,
   origin: string,
+  creation?: CreationService,
 ) {
   const management = "/api/projects/:id/external-agent";
   app.get(management, async (c) => {
@@ -31,23 +44,19 @@ export function externalAgentRoutes(
           .object({
             action: z.literal("issue"),
             allowCanvasWrite: z.boolean().default(false),
+            allowGeneration: z.boolean().default(false),
           })
           .strict(),
         z.object({ action: z.literal("revoke") }).strict(),
       ])
       .parse(await c.req.json());
     await service.project(user, projectId);
-    if (input.action === "issue")
-      return c.json(
-        await tokens.issue(
-          user,
-          projectId,
-          input.allowCanvasWrite
-            ? ["canvas:read", "canvas:write"]
-            : ["canvas:read"],
-        ),
-        201,
-      );
+    if (input.action === "issue") {
+      const scopes: ExternalAgentScope[] = ["canvas:read"];
+      if (input.allowCanvasWrite) scopes.push("canvas:write");
+      if (input.allowGeneration && creation) scopes.push("images:generate");
+      return c.json(await tokens.issue(user, projectId, scopes), 201);
+    }
     await tokens.revoke(user, projectId);
     return c.json({ grant: null });
   });
@@ -157,7 +166,7 @@ export function externalAgentRoutes(
         "edit_canvas",
         {
           description:
-            "Atomically apply layout operations to the saved canvas at the revision just read. Coordinates are absolute canvas units. Supply UUIDs for new nodes and a stable requestKey for retries. Group only ungrouped image and text nodes. For add_image, use an asset already present on this project canvas.",
+            "Atomically apply layout operations to the saved canvas at the revision just read. Coordinates are absolute canvas units. Supply UUIDs for new nodes and a stable requestKey for retries. Group only ungrouped image and text nodes. For add_image, use an asset on this canvas or a completed output from a task in this project.",
           annotations: {
             readOnlyHint: false,
             destructiveHint: false,
@@ -170,6 +179,77 @@ export function externalAgentRoutes(
             const saved = await canvas.editExternal(access, input);
             return { projectId: access.projectId, revision: saved.revision };
           }),
+      );
+    }
+    if (creation && access.scopes.includes("images:generate")) {
+      server.registerTool(
+        "image_options",
+        {
+          description:
+            "Read the allowed image models, capabilities, image count, and quota before submitting generation in this project.",
+          annotations: { readOnlyHint: true, openWorldHint: false },
+          inputSchema: { projectUrl: projectLink },
+        },
+        async ({ projectUrl }) =>
+          projectCall(projectUrl, async () => {
+            const usage = await creation.usage(access.principal);
+            const { maxCount, maxEdge, maxPixels, maxQuality } = usage.policy;
+            return {
+              models: usage.models,
+              modelOptions: usage.modelOptions ?? [],
+              capabilities: usage.capabilities,
+              limits: {
+                maxCount,
+                maxEdge,
+                maxPixels,
+                maxQuality,
+                remainingImages: usage.available,
+              },
+            };
+          }),
+      );
+      const generationInput = imageInput.omit({
+        projectId: true,
+        annotation: true,
+        editSession: true,
+      });
+      server.registerTool(
+        "submit_image_task",
+        {
+          description:
+            "Queue image generation or reference-image editing requested by the user. This consumes the user's image allowance for successful outputs. Reuse requestKey if the response is lost. References must be on this project canvas or be project task outputs. Poll get_image_task for completed assets and use edit_canvas to place them.",
+          annotations: {
+            readOnlyHint: false,
+            destructiveHint: false,
+            idempotentHint: true,
+            openWorldHint: true,
+          },
+          inputSchema: { projectUrl: projectLink, ...generationInput.shape },
+        },
+        async ({ projectUrl, ...input }) =>
+          projectCall(projectUrl, async () =>
+            imageTaskStatus(
+              await creation.submitExternal(
+                access,
+                generationInput.parse(input),
+              ),
+            ),
+          ),
+      );
+      server.registerTool(
+        "get_image_task",
+        {
+          description:
+            "Read a task in this project by ID. Use the asset IDs of successful outputs to place them on the canvas. Do not resubmit for a pending review or an unknown upstream result.",
+          annotations: { readOnlyHint: true, openWorldHint: false },
+          inputSchema: { projectUrl: projectLink, taskId: id },
+        },
+        async ({ projectUrl, taskId }) =>
+          projectCall(projectUrl, async () =>
+            imageTaskStatus(
+              await creation.task(access.principal, taskId, access.projectId),
+            ),
+          ),
       );
     }
     const transport = new WebStandardStreamableHTTPServerTransport({
@@ -186,4 +266,24 @@ export function externalAgentRoutes(
     c.header("Allow", "POST");
     return c.body(null, 405);
   });
+}
+
+function imageTaskStatus(task: ImageTask) {
+  return {
+    projectId: task.projectId,
+    taskId: task.id,
+    state: task.state,
+    pendingReview: task.pendingReview,
+    errorCode: task.errorCode,
+    used: task.used,
+    held: task.held,
+    outputs: task.outputs
+      .filter((asset) => !asset.deleted)
+      .map((asset) => ({
+        assetId: asset.id,
+        width: asset.width,
+        height: asset.height,
+        mime: asset.mime,
+      })),
+  };
 }

@@ -1,3 +1,4 @@
+import type { ExternalAgentAccess } from "./external-agent.js";
 import { composeCreativePrompt } from "@tuyile/contracts";
 import { createToolRegistry, defaultTool, type ToolRegistry } from "./tools.js";
 import { checkImageCapability } from "./capabilities.js";
@@ -27,10 +28,16 @@ export class ImageOperations {
     p: Principal,
     input: ImageInput,
     tool: ToolBinding = defaultTool(input),
+    external?: ExternalAgentAccess,
   ) {
     this.registry.validate(tool, input);
     return this.store.write({ owners: [p.id], queue: true }, async (r) => {
-      const existing = await r.tasks.existingAdmission(p, input, tool);
+      const existing = await r.tasks.existingAdmission(
+        p,
+        input,
+        tool,
+        external,
+      );
       if (existing) return existing;
       const textSources = await r.tasks.resolveTextSources(
         p,
@@ -63,6 +70,7 @@ export class ImageOperations {
         provider.id,
         tool,
         textSources,
+        !external,
       );
       await r.quota.reserve(p, task.id, snapshot);
       await r.assets.pin(p, task.id, input.referenceIds);
@@ -72,8 +80,8 @@ export class ImageOperations {
   async tasks(p: Principal, projectId?: string, offset = 0) {
     return this.store.read((r) => r.tasks.tasks(p, projectId, offset));
   }
-  async task(p: Principal, id: string) {
-    return this.store.read((r) => r.tasks.task(p, id));
+  async task(p: Principal, id: string, projectId?: string) {
+    return this.store.read((r) => r.tasks.task(p, id, projectId));
   }
   async recover(p: Principal, projectId: string, key: string) {
     return this.store.read((r) => r.tasks.recover(p, projectId, key));

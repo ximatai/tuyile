@@ -1,3 +1,4 @@
+import type { ExternalAgentAccess } from "./external-agent.js";
 import type { AgentRepository } from "./agent.js";
 import type { ExtensionsRepository } from "./extensions.js";
 import type { ImageCapability, ToolBinding } from "@tuyile/contracts";
@@ -47,6 +48,7 @@ export interface TasksRepository {
     p: Principal,
     input: ImageInput,
     tool: ToolBinding,
+    external?: ExternalAgentAccess,
   ): Promise<ImageTask | null>;
   insert(
     p: Principal,
@@ -55,13 +57,14 @@ export interface TasksRepository {
     providerId: string,
     tool: ToolBinding,
     textSources?: import("@tuyile/contracts").TextSource[],
+    autoPlace?: boolean,
   ): Promise<ImageTask>;
   tasks(
     p: Principal,
     projectId?: string,
     offset?: number,
   ): Promise<ImageTask[]>;
-  task(p: Principal, id: string): Promise<ImageTask>;
+  task(p: Principal, id: string, projectId?: string): Promise<ImageTask>;
   recover(p: Principal, projectId: string, key: string): Promise<ImageTask>;
   cancel(p: Principal, id: string): Promise<void>;
 }

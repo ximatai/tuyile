@@ -44,11 +44,15 @@ it("limits remote MCP to the authorized project and invalidates rotated, revoked
         headers: extra,
         body: JSON.stringify({ action }),
       });
-    async function issue(allowCanvasWrite = false) {
+    async function issue(allowCanvasWrite = false, allowGeneration = false) {
       const response = await app.request(path, {
         method: "POST",
         headers,
-        body: JSON.stringify({ action: "issue", allowCanvasWrite }),
+        body: JSON.stringify({
+          action: "issue",
+          allowCanvasWrite,
+          allowGeneration,
+        }),
       });
       expect(response.status).toBe(201);
       return (await response.json()).token as string;
@@ -197,6 +201,46 @@ it("limits remote MCP to the authorized project and invalidates rotated, revoked
         .isError,
     ).toBe(true);
     expect(await canvas.load(f.principal, f.project.id)).toEqual(moved);
+    const submit = async (token: string, input: object) =>
+      (
+        await (
+          await rpc(token, "tools/call", {
+            name: "submit_image_task",
+            arguments: { projectUrl, ...input },
+          })
+        ).json()
+      ).result;
+    const { projectId: _, ...image } = f.input();
+    expect((await submit(writeToken, image)).isError).toBe(true);
+    const imageToken = await issue(false, true);
+    const unlinked = await f.creation.upload(f.principal, f.png);
+    expect(
+      await submit(imageToken, { ...image, referenceIds: [unlinked.id] }),
+    ).toMatchObject({
+      isError: true,
+      content: [{ text: "REFERENCE_UNAVAILABLE" }],
+    });
+    const queued = (await submit(imageToken, image)).structuredContent;
+    expect(queued).toMatchObject({
+      projectId: f.project.id,
+      state: "queued",
+      held: 1,
+    });
+    expect((await submit(imageToken, image)).structuredContent.taskId).toBe(
+      queued.taskId,
+    );
+    const otherTask = await f.creation.submit(
+      f.principal,
+      f.input({ projectId: other.id }),
+    );
+    const otherStatus = await rpc(imageToken, "tools/call", {
+      name: "get_image_task",
+      arguments: { projectUrl, taskId: otherTask.id },
+    });
+    expect((await otherStatus.json()).result).toMatchObject({
+      isError: true,
+      content: [{ text: "NOT_FOUND" }],
+    });
     const third = await issue();
     await f.service.changePassword(
       f.principal,

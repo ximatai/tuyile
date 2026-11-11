@@ -332,7 +332,14 @@ export function createApp(
   if (agent) agentRoutes(app, agent);
   if (canvas) canvasRoutes(app, canvas);
   if (canvas && externalAgent)
-    externalAgentRoutes(app, service, canvas, externalAgent, config.origin);
+    externalAgentRoutes(
+      app,
+      service,
+      canvas,
+      externalAgent,
+      config.origin,
+      creation,
+    );
   if (catalog) modelCatalogRoutes(app, catalog);
   if (extensions) extensionRoutes(app, extensions);
   app.notFound((c) =>

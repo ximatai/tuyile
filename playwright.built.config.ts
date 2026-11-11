@@ -4,7 +4,11 @@ import base from "./playwright.config";
 const origin = "http://127.0.0.1:8794";
 export default defineConfig({
   ...base,
-  testMatch: ["**/image-edit.spec.ts", "**/svg.spec.ts"],
+  testMatch: [
+    "**/image-edit.spec.ts",
+    "**/svg.spec.ts",
+    "**/external-agent.spec.ts",
+  ],
   use: { ...base.use, baseURL: origin },
   webServer: [
     {

@@ -22,7 +22,10 @@ import {
   type CanvasSources,
   type Project,
 } from "@tuyile/contracts";
-import { requireExternalAgentScope } from "./external-agent.js";
+import {
+  requireExternalAgentScope,
+  requireProjectAssets,
+} from "./external-agent.js";
 import { PgTransactions } from "./transactions.js";
 import { PgCreationContext } from "./creation/context.js";
 function readDraftDocument(value: unknown) {
@@ -242,10 +245,14 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
       : { document: emptyCanvas(), revision: 0 };
     if (current.revision !== input.revision)
       throw new AppError("CANVAS_CONFLICT", 409);
-    const assets = new Set(
-      current.document.nodes.flatMap((node) =>
-        node.assetId ? [node.assetId] : [],
-      ),
+    const assetIds = input.operations.flatMap((operation) =>
+      operation.action === "add_image" ? [operation.node.assetId] : [],
+    );
+    const placements = await requireProjectAssets(
+      this.c,
+      principal.workspaceId,
+      projectId,
+      assetIds,
     );
     return this.save(
       principal,
@@ -253,12 +260,8 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
       {
         revision: input.revision,
         requestKey: input.requestKey,
-        placements: [],
-        document: applyCanvasOperations(
-          current.document,
-          input.operations,
-          assets,
-        ),
+        placements,
+        document: applyCanvasOperations(current.document, input.operations),
       },
       hash,
     );
@@ -387,7 +390,7 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
         `SELECT o.id AS output_id,o.asset_id,o.task_id,a.width,a.height,
       ARRAY(SELECT CASE WHEN EXISTS(SELECT 1 FROM canvas_references visible WHERE visible.workspace_id=$1 AND visible.project_id=$2 AND visible.asset_id=s.asset_id) THEN s.asset_id ELSE coalesce(source.derived_from,s.asset_id) END FROM image_output_sources s JOIN image_assets source ON source.workspace_id=o.workspace_id AND source.id=s.asset_id WHERE s.output_id=o.id) AS sources
       FROM image_outputs o JOIN image_tasks t ON t.id=o.task_id JOIN image_assets a ON a.id=o.asset_id
-      WHERE o.workspace_id=$1 AND t.project_id=$2 AND a.state='ready'
+      WHERE o.workspace_id=$1 AND t.project_id=$2 AND t.auto_place AND a.state='ready'
       AND NOT EXISTS(SELECT 1 FROM output_placements r WHERE r.project_id=$2 AND r.output_id=o.id)
       ORDER BY o.created_at,o.id LIMIT 100`,
         [p.workspaceId, project],

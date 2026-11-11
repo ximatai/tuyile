@@ -113,3 +113,169 @@ test("opens the current canvas from the Codex handoff and manages project access
     document: { nodes: [{ label: "远程标题", x: 130 }] },
   });
 });
+
+test("generates three project images through MCP and places them once on an open canvas", async ({
+  page,
+  baseURL,
+}) => {
+  await loginAdmin(page);
+  const { csrfToken } = await (await page.request.get("/api/auth/me")).json();
+  const headers = { Origin: baseURL!, "X-CSRF-Token": csrfToken };
+  const project = await page.request.post("/api/projects", {
+    headers,
+    data: { name: "外部 Agent 生图验收" },
+  });
+  expect(project.ok()).toBe(true);
+  const { id } = await project.json();
+  const png = await (
+    await import("sharp")
+  )
+    .default({
+      create: { width: 256, height: 256, channels: 3, background: "#0062b0" },
+    })
+    .png()
+    .toBuffer();
+  const uploaded = await page.request.post("/api/images/uploads", {
+    headers: { ...headers, "Content-Type": "image/png" },
+    data: png,
+  });
+  expect(uploaded.ok()).toBe(true);
+  const source = await uploaded.json();
+  const original = {
+    id: randomUUID(),
+    assetId: source.id,
+    kind: "image",
+    x: 80,
+    y: 60,
+    width: 128,
+    height: 128,
+    label: "商品原图",
+  };
+  const saved = await page.request.post(`/api/projects/${id}/canvas`, {
+    headers,
+    data: {
+      requestKey: randomUUID(),
+      revision: 0,
+      placements: [],
+      document: {
+        schemaVersion: 1,
+        viewport: { x: 0, y: 0, zoom: 1 },
+        nodes: [original],
+      },
+    },
+  });
+  expect(saved.ok()).toBe(true);
+  await page.goto(`/projects/${id}`);
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(1);
+  await page.getByRole("button", { name: "在 Codex 中继续" }).click();
+  const dialog = page.getByRole("dialog", { name: "在 Codex 中继续" });
+  await dialog.getByRole("checkbox", { name: "允许编辑画布" }).check();
+  await dialog
+    .getByRole("checkbox", { name: "允许提交生图", exact: false })
+    .check();
+  await dialog.getByRole("button", { name: "签发令牌" }).click();
+  const token = await dialog.getByLabel("项目访问令牌").inputValue();
+  await page.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible();
+  async function call(name: string, args: object = {}) {
+    const response = await page.request.post("/mcp", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json, text/event-stream",
+      },
+      data: {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "tools/call",
+        params: {
+          name,
+          arguments: { projectUrl: `${baseURL}/projects/${id}`, ...args },
+        },
+      },
+    });
+    expect(response.ok()).toBe(true);
+    const { result } = await response.json();
+    expect(result.isError, result.content?.[0]?.text).not.toBe(true);
+    return result.structuredContent;
+  }
+  const snapshot = await call("read_canvas");
+  expect(snapshot.nodes[0].assetId).toBe(source.id);
+  const options = await call("image_options");
+  expect(options.models).toContain("test-image");
+  const request = {
+    requestKey: randomUUID(),
+    model: "test-image",
+    prompt: "为商品合成三张背景图",
+    width: 256,
+    height: 256,
+    quality: "medium",
+    format: "png",
+    count: 3,
+    referenceIds: [source.id],
+  };
+  const queued = await call("submit_image_task", request);
+  expect((await call("submit_image_task", request)).taskId).toBe(queued.taskId);
+  const status = () => call("get_image_task", { taskId: queued.taskId });
+  await expect
+    .poll(async () => (await status()).state, { timeout: 25000 })
+    .toBe("succeeded");
+  const complete = await status();
+  expect(complete.outputs).toHaveLength(3);
+  expect(complete.used).toBe(3);
+  const pending = await (
+    await page.request.get(`/api/projects/${id}/canvas/outputs`)
+  ).json();
+  expect(pending.outputs).toEqual([]);
+  expect(await page.locator(".react-flow__node-image").count()).toBe(1);
+  const operations = complete.outputs.flatMap(
+    ({ assetId }: { assetId: string }, index: number) => {
+      const x = 80 + index * 180;
+      const label = `背景方案 ${index + 1}`;
+      return [
+        {
+          action: "add_image",
+          node: {
+            id: randomUUID(),
+            assetId,
+            x,
+            y: 250,
+            width: 128,
+            height: 128,
+            label,
+          },
+        },
+        {
+          action: "add_text",
+          node: {
+            id: randomUUID(),
+            x,
+            y: 390,
+            width: 128,
+            height: 60,
+            label: "标题",
+            text: label,
+          },
+        },
+      ];
+    },
+  );
+  const edit = {
+    revision: snapshot.revision,
+    requestKey: randomUUID(),
+    operations,
+  };
+  expect((await call("edit_canvas", edit)).revision).toBe(2);
+  expect((await call("edit_canvas", edit)).revision).toBe(2);
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(4);
+  await expect(page.locator(".react-flow__node-text")).toHaveCount(3);
+  await expect(page.locator(".canvas-status")).toContainText("v2");
+  const tasks = await (
+    await page.request.get(`/api/images/tasks?projectId=${id}`)
+  ).json();
+  expect(tasks.tasks).toHaveLength(1);
+  expect(tasks.tasks[0]).toMatchObject({
+    id: queued.taskId,
+    state: "succeeded",
+    used: 3,
+  });
+});

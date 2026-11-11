@@ -23,6 +23,7 @@ url = "${mcpUrl}"
 bearer_token_env_var = "${tokenVariable}"`;
   const [connection, setConnection] = useState<ExternalAgentConnection>();
   const [allowCanvasWrite, setAllowCanvasWrite] = useState(false);
+  const [allowGeneration, setAllowGeneration] = useState(false);
   const [token, setToken] = useState("");
   const [showSetup, setShowSetup] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -38,6 +39,9 @@ bearer_token_env_var = "${tokenVariable}"`;
     )
       .then((result) => {
         setConnection(result);
+        setAllowGeneration(
+          result.grant?.scopes.includes("images:generate") ?? false,
+        );
         setAllowCanvasWrite(
           result.grant?.scopes.includes("canvas:write") ?? false,
         );
@@ -56,7 +60,12 @@ bearer_token_env_var = "${tokenVariable}"`;
     try {
       const response = await client(csrf)<
         ExternalAgentConnection & { token?: string }
-      >(path, action === "issue" ? { action, allowCanvasWrite } : { action });
+      >(
+        path,
+        action === "issue"
+          ? { action, allowCanvasWrite, allowGeneration }
+          : { action },
+      );
       setConnection(response);
       setToken(response.token ?? "");
     } catch (cause) {
@@ -106,9 +115,9 @@ bearer_token_env_var = "${tokenVariable}"`;
         {showSetup && (
           <>
             <p>
-              将下方配置加入 Codex 的 config.toml。把访问令牌设为启动 Codex
-              时可读取的环境变量 <code>{tokenVariable}</code>，重新打开 Codex
-              后粘贴项目提示。
+              将下方配置加入 Codex 的 <code>~/.codex/config.toml</code>
+              。把访问令牌设为启动 Codex 时可读取的环境变量{" "}
+              <code>{tokenVariable}</code>，重新打开 Codex 后粘贴项目提示。
             </p>
             <Input.TextArea
               aria-label="Codex MCP 配置"
@@ -122,6 +131,13 @@ bearer_token_env_var = "${tokenVariable}"`;
               onChange={(event) => setAllowCanvasWrite(event.target.checked)}
             >
               允许编辑画布
+            </Checkbox>
+            <Checkbox
+              checked={allowGeneration}
+              disabled={busy || !connection}
+              onChange={(event) => setAllowGeneration(event.target.checked)}
+            >
+              允许提交生图（成功图片计入额度）
             </Checkbox>
             <div className="actions">
               <Button onClick={() => void copy(config, "已复制 MCP 配置")}>
@@ -142,7 +158,7 @@ bearer_token_env_var = "${tokenVariable}"`;
             </div>
             <div>
               {connection?.grant
-                ? `授权截至 ${new Date(connection.grant.expiresAt).toLocaleString("zh-CN")}`
+                ? `当前授权：读取${connection.grant.scopes.includes("canvas:write") ? "、编辑" : ""}${connection.grant.scopes.includes("images:generate") ? "、生图" : ""}，截至 ${new Date(connection.grant.expiresAt).toLocaleString("zh-CN")}`
                 : connection
                   ? "当前项目尚未授权。"
                   : "正在读取授权状态…"}{" "}

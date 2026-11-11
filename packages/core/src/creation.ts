@@ -1,3 +1,4 @@
+import type { ExternalAgentAccess } from "./external-agent.js";
 import { imageInput, composeCreativePrompt } from "@tuyile/contracts";
 import { createToolRegistry, type ToolRegistry } from "./tools.js";
 import type { ToolBinding } from "@tuyile/contracts";
@@ -118,6 +119,18 @@ export class CreationService extends ImageOperations {
   async submit(p: Principal, input: ImageInput) {
     if (!(await this.files.freeSpace())) throw new AppError("DISK_LOW", 507);
     return this.admit(p, input);
+  }
+  async submitExternal(
+    access: ExternalAgentAccess,
+    input: Omit<ImageInput, "projectId">,
+  ) {
+    if (!(await this.files.freeSpace())) throw new AppError("DISK_LOW", 507);
+    return this.admit(
+      access.principal,
+      { ...input, projectId: access.projectId },
+      undefined,
+      access,
+    );
   }
   async upload(p: Principal, bytes: Uint8Array) {
     if (bytes.length > 20 * 1024 * 1024)

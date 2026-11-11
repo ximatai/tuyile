@@ -129,3 +129,25 @@ export async function requireExternalAgentScope(
   if (!rows.length)
     throw new AppError("EXTERNAL_AGENT_PERMISSION_REQUIRED", 403);
 }
+
+export async function requireProjectAssets(
+  client: pg.PoolClient,
+  workspaceId: string,
+  projectId: string,
+  ids: readonly string[],
+) {
+  const unique = [...new Set(ids)];
+  if (!unique.length) return [];
+  const { rows } = await client.query<{ output_id: string | null }>(
+    `SELECT o.id AS output_id FROM image_assets a
+     LEFT JOIN (image_outputs o JOIN image_tasks t ON t.id=o.task_id AND t.project_id=$2)
+       ON o.workspace_id=a.workspace_id AND o.asset_id=a.id
+     WHERE a.workspace_id=$1 AND a.id=ANY($3::uuid[]) AND a.state='ready'
+       AND (o.id IS NOT NULL OR EXISTS (SELECT 1 FROM canvas_references c
+           WHERE c.workspace_id=$1 AND c.project_id=$2 AND c.asset_id=a.id))`,
+    [workspaceId, projectId, unique],
+  );
+  if (rows.length !== unique.length)
+    throw new AppError("REFERENCE_UNAVAILABLE", 404);
+  return rows.flatMap(({ output_id }) => (output_id ? [output_id] : []));
+}

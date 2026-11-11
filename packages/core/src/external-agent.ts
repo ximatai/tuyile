@@ -16,7 +16,6 @@ export interface ExternalAgentAccess {
 export function applyCanvasOperations(
   document: CanvasDocument,
   operations: ExternalCanvasEdit["operations"],
-  availableAssets: ReadonlySet<string>,
 ): CanvasDocument {
   const nodes = new Map(document.nodes.map((node) => [node.id, node]));
   function add(node: CanvasNode) {
@@ -31,8 +30,6 @@ export function applyCanvasOperations(
   for (const operation of operations) {
     switch (operation.action) {
       case "add_image":
-        if (!availableAssets.has(operation.node.assetId))
-          throw new AppError("REFERENCE_UNAVAILABLE", 404);
         add({ ...operation.node, kind: "image" });
         break;
       case "add_text":
