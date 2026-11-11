@@ -26,6 +26,7 @@ import {
   requireExternalAgentScope,
   requireProjectAssets,
 } from "./external-agent.js";
+import { recordExternalAgentActivity } from "./external-agent-activity.js";
 import { PgTransactions } from "./transactions.js";
 import { PgCreationContext } from "./creation/context.js";
 function readDraftDocument(value: unknown) {
@@ -88,6 +89,10 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
     );
     await this.c.query(
       "UPDATE image_tasks SET input=jsonb_set(jsonb_set(input - 'textSources' - 'textNodeIds' - 'finalPrompt' - 'annotation' - 'preserveRequirements','{prompt}',to_jsonb(''::text)),'{referenceIds}','[]'::jsonb) WHERE project_id=$1",
+      [id],
+    );
+    await this.c.query(
+      "DELETE FROM external_agent_activity WHERE project_id=$1",
       [id],
     );
     await this.c.query(
@@ -254,7 +259,7 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
       projectId,
       assetIds,
     );
-    return this.save(
+    const saved = await this.save(
       principal,
       projectId,
       {
@@ -265,6 +270,11 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
       },
       hash,
     );
+    await recordExternalAgentActivity(this.c, principal, projectId, {
+      action: "canvas_edited",
+      revision: saved.revision,
+    });
+    return saved;
   }
   async save(
     p: Principal,

@@ -269,6 +269,14 @@ test("generates three project images through MCP and places them once on an open
   await expect(page.locator(".react-flow__node-image")).toHaveCount(4);
   await expect(page.locator(".react-flow__node-text")).toHaveCount(3);
   await expect(page.locator(".canvas-status")).toContainText("v2");
+  await page.getByRole("button", { name: "在 Codex 中继续" }).click();
+  await dialog.getByRole("button", { name: "项目活动记录" }).click();
+  await expect(
+    dialog.getByRole("row").filter({ hasText: "外部 Agent 修改画布" }),
+  ).toHaveCount(1);
+  await expect(
+    dialog.getByRole("row").filter({ hasText: "外部 Agent 提交生图" }),
+  ).toContainText(queued.taskId);
   const tasks = await (
     await page.request.get(`/api/images/tasks?projectId=${id}`)
   ).json();

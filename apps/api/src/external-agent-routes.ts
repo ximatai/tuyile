@@ -7,6 +7,7 @@ import {
   externalCanvasEdit,
   id,
   imageInput,
+  pageOffset,
   z,
   type ExternalAgentScope,
   type ImageTask,
@@ -34,6 +35,18 @@ export function externalAgentRoutes(
     const projectId = id.parse(c.req.param("id"));
     await service.project(user, projectId);
     return c.json(await tokens.status(user, projectId));
+  });
+  app.get(`${management}/activity`, async (c) => {
+    const { user } = c.get("session");
+    const projectId = id.parse(c.req.param("id"));
+    await service.project(user, projectId);
+    return c.json(
+      await tokens.activity(
+        user,
+        projectId,
+        pageOffset.parse(c.req.query("offset")),
+      ),
+    );
   });
   app.post(management, async (c) => {
     const { user } = c.get("session");

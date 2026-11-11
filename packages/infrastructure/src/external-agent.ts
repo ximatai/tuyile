@@ -6,6 +6,10 @@ import type {
   Principal,
 } from "@tuyile/contracts";
 import { AppError, type ExternalAgentAccess } from "@tuyile/core";
+import {
+  recordExternalAgentActivity,
+  type ExternalAgentActivityRow,
+} from "./external-agent-activity.js";
 import { security } from "./security.js";
 import { PgTransactions } from "./transactions.js";
 
@@ -65,6 +69,10 @@ export class PgExternalAgentTokens {
           ],
         );
         if (!rows[0]) throw new AppError("NOT_FOUND", 404);
+        await recordExternalAgentActivity(client, principal, projectId, {
+          action: "grant_issued",
+          scopes,
+        });
         return { token, grant: grant(rows[0]) };
       },
       [principal.id],
@@ -73,19 +81,43 @@ export class PgExternalAgentTokens {
 
   async revoke(principal: Principal, projectId: string) {
     await this.transactions.write(
-      (client) =>
-        client.query(
+      async (client) => {
+        const { rows } = await client.query<{ scopes: ExternalAgentScope[] }>(
           `DELETE FROM external_agent_tokens
-       WHERE project_id=$1 AND user_id=$2 AND workspace_id=$3 AND execution_version=$4`,
+         WHERE project_id=$1 AND user_id=$2 AND workspace_id=$3 AND execution_version=$4
+           AND EXISTS (SELECT 1 FROM projects WHERE id=$1 AND workspace_id=$3 AND deleted_at IS NULL)
+         RETURNING scopes`,
           [
             projectId,
             principal.id,
             principal.workspaceId,
             principal.executionVersion,
           ],
-        ),
+        );
+        if (rows[0])
+          await recordExternalAgentActivity(client, principal, projectId, {
+            action: "grant_revoked",
+            scopes: rows[0].scopes,
+          });
+      },
       [principal.id],
     );
+  }
+
+  async activity(principal: Principal, projectId: string, offset: number) {
+    const { rows } = await this.pool.query<ExternalAgentActivityRow>(
+      `SELECT a.id,u.username AS actor,a.action,a.scopes,a.revision,a.task_id AS "taskId",a.created_at AS "createdAt"
+       FROM external_agent_activity a JOIN users u ON u.id=a.user_id
+       WHERE a.workspace_id=$1 AND a.project_id=$2 AND a.user_id=$3
+       ORDER BY a.id DESC LIMIT 21 OFFSET $4`,
+      [principal.workspaceId, projectId, principal.id, offset],
+    );
+    return {
+      items: rows
+        .slice(0, 20)
+        .map((row) => ({ ...row, createdAt: row.createdAt.toISOString() })),
+      hasMore: rows.length > 20,
+    };
   }
 
   async authenticate(authorization: string | undefined) {

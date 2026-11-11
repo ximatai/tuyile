@@ -80,3 +80,20 @@ export const externalCanvasEdit = z
   })
   .strict();
 export type ExternalCanvasEdit = z.infer<typeof externalCanvasEdit>;
+
+export type ExternalAgentAction =
+  | "grant_issued"
+  | "grant_revoked"
+  | "canvas_edited"
+  | "image_submitted"
+  | "canvas_undone";
+
+export interface ExternalAgentActivity {
+  id: string;
+  actor: string;
+  action: ExternalAgentAction;
+  scopes: ExternalAgentScope[] | null;
+  revision: number | null;
+  taskId: string | null;
+  createdAt: string;
+}

@@ -241,6 +241,35 @@ it("limits remote MCP to the authorized project and invalidates rotated, revoked
       isError: true,
       content: [{ text: "NOT_FOUND" }],
     });
+    const activity = await app.request(path + "/activity", { headers });
+    expect(activity.status).toBe(200);
+    const { items } = await activity.json();
+    expect(
+      items.filter(
+        (item: { action: string }) => item.action === "canvas_edited",
+      ),
+    ).toMatchObject([{ actor: "admin", revision: 2, taskId: null }]);
+    expect(
+      items.filter(
+        (item: { action: string }) => item.action === "image_submitted",
+      ),
+    ).toMatchObject([{ actor: "admin", taskId: queued.taskId }]);
+    expect(
+      items.some((item: { action: string }) => item.action === "grant_revoked"),
+    ).toBe(true);
+    expect(JSON.stringify(items)).not.toContain(imageToken);
+    expect(
+      (
+        await app.request(path + "/activity", {
+          headers: { Authorization: `Bearer ${imageToken}` },
+        })
+      ).status,
+    ).toBe(401);
+    const otherActivity = await app.request(
+      `/api/projects/${other.id}/external-agent/activity`,
+      { headers },
+    );
+    expect(await otherActivity.json()).toEqual({ items: [], hasMore: false });
     const third = await issue();
     await f.service.changePassword(
       f.principal,

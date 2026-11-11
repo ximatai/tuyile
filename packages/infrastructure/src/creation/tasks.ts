@@ -11,6 +11,7 @@ import {
   requireExternalAgentScope,
   requireProjectAssets,
 } from "../external-agent.js";
+import { recordExternalAgentActivity } from "../external-agent-activity.js";
 import { PgCreationContext } from "./context.js";
 export class PgTasksRepository extends PgCreationContext {
   async resolveTextSources(
@@ -121,6 +122,11 @@ export class PgTasksRepository extends PgCreationContext {
         ],
       )
     ).rows[0];
+    if (!autoPlace)
+      await recordExternalAgentActivity(c, p, input.projectId, {
+        action: "image_submitted",
+        taskId: task.id,
+      });
     return this.dto(c, task);
   }
   async tasks(p: Principal, projectId?: string, offset = 0) {

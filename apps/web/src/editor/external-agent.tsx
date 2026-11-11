@@ -1,8 +1,25 @@
-import { Button, Checkbox, Input, Modal, Notice } from "@tuyile/ui";
+import { Button, Checkbox, Input, Modal, Notice, Table } from "@tuyile/ui";
 import { useEffect, useState } from "react";
-import type { ExternalAgentConnection } from "@tuyile/contracts";
+import { useQuery } from "@tanstack/react-query";
+import type {
+  ExternalAgentActivity,
+  ExternalAgentConnection,
+} from "@tuyile/contracts";
 import { client } from "../api";
 import { useSessionState } from "../session-state";
+
+const activityLabels: Record<ExternalAgentActivity["action"], string> = {
+  grant_issued: "签发令牌",
+  grant_revoked: "撤销令牌",
+  canvas_edited: "外部 Agent 修改画布",
+  image_submitted: "外部 Agent 提交生图",
+  canvas_undone: "撤销外部编辑",
+};
+const scopeLabels = {
+  "canvas:read": "读取",
+  "canvas:write": "编辑",
+  "images:generate": "生图",
+};
 
 export function ExternalAgentDialog({
   projectId,
@@ -11,7 +28,8 @@ export function ExternalAgentDialog({
   projectId: string;
   onClose: () => void;
 }) {
-  const { session } = useSessionState();
+  const state = useSessionState();
+  const { session } = state;
   const path = `/projects/${projectId}/external-agent`;
   const projectUrl = new URL(`/projects/${projectId}`, location.origin).href;
   const mcpUrl = new URL("/mcp", location.origin).href;
@@ -30,6 +48,19 @@ bearer_token_env_var = "${tokenVariable}"`;
   const [error, setError] = useState("");
   const [feedback, setFeedback] = useState("");
   const csrf = session.csrfToken;
+  const [showActivity, setShowActivity] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const activityKey = state.key("external-agent-activity", projectId);
+  const activity = useQuery({
+    queryKey: [...activityKey, offset],
+    enabled: showActivity,
+    queryFn: ({ signal }) =>
+      client(csrf)<{ items: ExternalAgentActivity[]; hasMore: boolean }>(
+        `${path}/activity?offset=${offset}`,
+        undefined,
+        signal,
+      ),
+  });
   useEffect(() => {
     const controller = new AbortController();
     void client(csrf)<ExternalAgentConnection>(
@@ -68,6 +99,7 @@ bearer_token_env_var = "${tokenVariable}"`;
       );
       setConnection(response);
       setToken(response.token ?? "");
+      await state.queries.invalidateQueries({ queryKey: activityKey });
     } catch (cause) {
       setError((cause as Error).message);
     } finally {
@@ -93,6 +125,7 @@ bearer_token_env_var = "${tokenVariable}"`;
       mask={{ closable: !busy }}
       keyboard={!busy}
       footer={null}
+      width={showActivity ? 720 : undefined}
     >
       <div className="external-agent-dialog">
         <Input.TextArea
@@ -110,6 +143,9 @@ bearer_token_env_var = "${tokenVariable}"`;
           </Button>
           <Button onClick={() => setShowSetup((value) => !value)}>
             {showSetup ? "收起连接设置" : "首次连接与授权"}
+          </Button>
+          <Button onClick={() => setShowActivity((value) => !value)}>
+            {showActivity ? "收起活动记录" : "项目活动记录"}
           </Button>
         </div>
         {showSetup && (
@@ -179,6 +215,62 @@ bearer_token_env_var = "${tokenVariable}"`;
                 <div>请单独配置此令牌。关闭弹窗后无法再次查看。</div>
               </>
             )}
+          </>
+        )}
+        {showActivity && (
+          <>
+            {activity.error && <Notice error>{activity.error.message}</Notice>}
+            <Table<ExternalAgentActivity>
+              size="small"
+              rowKey="id"
+              pagination={false}
+              scroll={{ y: 260 }}
+              loading={activity.isFetching}
+              dataSource={activity.data?.items ?? []}
+              locale={{ emptyText: "暂无外部 Agent 活动" }}
+              columns={[
+                {
+                  title: "时间",
+                  dataIndex: "createdAt",
+                  render: (date: string) =>
+                    new Date(date).toLocaleString("zh-CN"),
+                },
+                { title: "操作者", dataIndex: "actor" },
+                {
+                  title: "操作",
+                  dataIndex: "action",
+                  render: (action: ExternalAgentActivity["action"]) =>
+                    activityLabels[action],
+                },
+                {
+                  title: "结果",
+                  render: (_, row) =>
+                    row.revision !== null ? (
+                      `v${row.revision}`
+                    ) : row.taskId ? (
+                      <span style={{ overflowWrap: "anywhere" }}>
+                        {row.taskId}
+                      </span>
+                    ) : (
+                      row.scopes?.map((scope) => scopeLabels[scope]).join("、")
+                    ),
+                },
+              ]}
+            />
+            <div className="actions">
+              <Button
+                disabled={!offset || activity.isFetching}
+                onClick={() => setOffset(offset - 20)}
+              >
+                上一页
+              </Button>
+              <Button
+                disabled={!activity.data?.hasMore || activity.isFetching}
+                onClick={() => setOffset(offset + 20)}
+              >
+                下一页
+              </Button>
+            </div>
           </>
         )}
         {feedback && <div role="status">{feedback}</div>}
