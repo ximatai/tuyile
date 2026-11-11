@@ -17,7 +17,7 @@ export const defaultImagePolicy: ImagePolicy = {
   imageLimit: 100,
   attemptsLimit: 300,
   storageLimit: 2147483648,
-  concurrency: 1,
+  concurrency: 2,
   queueLimit: 10,
   maxEdge: 2048,
   maxPixels: 4194304,

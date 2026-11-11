@@ -135,8 +135,13 @@ it("separates queued capacity from execution concurrency, and enforces bounded a
   expect(work?.id).toBe(t.id);
   const second = await f.creation.submit(f.principal, f.input());
   expect(second.state).toBe("queued");
-  expect(await f.repo.claim([f.principal.id], 1)).toBeNull();
-  await f.repo.cancel(f.principal, second.id);
+  expect(await f.repo.claim([f.principal.id], 10)).toBeNull();
+  const secondWork = await f.repo.claim([f.principal.id], 1);
+  expect(secondWork?.id).toBe(second.id);
+  const third = await f.creation.submit(f.principal, f.input());
+  expect(await f.repo.claim([f.principal.id, f.principal.id], 2)).toBeNull();
+  await f.repo.cancel(f.principal, third.id);
+  await f.repo.finish(secondWork!, "TEST_STOP", true);
   await f.repo.finish(work!, "TEST_STOP", true);
   await expect(
     f.creation.submit(f.principal, f.input({ model: "forbidden" })),

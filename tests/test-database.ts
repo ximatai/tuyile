@@ -78,7 +78,7 @@ export async function resetDatabase() {
       "INSERT INTO tuyile.tool_controls(tool_id,version) VALUES('image.generate',1),('image.edit',1)",
     );
     await owner.query(
-      "UPDATE tuyile.image_settings SET concurrency=2,queue_limit=64 WHERE id=1",
+      "UPDATE tuyile.image_settings SET concurrency=DEFAULT,queue_limit=64 WHERE id=1",
     );
     await owner.query(
       "UPDATE tuyile.planning_settings SET concurrency=2,queue_limit=64 WHERE id=1",
