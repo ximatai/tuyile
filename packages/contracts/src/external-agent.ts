@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { canvasNode } from "./canvas.js";
 
 export const externalAgentScope = z.enum([
   "canvas:read",
@@ -14,3 +15,68 @@ export interface ExternalAgentGrant {
 export interface ExternalAgentConnection {
   grant: ExternalAgentGrant | null;
 }
+
+export const externalCanvasEdit = z
+  .object({
+    revision: z.number().int().min(0).max(2147483647),
+    requestKey: z.uuid(),
+    operations: z
+      .array(
+        z.discriminatedUnion("action", [
+          z
+            .object({
+              action: z.literal("add_image"),
+              node: canvasNode
+                .pick({
+                  id: true,
+                  x: true,
+                  y: true,
+                  width: true,
+                  height: true,
+                  label: true,
+                })
+                .extend({ assetId: z.uuid() }),
+            })
+            .strict(),
+          z
+            .object({
+              action: z.literal("add_text"),
+              node: canvasNode
+                .pick({
+                  id: true,
+                  x: true,
+                  y: true,
+                  width: true,
+                  height: true,
+                  label: true,
+                  tone: true,
+                })
+                .extend({ text: canvasNode.shape.text.unwrap() }),
+            })
+            .strict(),
+          z
+            .object({
+              action: z.literal("move_node"),
+              nodeId: z.uuid(),
+              ...canvasNode.pick({ x: true, y: true }).shape,
+            })
+            .strict(),
+          z
+            .object({
+              action: z.literal("group_nodes"),
+              id: z.uuid(),
+              label: canvasNode.shape.label,
+              nodeIds: z
+                .array(z.uuid())
+                .min(2)
+                .max(50)
+                .refine((ids) => new Set(ids).size === ids.length),
+            })
+            .strict(),
+        ]),
+      )
+      .min(1)
+      .max(25),
+  })
+  .strict();
+export type ExternalCanvasEdit = z.infer<typeof externalCanvasEdit>;

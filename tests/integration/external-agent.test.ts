@@ -44,8 +44,12 @@ it("limits remote MCP to the authorized project and invalidates rotated, revoked
         headers: extra,
         body: JSON.stringify({ action }),
       });
-    async function issue() {
-      const response = await manage("issue");
+    async function issue(allowCanvasWrite = false) {
+      const response = await app.request(path, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ action: "issue", allowCanvasWrite }),
+      });
       expect(response.status).toBe(201);
       return (await response.json()).token as string;
     }
@@ -142,6 +146,57 @@ it("limits remote MCP to the authorized project and invalidates rotated, revoked
     expect((await read(second)).status).toBe(200);
     expect((await manage("revoke")).status).toBe(200);
     expect((await read(second)).status).toBe(401);
+    const noWrite = await rpc(await issue(), "tools/call", {
+      name: "edit_canvas",
+      arguments: {},
+    });
+    expect((await noWrite.json()).result.isError).toBe(true);
+    const writeToken = await issue(true);
+    const node2 = { ...node, id: randomUUID(), label: "Second" };
+    const group = randomUUID();
+    const batch = (revision: number, operations: object[]) => ({
+      name: "edit_canvas",
+      arguments: { projectUrl, revision, requestKey: randomUUID(), operations },
+    });
+    const request = batch(1, [
+      { action: "add_text", node: { ...node2, kind: undefined } },
+      {
+        action: "group_nodes",
+        id: group,
+        label: "Group",
+        nodeIds: [node.id, node2.id],
+      },
+      { action: "move_node", nodeId: group, x: 10, y: 20 },
+    ]);
+    expect(
+      (await (await rpc(writeToken, "tools/call", request)).json()).result
+        .structuredContent.revision,
+    ).toBe(2);
+    const moved = await canvas.load(f.principal, f.project.id);
+    expect(
+      moved.document.nodes.filter((n) => n.parentId === group),
+    ).toMatchObject([
+      { id: node.id, x: 35, y: 60 },
+      { id: node2.id, x: 35, y: 60 },
+    ]);
+    expect(
+      (await (await rpc(writeToken, "tools/call", request)).json()).result
+        .structuredContent.revision,
+    ).toBe(2);
+    const stale = batch(1, request.arguments.operations);
+    expect(
+      (await (await rpc(writeToken, "tools/call", stale)).json()).result
+        .isError,
+    ).toBe(true);
+    const invalid = batch(2, [
+      { action: "move_node", nodeId: group, x: 80, y: 90 },
+      { action: "move_node", nodeId: randomUUID(), x: 0, y: 0 },
+    ]);
+    expect(
+      (await (await rpc(writeToken, "tools/call", invalid)).json()).result
+        .isError,
+    ).toBe(true);
+    expect(await canvas.load(f.principal, f.project.id)).toEqual(moved);
     const third = await issue();
     await f.service.changePassword(
       f.principal,

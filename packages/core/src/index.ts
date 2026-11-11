@@ -367,3 +367,4 @@ export * from "./administration.js";
 export * from "./model-catalog.js";
 export * from "./demo.js";
 export * from "./model-usage.js";
+export * from "./external-agent.js";

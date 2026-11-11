@@ -2,6 +2,8 @@ import type pg from "pg";
 import { createHash } from "node:crypto";
 import {
   AppError,
+  applyCanvasOperations,
+  type ExternalAgentAccess,
   type CanvasStore,
   type CanvasRepository,
 } from "@tuyile/core";
@@ -14,11 +16,13 @@ import {
   canvasDocument,
   type Principal,
   type CanvasSave,
+  type ExternalCanvasEdit,
   type CanvasSnapshot,
   type CanvasOutput,
   type CanvasSources,
   type Project,
 } from "@tuyile/contracts";
+import { requireExternalAgentScope } from "./external-agent.js";
 import { PgTransactions } from "./transactions.js";
 import { PgCreationContext } from "./creation/context.js";
 function readDraftDocument(value: unknown) {
@@ -213,15 +217,59 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
       ? { document: canvasDocument.parse(r.document), revision: r.revision }
       : { document: emptyCanvas(), revision: 0 };
   }
+  async editExternal(access: ExternalAgentAccess, input: ExternalCanvasEdit) {
+    const { principal, projectId } = access;
+    await requireExternalAgentScope(this.c, access, "canvas:write");
+    await this.project(principal, projectId);
+    const { rows } = await this.c.query(
+      "SELECT document,revision,request_key,request_hash FROM project_documents WHERE project_id=$1",
+      [projectId],
+    );
+    const old = rows[0];
+    const hash = createHash("sha256")
+      .update(JSON.stringify({ externalCanvasEdit: input }))
+      .digest("hex");
+    if (old?.request_key === input.requestKey) {
+      if (old.request_hash !== hash)
+        throw new AppError("IDEMPOTENCY_CONFLICT", 409);
+      return {
+        document: canvasDocument.parse(old.document),
+        revision: old.revision,
+      };
+    }
+    const current = old
+      ? { document: canvasDocument.parse(old.document), revision: old.revision }
+      : { document: emptyCanvas(), revision: 0 };
+    if (current.revision !== input.revision)
+      throw new AppError("CANVAS_CONFLICT", 409);
+    const assets = new Set(
+      current.document.nodes.flatMap((node) =>
+        node.assetId ? [node.assetId] : [],
+      ),
+    );
+    return this.save(
+      principal,
+      projectId,
+      {
+        revision: input.revision,
+        requestKey: input.requestKey,
+        placements: [],
+        document: applyCanvasOperations(
+          current.document,
+          input.operations,
+          assets,
+        ),
+      },
+      hash,
+    );
+  }
   async save(
     p: Principal,
     project: string,
     input: CanvasSave,
+    hash = createHash("sha256").update(JSON.stringify(input)).digest("hex"),
   ): Promise<CanvasSnapshot> {
     await this.project(p, project);
-    const hash = createHash("sha256")
-      .update(JSON.stringify(input))
-      .digest("hex");
     const old = (
       await this.c.query(
         "SELECT * FROM project_documents WHERE project_id=$1",

@@ -794,6 +794,30 @@ function CanvasView({
       ),
     refetchInterval: 1500,
   });
+  const surface = useRef<HTMLElement>(null);
+  const [movingNode, setMovingNode] = useState(false);
+  const remoteRevision = outputs.data?.revision ?? snap.revision;
+  const remoteCanvas = useQuery({
+    queryKey: state.key("canvas-remote", projectId, String(remoteRevision)),
+    enabled: remoteRevision > snap.revision && !snap.saving && !snap.conflict,
+    queryFn: ({ signal }) =>
+      api<CanvasSnapshot>(`/projects/${projectId}/canvas`, undefined, signal),
+  });
+  useEffect(() => {
+    const active = document.activeElement;
+    const editing =
+      active?.matches(".react-flow__node input, .react-flow__node textarea") &&
+      surface.current?.contains(active);
+    if (remoteCanvas.data && !editing && !movingNode)
+      store.receiveRemote(remoteCanvas.data);
+  }, [
+    remoteCanvas.data,
+    outputs.dataUpdatedAt,
+    movingNode,
+    snap.saving,
+    snap.revision,
+    store,
+  ]);
   const sources = useQuery({
     queryKey: state.key("canvas-sources", projectId, String(snap.revision)),
     queryFn: ({ signal }) =>
@@ -821,7 +845,7 @@ function CanvasView({
     if (
       outputs.data &&
       !snap.conflict &&
-      outputs.data.revision >= snap.revision
+      outputs.data.revision === snap.revision
     )
       store.place(outputs.data.outputs);
   }, [outputs.data, store, snap.conflict, snap.revision]);
@@ -1020,6 +1044,22 @@ function CanvasView({
   function changes(changes: NodeChange[]) {
     changes = changes.filter((c) => !("id" in c) || !c.id.startsWith("task-"));
     if (!changes.length) return;
+    if (
+      changes.some(
+        (c) =>
+          (c.type === "position" && c.dragging === true) ||
+          (c.type === "dimensions" && c.resizing === true),
+      )
+    )
+      setMovingNode(true);
+    if (
+      changes.some(
+        (c) =>
+          (c.type === "position" && c.dragging === false) ||
+          (c.type === "dimensions" && c.resizing === false),
+      )
+    )
+      setMovingNode(false);
     setNodes((current) => applyNodeChanges(changes, current));
     const selection = changes.filter((c) => c.type === "select");
     if (selection.length) {
@@ -1182,6 +1222,7 @@ function CanvasView({
 
   return (
     <section
+      ref={surface}
       className={`canvas-surface${panning ? " is-panning" : ""}${fileDrag ? " is-file-drag" : ""}`}
       aria-label="项目画布"
       tabIndex={0}

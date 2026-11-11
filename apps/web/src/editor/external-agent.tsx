@@ -1,4 +1,4 @@
-import { Button, Input, Modal, Notice } from "@tuyile/ui";
+import { Button, Checkbox, Input, Modal, Notice } from "@tuyile/ui";
 import { useEffect, useState } from "react";
 import type { ExternalAgentConnection } from "@tuyile/contracts";
 import { client } from "../api";
@@ -22,6 +22,7 @@ export function ExternalAgentDialog({
 url = "${mcpUrl}"
 bearer_token_env_var = "${tokenVariable}"`;
   const [connection, setConnection] = useState<ExternalAgentConnection>();
+  const [allowCanvasWrite, setAllowCanvasWrite] = useState(false);
   const [token, setToken] = useState("");
   const [showSetup, setShowSetup] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -37,6 +38,9 @@ bearer_token_env_var = "${tokenVariable}"`;
     )
       .then((result) => {
         setConnection(result);
+        setAllowCanvasWrite(
+          result.grant?.scopes.includes("canvas:write") ?? false,
+        );
         setShowSetup(!result.grant);
       })
       .catch((cause: Error) => {
@@ -52,7 +56,7 @@ bearer_token_env_var = "${tokenVariable}"`;
     try {
       const response = await client(csrf)<
         ExternalAgentConnection & { token?: string }
-      >(path, { action });
+      >(path, action === "issue" ? { action, allowCanvasWrite } : { action });
       setConnection(response);
       setToken(response.token ?? "");
     } catch (cause) {
@@ -112,6 +116,13 @@ bearer_token_env_var = "${tokenVariable}"`;
               readOnly
               autoSize
             />
+            <Checkbox
+              checked={allowCanvasWrite}
+              disabled={busy || !connection}
+              onChange={(event) => setAllowCanvasWrite(event.target.checked)}
+            >
+              允许编辑画布
+            </Checkbox>
             <div className="actions">
               <Button onClick={() => void copy(config, "已复制 MCP 配置")}>
                 复制配置
@@ -135,7 +146,8 @@ bearer_token_env_var = "${tokenVariable}"`;
                 : connection
                   ? "当前项目尚未授权。"
                   : "正在读取授权状态…"}{" "}
-              令牌仅限当前项目，签发后有效期为 7 天，替换会使旧令牌失效。
+              令牌允许读取当前项目。勾选的权限在签发或替换时生效，有效期为 7
+              天。
             </div>
             {token && (
               <>

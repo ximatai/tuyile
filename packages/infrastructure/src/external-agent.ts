@@ -5,7 +5,7 @@ import type {
   ExternalAgentScope,
   Principal,
 } from "@tuyile/contracts";
-import { AppError } from "@tuyile/core";
+import { AppError, type ExternalAgentAccess } from "@tuyile/core";
 import { security } from "./security.js";
 import { PgTransactions } from "./transactions.js";
 
@@ -72,21 +72,26 @@ export class PgExternalAgentTokens {
   }
 
   async revoke(principal: Principal, projectId: string) {
-    await this.pool.query(
-      `DELETE FROM external_agent_tokens
+    await this.transactions.write(
+      (client) =>
+        client.query(
+          `DELETE FROM external_agent_tokens
        WHERE project_id=$1 AND user_id=$2 AND workspace_id=$3 AND execution_version=$4`,
-      [
-        projectId,
-        principal.id,
-        principal.workspaceId,
-        principal.executionVersion,
-      ],
+          [
+            projectId,
+            principal.id,
+            principal.workspaceId,
+            principal.executionVersion,
+          ],
+        ),
+      [principal.id],
     );
   }
 
   async authenticate(authorization: string | undefined) {
     const token = /^Bearer (tuyile_[\w-]{43})$/i.exec(authorization ?? "")?.[1];
     if (!token) return null;
+    const tokenHash = security.digest(token);
     const { rows } = await this.pool.query<{
       principal: Principal;
       projectId: string;
@@ -102,8 +107,25 @@ export class PgExternalAgentTokens {
        WHERE t.token_hash=$1 AND t.expires_at>now() AND p.deleted_at IS NULL
          AND u.enabled AND u.password_hash IS NOT NULL AND NOT u.must_change_password
          AND t.execution_version=u.execution_version`,
-      [security.digest(token)],
+      [tokenHash],
     );
-    return rows[0] ?? null;
+    return rows[0] ? { ...rows[0], tokenHash } : null;
   }
+}
+
+/** Write transactions hold the owner lock, as do token changes and account revocation. */
+export async function requireExternalAgentScope(
+  client: pg.PoolClient,
+  access: ExternalAgentAccess,
+  scope: ExternalAgentScope,
+) {
+  const { rows } = await client.query(
+    `SELECT 1 FROM external_agent_tokens t JOIN users u ON u.id=t.user_id
+     WHERE t.project_id=$1 AND t.user_id=$2 AND t.token_hash=$3 AND $4=ANY(t.scopes)
+       AND t.expires_at>now() AND t.execution_version=u.execution_version
+       AND u.enabled AND NOT u.must_change_password`,
+    [access.projectId, access.principal.id, access.tokenHash, scope],
+  );
+  if (!rows.length)
+    throw new AppError("EXTERNAL_AGENT_PERMISSION_REQUIRED", 403);
 }
