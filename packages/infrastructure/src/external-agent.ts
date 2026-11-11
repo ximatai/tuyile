@@ -226,12 +226,20 @@ export class PgExternalAgentTokens {
     );
   }
 
-  async requireImage(access: ExternalAgentAccess, assetId: string) {
+  requireImage(access: ExternalAgentAccess, assetId: string) {
+    return this.authorizeImage(access, assetId, "canvas:read");
+  }
+
+  private authorizeImage(
+    access: ExternalAgentAccess,
+    assetId: string,
+    scope: "canvas:read" | "images:download",
+  ) {
     return this.transactions.read(async (client) => {
       const grantExpires = await requireExternalAgentScope(
         client,
         access,
-        "canvas:read",
+        scope,
       );
       await requireProjectAssets(
         client,
@@ -244,7 +252,11 @@ export class PgExternalAgentTokens {
   }
 
   async issueImageDownload(access: ExternalAgentAccess, assetId: string) {
-    const grantExpires = await this.requireImage(access, assetId);
+    const grantExpires = await this.authorizeImage(
+      access,
+      assetId,
+      "images:download",
+    );
     const expires = Math.min(
       Math.floor(Date.now() / 1000) + imageDownloadLifetime,
       Math.floor(grantExpires.getTime() / 1000),
@@ -282,8 +294,8 @@ export class PgExternalAgentTokens {
              'executionVersion',u.execution_version) AS principal
          FROM projects p JOIN external_agent_tokens t ON t.workspace_id=p.workspace_id
          JOIN users u ON u.id=t.user_id
-         WHERE p.id=$1 AND p.deleted_at IS NULL AND (t.project_id IS NULL OR t.project_id=p.id)
-           AND t.token_hash IS NOT NULL AND 'canvas:read'=ANY(t.scopes)
+         WHERE p.id=$1 AND p.deleted_at IS NULL AND t.project_id IS NULL
+           AND t.token_hash IS NOT NULL AND 'images:download'=ANY(t.scopes)
            AND t.expires_at>clock_timestamp() AND t.execution_version=u.execution_version
            AND u.enabled AND u.password_hash IS NOT NULL AND NOT u.must_change_password`,
         [projectId],
@@ -310,6 +322,33 @@ export class PgExternalAgentTokens {
         [assetId],
       );
       return grant.principal;
+    });
+  }
+
+  async recentImages(access: ExternalAgentAccess, limit: number) {
+    return this.transactions.read(async (client) => {
+      await requireExternalAgentScope(client, access, "canvas:read");
+      const { rows } = await client.query<{
+        assetId: string;
+        taskId: string;
+        width: number;
+        height: number;
+        mime: string;
+        createdAt: Date;
+      }>(
+        `SELECT a.id AS "assetId", t.id AS "taskId", a.width, a.height, a.mime,
+                o.created_at AS "createdAt"
+         FROM image_tasks t
+         JOIN image_outputs o ON o.workspace_id=t.workspace_id AND o.task_id=t.id
+         JOIN image_assets a ON a.workspace_id=o.workspace_id AND a.id=o.asset_id
+         WHERE t.workspace_id=$1 AND t.project_id=$2 AND a.state='ready'
+         ORDER BY o.created_at DESC, o.id DESC LIMIT $3`,
+        [access.principal.workspaceId, access.projectId, limit],
+      );
+      return rows.map(({ createdAt, ...image }) => ({
+        ...image,
+        createdAt: createdAt.toISOString(),
+      }));
     });
   }
 

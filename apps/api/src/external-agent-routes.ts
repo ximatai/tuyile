@@ -36,6 +36,7 @@ const accountGrantChange = z.discriminatedUnion("action", [
       action: z.literal("issue"),
       allowCanvasWrite: z.boolean().default(false),
       allowGeneration: z.boolean().default(false),
+      allowDownload: z.boolean().default(false),
       expectedGrantId: grantId,
     })
     .strict(),
@@ -85,10 +86,12 @@ export function externalAgentRoutes(
   function scopesFor(input: {
     allowCanvasWrite: boolean;
     allowGeneration: boolean;
+    allowDownload: boolean;
   }) {
     const scopes: ExternalAgentScope[] = ["canvas:read"];
     if (input.allowCanvasWrite) scopes.push("canvas:write");
     if (input.allowGeneration && creation) scopes.push("images:generate");
+    if (input.allowDownload && creation) scopes.push("images:download");
     return scopes;
   }
 
@@ -347,7 +350,7 @@ export function externalAgentRoutes(
         "read_image",
         {
           description:
-            "View a preview of an image on this canvas or a saved output from a task in this project. Use the asset ID from read_canvas or get_image_task.",
+            "View a preview of an image on this canvas or a saved output from a task in this project. Use the asset ID from read_canvas, list_recent_images, or get_image_task.",
           annotations: { readOnlyHint: true, openWorldHint: false },
           inputSchema: imageInputSchema,
         },
@@ -372,6 +375,40 @@ export function externalAgentRoutes(
           }),
       );
       server.registerTool(
+        "list_recent_images",
+        {
+          description:
+            "Find the latest saved generation outputs for this project, including images not yet placed on the canvas. Use an output assetId with read_image to view it.",
+          annotations: { readOnlyHint: true, openWorldHint: false },
+          inputSchema: {
+            projectUrl: projectLink,
+            limit: z.number().int().min(1).max(25).default(10),
+          },
+        },
+        async ({ projectUrl, limit }) =>
+          projectCall(projectUrl, async (projectId) => ({
+            projectId,
+            images: await tokens.recentImages({ ...access, projectId }, limit),
+          })),
+      );
+      server.registerTool(
+        "get_image_task",
+        {
+          description:
+            "Read a task in this project by ID. Use read_image with an output's asset ID to see it, or edit_canvas to place it. Do not resubmit for a pending review or an unknown upstream result.",
+          annotations: { readOnlyHint: true, openWorldHint: false },
+          inputSchema: { projectUrl: projectLink, taskId: id },
+        },
+        async ({ projectUrl, taskId }) =>
+          projectCall(projectUrl, async (projectId) =>
+            imageTaskStatus(
+              await creation.task(access.principal, taskId, projectId),
+            ),
+          ),
+      );
+    }
+    if (creation && access.scopes.includes("images:download")) {
+      server.registerTool(
         "get_image_download_link",
         {
           description:
@@ -381,7 +418,7 @@ export function externalAgentRoutes(
             destructiveHint: false,
             openWorldHint: true,
           },
-          inputSchema: imageInputSchema,
+          inputSchema: { projectUrl: projectLink, assetId: id },
         },
         async ({ projectUrl, assetId }) =>
           projectCall(projectUrl, async (projectId) => {
@@ -478,21 +515,6 @@ export function externalAgentRoutes(
                 { ...access, projectId },
                 generationInput.parse(input),
               ),
-            ),
-          ),
-      );
-      server.registerTool(
-        "get_image_task",
-        {
-          description:
-            "Read a task in this project by ID. Use read_image with an output's asset ID to see it, or edit_canvas to place it. Do not resubmit for a pending review or an unknown upstream result.",
-          annotations: { readOnlyHint: true, openWorldHint: false },
-          inputSchema: { projectUrl: projectLink, taskId: id },
-        },
-        async ({ projectUrl, taskId }) =>
-          projectCall(projectUrl, async (projectId) =>
-            imageTaskStatus(
-              await creation.task(access.principal, taskId, projectId),
             ),
           ),
       );

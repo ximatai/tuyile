@@ -60,6 +60,9 @@ export const canvasDocument = z
   });
 export type CanvasDocument = z.infer<typeof canvasDocument>;
 export type CanvasNode = z.infer<typeof canvasNode>;
+export function compareCanvasPaintOrder(a: CanvasNode, b: CanvasNode) {
+  return Number(!!a.parentId) - Number(!!b.parentId);
+}
 export const emptyCanvas = (): CanvasDocument => ({
   schemaVersion: 1,
   nodes: [],

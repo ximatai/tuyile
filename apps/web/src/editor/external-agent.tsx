@@ -33,6 +33,7 @@ const scopeLabels = {
   "canvas:read": "读取",
   "canvas:write": "编辑",
   "images:generate": "生图",
+  "images:download": "原图链接",
 };
 
 export function ExternalAgentDialog({

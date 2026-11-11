@@ -5,6 +5,7 @@ export const externalAgentScope = z.enum([
   "canvas:read",
   "canvas:write",
   "images:generate",
+  "images:download",
 ]);
 export type ExternalAgentScope = z.infer<typeof externalAgentScope>;
 

@@ -135,7 +135,8 @@ it("limits remote MCP to the authorized project and invalidates rotated, revoked
       "read_canvas",
       "read_canvas_preview",
       "read_image",
-      "get_image_download_link",
+      "list_recent_images",
+      "get_image_task",
     ]);
     expect(
       (await (await read(first)).json()).result.structuredContent,
@@ -374,6 +375,7 @@ it("limits remote MCP to the authorized project and invalidates rotated, revoked
       action: "issue",
       allowCanvasWrite: true,
       allowGeneration: true,
+      allowDownload: true,
     });
     expect(issued.status).toBe(201);
     const { token: accountToken, grant: issuedGrant } = await issued.json();
@@ -538,6 +540,43 @@ it("limits remote MCP to the authorized project and invalidates rotated, revoked
       height: 1,
       visibleNodes: 0,
     });
+    const redAsset = await f.creation.upload(
+      f.principal,
+      await sharp({
+        create: { width: 128, height: 128, channels: 3, background: "#ff0000" },
+      })
+        .png()
+        .toBuffer(),
+    );
+    const groupId = randomUUID();
+    await canvas.save(f.principal, other.id, {
+      revision: 2,
+      requestKey: randomUUID(),
+      placements: [],
+      document: {
+        ...emptyCanvas(),
+        nodes: [
+          {
+            id: groupId,
+            kind: "group",
+            x: 0,
+            y: 0,
+            width: 128,
+            height: 128,
+            label: "Group",
+          },
+          { ...imageNode, parentId: groupId },
+          { ...imageNode, id: randomUUID(), assetId: redAsset.id },
+        ],
+      },
+    });
+    const overlap = await canvasPreview(otherUrl, region);
+    const topPixel = await sharp(Buffer.from(overlap.content[1].data, "base64"))
+      .extract({ left: 600, top: 600, width: 1, height: 1 })
+      .raw()
+      .toBuffer();
+    expect(topPixel[0]).toBeLessThan(20);
+    expect(topPixel[2]).toBeGreaterThan(145);
     expect(await canvasPreview(foreignUrl)).toMatchObject({ isError: true });
     expect(await canvasPreview(otherUrl, undefined, third)).toMatchObject({
       isError: true,
@@ -593,6 +632,15 @@ it("limits remote MCP to the authorized project and invalidates rotated, revoked
       (await accountChange({ action: "issue" }, issuedGrant.id)).status,
     ).toBe(409);
     expect((await read(replacement)).status).toBe(200);
+    expect(
+      await imageTool("read_image", unlinked.id, otherUrl, replacement),
+    ).toMatchObject({ content: [{ type: "image" }] });
+    const noDownload = await rpc(replacement, "tools/list");
+    expect(
+      (await noDownload.json()).result.tools.map(
+        (tool: { name: string }) => tool.name,
+      ),
+    ).not.toContain("get_image_download_link");
     expect(await (await accountChange({ action: "revoke" })).json()).toEqual({
       grant: null,
       savedScopes: ["canvas:read", "canvas:write"],

@@ -24,6 +24,9 @@ test("opens the current canvas from the Codex handoff and reuses account access 
   await expect(
     dialog.getByRole("heading", { name: "授权 Codex 访问你的项目" }),
   ).toBeVisible();
+  await expect(
+    dialog.getByRole("checkbox", { name: /允许生成原图下载链接/ }),
+  ).not.toBeChecked();
   await dialog.getByRole("button", { name: "签发令牌并继续" }).click();
   await expect(dialog.getByLabel("Codex MCP 配置")).toHaveValue(
     new RegExp(`${baseURL}/mcp`),
@@ -301,7 +304,7 @@ test("generates three project images through MCP and places them once on an open
     .getByRole("checkbox", { name: "允许提交生图", exact: false })
     .check();
   await dialog.getByRole("button", { name: "签发令牌并继续" }).click();
-  const token = await dialog.getByLabel("账号访问令牌").inputValue();
+  let token = await dialog.getByLabel("账号访问令牌").inputValue();
   await page.keyboard.press("Escape");
   await expect(dialog).not.toBeVisible();
   async function call(name: string, args: object = {}, image = false) {
@@ -468,4 +471,27 @@ test("generates three project images through MCP and places them once on an open
   const completedAfterUndo = await status();
   expect(completedAfterUndo).toMatchObject({ state: "succeeded", used: 3 });
   expect(completedAfterUndo.outputs).toHaveLength(3);
+  const currentGrant = await (
+    await page.request.get("/api/account/external-agent")
+  ).json();
+  const readOnlyGrant = await page.request.post("/api/account/external-agent", {
+    headers,
+    data: { action: "issue", expectedGrantId: currentGrant.grant.id },
+  });
+  expect(readOnlyGrant.status()).toBe(201);
+  const issued = await readOnlyGrant.json();
+  expect(issued.grant.scopes).toEqual(["canvas:read"]);
+  token = issued.token;
+  const recent = await call("list_recent_images", { limit: 2 });
+  expect(recent.images).toHaveLength(2);
+  expect(
+    recent.images.every(
+      (image: { taskId: string }) => image.taskId === queued.taskId,
+    ),
+  ).toBe(true);
+  expect(
+    (await call("read_image", { assetId: recent.images[0].assetId }, true))
+      .content[0].type,
+  ).toBe("image");
+  expect((await status()).outputs).toHaveLength(3);
 });

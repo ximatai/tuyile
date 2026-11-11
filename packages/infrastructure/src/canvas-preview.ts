@@ -1,5 +1,9 @@
 import sharp from "sharp";
-import type { CanvasNode, CanvasSnapshot } from "@tuyile/contracts";
+import {
+  compareCanvasPaintOrder,
+  type CanvasNode,
+  type CanvasSnapshot,
+} from "@tuyile/contracts";
 import { AppError } from "@tuyile/core";
 
 export interface CanvasPreviewRegion {
@@ -138,7 +142,8 @@ export async function renderCanvasPreview(
     const cropHeight = bounds.height * scale;
     const width = Math.min(maxEdge, Math.ceil(cropWidth));
     const height = Math.min(maxEdge, Math.ceil(cropHeight));
-    const nodes = snapshot.document.nodes
+    const nodes = [...snapshot.document.nodes]
+      .sort(compareCanvasPaintOrder)
       .map((node) => {
         const box = {
           x: (node.x - bounds.x) * scale,
@@ -171,9 +176,7 @@ export async function renderCanvasPreview(
         if (!(error instanceof AppError && error.status === 404)) throw error;
       }
     }
-    const groups = nodes.filter(({ node }) => node.kind === "group");
-    const foreground = nodes.filter(({ node }) => node.kind !== "group");
-    const elements = [...groups, ...foreground]
+    const elements = nodes
       .map(({ node, box }) => drawNode(node, box, thumbnails.get(node.id)))
       .join("");
     const markup = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${width}" height="${height}">

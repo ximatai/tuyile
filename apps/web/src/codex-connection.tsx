@@ -20,6 +20,7 @@ const scopeLabels = {
   "canvas:read": "读取",
   "canvas:write": "编辑",
   "images:generate": "生图",
+  "images:download": "原图链接",
 };
 const accountConnectionPath = "/account/external-agent";
 const accountConnectionKey = "codex-account-connection";
@@ -74,6 +75,7 @@ bearer_token_env_var = "${tokenVariable}"`;
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [allowCanvasWrite, setAllowCanvasWrite] = useState(false);
   const [allowGeneration, setAllowGeneration] = useState(false);
+  const [allowDownload, setAllowDownload] = useState(false);
   const [token, setToken] = useState("");
   const [grantReplaced, setGrantReplaced] = useState(false);
   const [step, setStep] = useState(0);
@@ -94,6 +96,7 @@ bearer_token_env_var = "${tokenVariable}"`;
       .then((result) => {
         setConnection(result);
         setAllowGeneration(result.savedScopes.includes("images:generate"));
+        setAllowDownload(result.savedScopes.includes("images:download"));
         setAllowCanvasWrite(result.savedScopes.includes("canvas:write"));
         setStep(result.grant ? 1 : 0);
       })
@@ -127,7 +130,13 @@ bearer_token_env_var = "${tokenVariable}"`;
       >(
         accountConnectionPath,
         action === "issue"
-          ? { action, allowCanvasWrite, allowGeneration, expectedGrantId }
+          ? {
+              action,
+              allowCanvasWrite,
+              allowGeneration,
+              allowDownload,
+              expectedGrantId,
+            }
           : { action, expectedGrantId },
       );
       setConnection(response);
@@ -136,6 +145,7 @@ bearer_token_env_var = "${tokenVariable}"`;
       setStep(response.grant ? 1 : 0);
       setAllowCanvasWrite(response.savedScopes.includes("canvas:write"));
       setAllowGeneration(response.savedScopes.includes("images:generate"));
+      setAllowDownload(response.savedScopes.includes("images:download"));
       void state.queries.invalidateQueries({
         queryKey: state.key(accountConnectionKey),
       });
@@ -182,6 +192,7 @@ bearer_token_env_var = "${tokenVariable}"`;
         setToken("");
         setAllowCanvasWrite(latest.savedScopes.includes("canvas:write"));
         setAllowGeneration(latest.savedScopes.includes("images:generate"));
+        setAllowDownload(latest.savedScopes.includes("images:download"));
         setStep(0);
         setGrantReplaced(false);
         setFeedback("令牌已失效，请重新签发。");
@@ -189,6 +200,7 @@ bearer_token_env_var = "${tokenVariable}"`;
         setToken("");
         setAllowCanvasWrite(latest.grant.scopes.includes("canvas:write"));
         setAllowGeneration(latest.grant.scopes.includes("images:generate"));
+        setAllowDownload(latest.grant.scopes.includes("images:download"));
         setGrantReplaced(true);
         setStep(0);
       } else if (!latest.grant.verifiedAt) {
@@ -327,7 +339,7 @@ bearer_token_env_var = "${tokenVariable}"`;
                 ? "账号令牌已在其他页面换发。请签发新令牌并重新配置 Codex。"
                 : grant
                   ? "签发新令牌后，旧令牌立即失效。"
-                  : "权限适用于你能访问的所有项目。读取权限包含项目图片预览，也可按需生成原图短时下载链接。"}
+                  : "权限适用于你能访问的所有项目。"}
             </p>
           </div>
           <div className="external-agent-permissions">
@@ -348,6 +360,16 @@ bearer_token_env_var = "${tokenVariable}"`;
             >
               允许提交生图{" "}
               <span className="external-agent-muted">· 成功图片计入额度</span>
+            </Checkbox>
+            <Checkbox
+              checked={allowDownload}
+              disabled={busy}
+              onChange={(event) => setAllowDownload(event.target.checked)}
+            >
+              允许生成原图下载链接{" "}
+              <span className="external-agent-muted">
+                · 链接有效期内，持有者可下载原图
+              </span>
             </Checkbox>
           </div>
         </div>
