@@ -7,6 +7,8 @@ import { libraryRoutes } from "./library-routes.js";
 import type { LibraryService } from "@tuyile/core";
 import { agentRoutes } from "./agent-routes.js";
 import type { AgentService } from "@tuyile/core";
+import { externalAgentRoutes } from "./external-agent-routes.js";
+import type { PgExternalAgentTokens } from "@tuyile/infrastructure";
 import { canvasRoutes } from "./canvas-routes.js";
 import type { CanvasService } from "@tuyile/core";
 import { extensionRoutes } from "./extension-routes.js";
@@ -59,6 +61,7 @@ export function createApp(
   administration?: AdministrationService,
   catalog?: import("@tuyile/core").ModelCatalogService,
   demo?: import("@tuyile/core").DemoService,
+  externalAgent?: PgExternalAgentTokens,
 ) {
   const app = new Hono<ApiEnv>();
   app.use("*", async (c, next) => {
@@ -328,6 +331,15 @@ export function createApp(
   if (library && creation) libraryRoutes(app, library, creation);
   if (agent) agentRoutes(app, agent);
   if (canvas) canvasRoutes(app, canvas);
+  if (canvas && externalAgent)
+    externalAgentRoutes(
+      app,
+      service,
+      canvas,
+      externalAgent,
+      config.origin,
+      creation,
+    );
   if (catalog) modelCatalogRoutes(app, catalog);
   if (extensions) extensionRoutes(app, extensions);
   app.notFound((c) =>

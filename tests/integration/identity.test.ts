@@ -47,6 +47,48 @@ describe("real PostgreSQL identity and HTTP boundaries", () => {
       await pool.end();
     }
   });
+  it("uses the new image concurrency defaults while preserving configured limits on upgrade", async () => {
+    const {
+      rows: [settings],
+    } = await db.pool.query(
+      "SELECT concurrency FROM image_settings WHERE id=1",
+    );
+    expect(settings.concurrency).toBe(10);
+    const admin = await login();
+    const { pool: owner } = createDatabase(testUrls().owner);
+    try {
+      await owner.query(`
+        UPDATE image_settings SET concurrency=1 WHERE id=1;
+        ALTER TABLE image_settings ALTER COLUMN concurrency SET DEFAULT 2;
+        ALTER TABLE image_policies ALTER COLUMN concurrency SET DEFAULT 1;
+        DELETE FROM schema_migrations WHERE version=37;
+      `);
+    } finally {
+      await owner.end();
+    }
+    await db.pool.query("INSERT INTO image_policies(user_id) VALUES($1)", [
+      admin.view.user.id,
+    ]);
+    await migrate(testUrls().owner);
+    const newAccount = await db.service.createUser(
+      admin.view.user,
+      "new_image_policy",
+    );
+    const {
+      rows: [newPolicy],
+    } = await db.pool.query(
+      "INSERT INTO image_policies(user_id) VALUES($1) RETURNING concurrency",
+      [newAccount.user.id],
+    );
+    expect(newPolicy.concurrency).toBe(2);
+    const {
+      rows: [existing],
+    } = await db.pool.query(
+      "SELECT s.concurrency AS global, p.concurrency AS account FROM image_settings s JOIN image_policies p ON p.user_id=$1 WHERE s.id=1",
+      [admin.view.user.id],
+    );
+    expect(existing).toEqual({ global: 1, account: 1 });
+  });
   it("preserves configured quotas when upgrading through migration 15 and does not rewrite already applied databases", async () => {
     const admin = await login();
     const member = await db.service.createUser(

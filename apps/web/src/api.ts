@@ -23,7 +23,7 @@ const messages: Record<string, string> = {
   STYLE_CONFLICT: "风格已被修改，请重新打开后编辑。当前输入已保留。",
   STYLE_LIMIT: "最多保存 200 个风格，请先清理不再使用的风格。",
   TEXT_REFERENCE_CONFLICT:
-    "画布已在其他操作中更新。请在画布中选择‘重新加载’，核对文案预览后再提交；当前创作需求已保留。",
+    "画布已在其他操作中更新。请在画布中选择‘加载新版’，核对文案预览后再提交；当前创作需求已保留。",
   TEXT_REFERENCE_UNAVAILABLE:
     "引用文案已删除或内容为空，请补充内容或移除引用。",
   PROMPT_TOO_LONG:
@@ -62,6 +62,7 @@ const messages: Record<string, string> = {
   PLAN_NOT_READY: "规划尚未完成，请等待结果。",
   PLANNING_PROVIDER_UNAVAILABLE: "绑定的规划服务已撤销，请重新规划。",
 
+  EXTERNAL_UNDO_CONFLICT: "画布已更新，无法撤销这次外部编辑。",
   CANVAS_CONFLICT:
     "画布已在其他页面修改。本地内容已保留，请重新加载或另存副本。",
   PLAN_SELECTION_INVALID:
@@ -111,6 +112,10 @@ const messages: Record<string, string> = {
   NOT_FOUND: "内容不存在或你无权访问。",
   RATE_LIMITED: "操作过于频繁，请在 15 分钟后重试。",
   INVALID_CSRF: "会话已改变，请刷新后重试。",
+  EXTERNAL_AGENT_GRANT_CHANGED:
+    "账号连接已在其他页面变更，请核对当前令牌后再操作。",
+  EXTERNAL_AGENT_ACCOUNT_CONNECTION_REQUIRED:
+    "请刷新页面，使用账号级 Codex 连接。",
   INVALID_ORIGIN: "访问来源不匹配，请使用配置的应用地址。",
 };
 export class ApiError extends Error {

@@ -115,3 +115,4 @@ export interface AdminArtworksPage {
 }
 
 export * from "./annotation.js";
+export * from "./external-agent.js";

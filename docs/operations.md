@@ -4,7 +4,9 @@
 
 ## 独立运行
 
-依赖和隔离地址见 [本地开发](development.md)。当前程序要求 schema 1—31（以[迁移目录](../migrations)及启动校验为准）；迁移由 migrator 显式执行，API/Worker 只检查兼容性，运行身份不能修改 schema。普通停止用 `docker compose ... stop api worker`，保留数据库与图片卷；不要用删除卷解决启动问题。
+依赖和隔离地址见 [本地开发](development.md)。当前程序要求 schema 1—39（以[迁移目录](../migrations)及启动校验为准）；迁移由 migrator 显式执行，API/Worker 只检查兼容性，运行身份不能修改 schema。普通停止用 `docker compose ... stop api worker`，保留数据库与图片卷；不要用删除卷解决启动问题。
+
+生图并发默认全站 10、单账号 2。迁移 0037 只为新实例和新建的个人策略采用新默认值。已有实例可在管理页调整全站和个人上限，个人上限在任务提交时保存。
 
 本地 Docker 使用 `.env.docker`、项目 `tuyile-docker`、数据库 `tuyile_docker`/55441 和应用8792。专用自动测试只使用 `tuyile_test`/55440。其他实例的数据、凭据与后台服务不参与本实例运行或构建。
 
@@ -23,6 +25,10 @@ PUBLIC_APP_ORIGIN=https://tuyile.example docker compose --env-file .env.docker -
 [Nginx 模板](../deploy/nginx.conf.example)供宿主机代理使用；替换域名，配置证书和密钥后先运行 `nginx -t`。API 的精确 origin 与浏览器入口必须一致。生产会话使用 Secure、HttpOnly、SameSite=Strict；不把模型 Key 或私有图片地址变成公开链接。模板不重试上游请求，应用继续使用 HTTP 轮询，无需 SSE 或 WebSocket。
 
 配置依据为 [Nginx proxy 模块](https://nginx.org/en/docs/http/ngx_http_proxy_module.html)与 [SSL 模块](https://nginx.org/en/docs/http/ngx_http_ssl_module.html)。本地演练用短期自签证书，仅在隔离浏览器上下文接受该证书，不修改系统信任，也不关闭应用 TLS 验证。
+
+外部 Agent 连接同一 HTTPS 域名的 `/mcp` 路由，由现有代理转发到 API。内网实例要求 Agent 所在设备能够访问该地址。账号级连接可从右上角账户菜单的「连接 Codex」或画布的「在 Codex 中继续」配置。0038 保留已签发的项目令牌及其原有范围，用户可在原项目撤销旧令牌。
+
+MCP 原图下载地址包含短时签名。反向代理应禁用 `/mcp/download/` 的访问日志，或使用不记录查询参数的日志格式。示例 Nginx 配置关闭访问日志。
 
 ## 成套备份
 

@@ -2,6 +2,8 @@ import type pg from "pg";
 import { createHash } from "node:crypto";
 import {
   AppError,
+  applyCanvasOperations,
+  type ExternalAgentAccess,
   type CanvasStore,
   type CanvasRepository,
 } from "@tuyile/core";
@@ -14,11 +16,18 @@ import {
   canvasDocument,
   type Principal,
   type CanvasSave,
+  type ExternalCanvasEdit,
+  type ExternalCanvasUndo,
   type CanvasSnapshot,
   type CanvasOutput,
   type CanvasSources,
   type Project,
 } from "@tuyile/contracts";
+import {
+  requireExternalAgentScope,
+  requireProjectAssets,
+} from "./external-agent.js";
+import { recordExternalAgentActivity } from "./external-agent-activity.js";
 import { PgTransactions } from "./transactions.js";
 import { PgCreationContext } from "./creation/context.js";
 function readDraftDocument(value: unknown) {
@@ -81,6 +90,14 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
     );
     await this.c.query(
       "UPDATE image_tasks SET input=jsonb_set(jsonb_set(input - 'textSources' - 'textNodeIds' - 'finalPrompt' - 'annotation' - 'preserveRequirements','{prompt}',to_jsonb(''::text)),'{referenceIds}','[]'::jsonb) WHERE project_id=$1",
+      [id],
+    );
+    await this.c.query(
+      "DELETE FROM external_agent_activity WHERE project_id=$1",
+      [id],
+    );
+    await this.c.query(
+      "DELETE FROM external_agent_canvas_undo WHERE project_id=$1",
       [id],
     );
     await this.c.query(
@@ -205,23 +222,123 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
     await this.project(p, project);
     const r = (
       await this.c.query(
-        "SELECT document,revision FROM project_documents WHERE project_id=$1",
+        `SELECT d.document,d.revision,(u.revision IS NOT NULL) AS external_edit
+         FROM project_documents d LEFT JOIN external_agent_canvas_undo u
+           ON u.project_id=d.project_id AND u.revision=d.revision
+         WHERE d.project_id=$1`,
         [project],
       )
     ).rows[0];
     return r
-      ? { document: canvasDocument.parse(r.document), revision: r.revision }
+      ? {
+          document: canvasDocument.parse(r.document),
+          revision: r.revision,
+          ...(r.external_edit ? { externalEdit: true } : {}),
+        }
       : { document: emptyCanvas(), revision: 0 };
+  }
+  async editExternal(access: ExternalAgentAccess, input: ExternalCanvasEdit) {
+    const { principal, projectId } = access;
+    await requireExternalAgentScope(this.c, access, "canvas:write");
+    await this.project(principal, projectId);
+    const { rows } = await this.c.query(
+      "SELECT document,revision,request_key,request_hash FROM project_documents WHERE project_id=$1",
+      [projectId],
+    );
+    const old = rows[0];
+    const hash = createHash("sha256")
+      .update(JSON.stringify({ externalCanvasEdit: input }))
+      .digest("hex");
+    if (old?.request_key === input.requestKey) {
+      if (old.request_hash !== hash)
+        throw new AppError("IDEMPOTENCY_CONFLICT", 409);
+      return {
+        document: canvasDocument.parse(old.document),
+        revision: old.revision,
+      };
+    }
+    const current = old
+      ? { document: canvasDocument.parse(old.document), revision: old.revision }
+      : { document: emptyCanvas(), revision: 0 };
+    if (current.revision !== input.revision)
+      throw new AppError("CANVAS_CONFLICT", 409);
+    const assetIds = input.operations.flatMap((operation) =>
+      operation.action === "add_image" ? [operation.node.assetId] : [],
+    );
+    const placements = await requireProjectAssets(
+      this.c,
+      principal.workspaceId,
+      projectId,
+      assetIds,
+    );
+    const saved = await this.save(
+      principal,
+      projectId,
+      {
+        revision: input.revision,
+        requestKey: input.requestKey,
+        placements,
+        document: applyCanvasOperations(current.document, input.operations),
+      },
+      hash,
+    );
+    await this.c.query(
+      "INSERT INTO external_agent_canvas_undo(project_id,workspace_id,revision,document) VALUES($1,$2,$3,$4)",
+      [projectId, principal.workspaceId, saved.revision, current.document],
+    );
+    await recordExternalAgentActivity(this.c, principal, projectId, {
+      action: "canvas_edited",
+      revision: saved.revision,
+    });
+    return saved;
+  }
+  async undoExternal(p: Principal, project: string, input: ExternalCanvasUndo) {
+    await this.project(p, project);
+    const { rows } = await this.c.query(
+      `SELECT d.document,d.revision,d.request_key,d.request_hash,u.document AS previous
+       FROM project_documents d LEFT JOIN external_agent_canvas_undo u
+         ON u.project_id=d.project_id AND u.revision=d.revision
+       WHERE d.project_id=$1 AND d.workspace_id=$2`,
+      [project, p.workspaceId],
+    );
+    const current = rows[0];
+    const hash = createHash("sha256")
+      .update(JSON.stringify({ externalCanvasUndo: input }))
+      .digest("hex");
+    if (current?.request_key === input.requestKey) {
+      if (current.request_hash !== hash)
+        throw new AppError("IDEMPOTENCY_CONFLICT", 409);
+      return {
+        document: canvasDocument.parse(current.document),
+        revision: current.revision,
+      };
+    }
+    if (current?.revision !== input.revision || !current.previous)
+      throw new AppError("EXTERNAL_UNDO_CONFLICT", 409);
+    // Placement receipts stay consumed, even if the restored canvas removes their nodes.
+    const saved = await this.save(
+      p,
+      project,
+      {
+        ...input,
+        document: canvasDocument.parse(current.previous),
+        placements: [],
+      },
+      hash,
+    );
+    await recordExternalAgentActivity(this.c, p, project, {
+      action: "canvas_undone",
+      revision: saved.revision,
+    });
+    return saved;
   }
   async save(
     p: Principal,
     project: string,
     input: CanvasSave,
+    hash = createHash("sha256").update(JSON.stringify(input)).digest("hex"),
   ): Promise<CanvasSnapshot> {
     await this.project(p, project);
-    const hash = createHash("sha256")
-      .update(JSON.stringify(input))
-      .digest("hex");
     const old = (
       await this.c.query(
         "SELECT * FROM project_documents WHERE project_id=$1",
@@ -275,6 +392,10 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
     await this.c.query(
       "INSERT INTO output_placements(workspace_id,project_id,output_id) SELECT $1,$2,unnest($3::uuid[]) ON CONFLICT DO NOTHING",
       [p.workspaceId, project, placements],
+    );
+    await this.c.query(
+      "DELETE FROM external_agent_canvas_undo WHERE project_id=$1",
+      [project],
     );
     return { document: input.document, revision };
   }
@@ -339,7 +460,7 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
         `SELECT o.id AS output_id,o.asset_id,o.task_id,a.width,a.height,
       ARRAY(SELECT CASE WHEN EXISTS(SELECT 1 FROM canvas_references visible WHERE visible.workspace_id=$1 AND visible.project_id=$2 AND visible.asset_id=s.asset_id) THEN s.asset_id ELSE coalesce(source.derived_from,s.asset_id) END FROM image_output_sources s JOIN image_assets source ON source.workspace_id=o.workspace_id AND source.id=s.asset_id WHERE s.output_id=o.id) AS sources
       FROM image_outputs o JOIN image_tasks t ON t.id=o.task_id JOIN image_assets a ON a.id=o.asset_id
-      WHERE o.workspace_id=$1 AND t.project_id=$2 AND a.state='ready'
+      WHERE o.workspace_id=$1 AND t.project_id=$2 AND t.auto_place AND a.state='ready'
       AND NOT EXISTS(SELECT 1 FROM output_placements r WHERE r.project_id=$2 AND r.output_id=o.id)
       ORDER BY o.created_at,o.id LIMIT 100`,
         [p.workspaceId, project],

@@ -413,6 +413,29 @@ export class EditorStore {
       placements: [],
     };
   }
+  receiveRemote(snapshot: CanvasSnapshot) {
+    if (
+      snapshot.revision <= this.state.revision ||
+      this.state.saving ||
+      this.state.conflict
+    )
+      return;
+    // An unacknowledged local request can still be recovered using its original key.
+    if (this.pending) return;
+    if (this.state.dirty) {
+      this.markReferenceConflict(
+        "画布已有新版本。本地修改已保留，可重新加载或另存副本。",
+      );
+      return;
+    }
+    const { selected, document } = this.state;
+    const ids = new Set(snapshot.document.nodes.map((node) => node.id));
+    this.reset({
+      ...snapshot,
+      document: { ...snapshot.document, viewport: document.viewport },
+    });
+    this.select(selected.filter((id) => ids.has(id)));
+  }
   reset(snapshot: CanvasSnapshot) {
     this.epoch++;
     this.pending = undefined;

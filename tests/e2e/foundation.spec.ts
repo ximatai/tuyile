@@ -1535,7 +1535,7 @@ test("desktop canvas saves geometry, handles conflicts and never replaces remove
   );
   expect(response.ok()).toBe(true);
   await page.locator(".react-flow__controls-zoomin").click();
-  await expect(page.getByText(/画布已在其他页面修改/)).toBeVisible();
+  await expect(page.getByText(/画布已有新版本/)).toBeVisible();
   await page.getByRole("link", { name: "额度", exact: true }).click();
   await expect(page).toHaveURL(projectUrl);
   await expect(page.getByText(/未能保存当前修改/)).toBeVisible();
@@ -1580,7 +1580,7 @@ test("desktop canvas saves geometry, handles conflicts and never replaces remove
       });
     },
   );
-  await page.getByRole("button", { name: "另存副本", exact: true }).click();
+  await page.getByRole("button", { name: "另存当前修改", exact: true }).click();
   await expect(page.getByText("参考图已不可用，请重新选择。")).toBeVisible();
   await page.locator(".react-flow__controls-zoomout").click();
   await page.waitForTimeout(500);
@@ -1604,7 +1604,7 @@ test("desktop canvas saves geometry, handles conflicts and never replaces remove
       await route.fulfill({ response });
     },
   );
-  await page.getByRole("button", { name: "另存副本", exact: true }).click();
+  await page.getByRole("button", { name: "另存当前修改", exact: true }).click();
   await requested;
   await page.locator(".react-flow__controls-zoomout").click();
   await expect(page.locator(".react-flow__viewport")).toHaveCSS(
@@ -1620,7 +1620,7 @@ test("desktop canvas saves geometry, handles conflicts and never replaces remove
     await page.request.get(`/api/projects/${copiedId}/canvas`)
   ).json();
   await page.unroute(`**/api/projects/${projectId}/canvas/copy`);
-  await page.getByRole("button", { name: "另存副本", exact: true }).click();
+  await page.getByRole("button", { name: "另存当前修改", exact: true }).click();
   await expect(page).not.toHaveURL(projectUrl);
   await expect(
     page.getByRole("heading", { name: "画布保存验证（副本）" }),

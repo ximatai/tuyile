@@ -6,6 +6,12 @@ import type { AdmissionSnapshot } from "@tuyile/core";
 import { createHash } from "node:crypto";
 import { AppError, ASSET_RESERVE } from "@tuyile/core";
 import type { Principal, ImageInput } from "@tuyile/contracts";
+import type { ExternalAgentAccess } from "@tuyile/core";
+import {
+  requireExternalAgentScope,
+  requireProjectAssets,
+} from "../external-agent.js";
+import { recordExternalAgentActivity } from "../external-agent-activity.js";
 import { PgCreationContext } from "./context.js";
 export class PgTasksRepository extends PgCreationContext {
   async resolveTextSources(
@@ -33,9 +39,16 @@ export class PgTasksRepository extends PgCreationContext {
       return { nodeId: id, title: node.label, text: node.text };
     });
   }
-  async existingAdmission(p: Principal, input: ImageInput, tool: ToolBinding) {
+  async existingAdmission(
+    p: Principal,
+    input: ImageInput,
+    tool: ToolBinding,
+    external?: ExternalAgentAccess,
+  ) {
     const c = this.c;
 
+    if (external)
+      await requireExternalAgentScope(c, external, "images:generate");
     await this.auth(c, p);
     const project = (
       await c.query(
@@ -56,12 +69,20 @@ export class PgTasksRepository extends PgCreationContext {
     if (old) {
       if (
         old.input_hash !== hash ||
+        old.auto_place !== !external ||
         old.tool_id !== tool.id ||
         old.tool_version !== tool.version
       )
         throw new AppError("IDEMPOTENCY_CONFLICT", 409);
       return this.dto(c, old);
     }
+    if (external)
+      await requireProjectAssets(
+        c,
+        p.workspaceId,
+        input.projectId,
+        input.referenceIds,
+      );
     return null;
   }
   async insert(
@@ -71,11 +92,12 @@ export class PgTasksRepository extends PgCreationContext {
     providerId: string,
     tool: ToolBinding,
     textSources: import("@tuyile/contracts").TextSource[] = [],
+    autoPlace = true,
   ) {
     const c = this.c;
     const task = (
       await c.query<TaskRow>(
-        "INSERT INTO image_tasks(workspace_id,project_id,user_id,execution_version,request_key,input_hash,input,policy,provider_id,day,held,storage_remaining,deadline,tool_id,tool_version) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *",
+        "INSERT INTO image_tasks(workspace_id,project_id,user_id,execution_version,request_key,input_hash,input,policy,provider_id,day,held,storage_remaining,deadline,tool_id,tool_version,auto_place) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *",
         [
           p.workspaceId,
           input.projectId,
@@ -96,9 +118,15 @@ export class PgTasksRepository extends PgCreationContext {
           new Date(this.now().getTime() + 30 * 60000),
           tool.id,
           tool.version,
+          autoPlace,
         ],
       )
     ).rows[0];
+    if (!autoPlace)
+      await recordExternalAgentActivity(c, p, input.projectId, {
+        action: "image_submitted",
+        taskId: task.id,
+      });
     return this.dto(c, task);
   }
   async tasks(p: Principal, projectId?: string, offset = 0) {
@@ -144,14 +172,14 @@ export class PgTasksRepository extends PgCreationContext {
       ),
     );
   }
-  async task(p: Principal, id: string) {
+  async task(p: Principal, id: string, projectId?: string) {
     const c = this.c;
 
     await this.auth(c, p, false, false);
     const r = (
       await c.query<TaskRow>(
-        "SELECT * FROM image_tasks WHERE workspace_id=$1 AND id=$2",
-        [p.workspaceId, id],
+        "SELECT * FROM image_tasks WHERE workspace_id=$1 AND id=$2 AND ($3::uuid IS NULL OR project_id=$3)",
+        [p.workspaceId, id, projectId ?? null],
       )
     ).rows[0];
     if (!r) throw new AppError("NOT_FOUND", 404);

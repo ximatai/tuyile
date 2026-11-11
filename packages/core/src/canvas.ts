@@ -3,6 +3,10 @@ import {
   type ProjectDraftSave,
   type ProjectDraftSnapshot,
   canvasSave,
+  externalCanvasEdit,
+  externalCanvasUndo,
+  type ExternalCanvasUndo,
+  type ExternalCanvasEdit,
   type CanvasSave,
   type CanvasSnapshot,
   type CanvasOutput,
@@ -10,7 +14,17 @@ import {
   type Principal,
   type Project,
 } from "@tuyile/contracts";
+import type { ExternalAgentAccess } from "./external-agent.js";
 export interface CanvasRepository {
+  editExternal(
+    access: ExternalAgentAccess,
+    input: ExternalCanvasEdit,
+  ): Promise<CanvasSnapshot>;
+  undoExternal(
+    p: Principal,
+    projectId: string,
+    input: ExternalCanvasUndo,
+  ): Promise<CanvasSnapshot>;
   loadDraft(p: Principal, projectId: string): Promise<ProjectDraftSnapshot>;
   saveDraft(
     p: Principal,
@@ -53,6 +67,16 @@ export class CanvasService {
   save(p: Principal, project: string, input: CanvasSave) {
     const parsed = canvasSave.parse(input);
     return this.store.write(p.id, (r) => r.save(p, project, parsed));
+  }
+  editExternal(access: ExternalAgentAccess, input: ExternalCanvasEdit) {
+    const parsed = externalCanvasEdit.parse(input);
+    return this.store.write(access.principal.id, (r) =>
+      r.editExternal(access, parsed),
+    );
+  }
+  undoExternal(p: Principal, project: string, input: ExternalCanvasUndo) {
+    const parsed = externalCanvasUndo.parse(input);
+    return this.store.write(p.id, (r) => r.undoExternal(p, project, parsed));
   }
   copy(p: Principal, project: string, input: CanvasSave) {
     const parsed = canvasSave.parse(input);

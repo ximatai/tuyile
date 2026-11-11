@@ -25,6 +25,7 @@ export async function migrate(url: string) {
     const files = (await readdir(new URL("../migrations/", import.meta.url)))
       .filter((n) => /^\d{4}_.*\.sql$/.test(n))
       .sort();
+    let seededImageSettings = false;
     for (const file of files) {
       const version = Number(file.slice(0, 4));
       const sql = await readFile(
@@ -55,6 +56,12 @@ export async function migrate(url: string) {
               ).rows
             : null;
         await c.query(sql);
+        if (version === 2) seededImageSettings = true;
+        // The original migration seeds the singleton; refresh only this run's seed.
+        if (version === 37 && seededImageSettings)
+          await c.query(
+            "UPDATE image_settings SET concurrency=DEFAULT WHERE id=1",
+          );
         if (existingPolicies?.length) {
           await c.query(
             `UPDATE image_policies p SET image_limit=b.image_limit,attempts_limit=b.attempts_limit
