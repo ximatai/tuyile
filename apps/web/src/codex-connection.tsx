@@ -11,7 +11,10 @@ import {
 } from "@tuyile/ui";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { ExternalAgentAccountConnection } from "@tuyile/contracts";
+import type {
+  ExternalAgentAccountConnection,
+  ExternalAgentScope,
+} from "@tuyile/contracts";
 import { ArrowUpRight, CheckCircle2, Copy } from "lucide-react";
 import { ApiError, client } from "./api";
 import { useSessionState } from "./session-state";
@@ -47,6 +50,14 @@ export function useCodexAccountConnection() {
   });
 }
 
+function permissionsFromScopes(scopes: readonly ExternalAgentScope[]) {
+  return {
+    allowCanvasWrite: scopes.includes("canvas:write"),
+    allowGeneration: scopes.includes("images:generate"),
+    allowDownload: scopes.includes("images:download"),
+  };
+}
+
 export function CodexConnection({
   projectId,
   handoffCopied,
@@ -73,9 +84,9 @@ bearer_token_env_var = "${tokenVariable}"`;
     useState<ExternalAgentAccountConnection>();
   const [loadError, setLoadError] = useState("");
   const [loadAttempt, setLoadAttempt] = useState(0);
-  const [allowCanvasWrite, setAllowCanvasWrite] = useState(false);
-  const [allowGeneration, setAllowGeneration] = useState(false);
-  const [allowDownload, setAllowDownload] = useState(false);
+  const [permissions, setPermissions] = useState(() =>
+    permissionsFromScopes([]),
+  );
   const [token, setToken] = useState("");
   const [grantReplaced, setGrantReplaced] = useState(false);
   const [step, setStep] = useState(0);
@@ -95,9 +106,7 @@ bearer_token_env_var = "${tokenVariable}"`;
     )
       .then((result) => {
         setConnection(result);
-        setAllowGeneration(result.savedScopes.includes("images:generate"));
-        setAllowDownload(result.savedScopes.includes("images:download"));
-        setAllowCanvasWrite(result.savedScopes.includes("canvas:write"));
+        setPermissions(permissionsFromScopes(result.savedScopes));
         setStep(result.grant ? 1 : 0);
       })
       .catch((cause: Error) => {
@@ -130,22 +139,14 @@ bearer_token_env_var = "${tokenVariable}"`;
       >(
         accountConnectionPath,
         action === "issue"
-          ? {
-              action,
-              allowCanvasWrite,
-              allowGeneration,
-              allowDownload,
-              expectedGrantId,
-            }
+          ? { action, ...permissions, expectedGrantId }
           : { action, expectedGrantId },
       );
       setConnection(response);
       setToken(issuedToken ?? "");
       setGrantReplaced(false);
       setStep(response.grant ? 1 : 0);
-      setAllowCanvasWrite(response.savedScopes.includes("canvas:write"));
-      setAllowGeneration(response.savedScopes.includes("images:generate"));
-      setAllowDownload(response.savedScopes.includes("images:download"));
+      setPermissions(permissionsFromScopes(response.savedScopes));
       void state.queries.invalidateQueries({
         queryKey: state.key(accountConnectionKey),
       });
@@ -188,19 +189,15 @@ bearer_token_env_var = "${tokenVariable}"`;
       );
       setConnection(latest);
       state.queries.setQueryData(state.key(accountConnectionKey), latest);
+      if (!latest.grant || latest.grant.id !== connection?.grant?.id)
+        setPermissions(permissionsFromScopes(latest.savedScopes));
       if (!latest.grant) {
         setToken("");
-        setAllowCanvasWrite(latest.savedScopes.includes("canvas:write"));
-        setAllowGeneration(latest.savedScopes.includes("images:generate"));
-        setAllowDownload(latest.savedScopes.includes("images:download"));
         setStep(0);
         setGrantReplaced(false);
         setFeedback("令牌已失效，请重新签发。");
       } else if (latest.grant.id !== connection?.grant?.id) {
         setToken("");
-        setAllowCanvasWrite(latest.grant.scopes.includes("canvas:write"));
-        setAllowGeneration(latest.grant.scopes.includes("images:generate"));
-        setAllowDownload(latest.grant.scopes.includes("images:download"));
         setGrantReplaced(true);
         setStep(0);
       } else if (!latest.grant.verifiedAt) {
@@ -347,24 +344,39 @@ bearer_token_env_var = "${tokenVariable}"`;
               读取画布和项目图片
             </Checkbox>
             <Checkbox
-              checked={allowCanvasWrite}
+              checked={permissions.allowCanvasWrite}
               disabled={busy}
-              onChange={(event) => setAllowCanvasWrite(event.target.checked)}
+              onChange={(event) =>
+                setPermissions({
+                  ...permissions,
+                  allowCanvasWrite: event.target.checked,
+                })
+              }
             >
               允许编辑画布
             </Checkbox>
             <Checkbox
-              checked={allowGeneration}
+              checked={permissions.allowGeneration}
               disabled={busy}
-              onChange={(event) => setAllowGeneration(event.target.checked)}
+              onChange={(event) =>
+                setPermissions({
+                  ...permissions,
+                  allowGeneration: event.target.checked,
+                })
+              }
             >
               允许提交生图{" "}
               <span className="external-agent-muted">· 成功图片计入额度</span>
             </Checkbox>
             <Checkbox
-              checked={allowDownload}
+              checked={permissions.allowDownload}
               disabled={busy}
-              onChange={(event) => setAllowDownload(event.target.checked)}
+              onChange={(event) =>
+                setPermissions({
+                  ...permissions,
+                  allowDownload: event.target.checked,
+                })
+              }
             >
               允许生成原图下载链接{" "}
               <span className="external-agent-muted">

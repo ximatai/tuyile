@@ -928,81 +928,85 @@ function CanvasView({
     useState<ReturnType<EditorStore["copyInput"]>>();
   const display = useMemo<Node[]>(
     () =>
-      [...snap.document.nodes].sort(compareCanvasPaintOrder).map((n) => {
-        const parent = snap.document.nodes.find((p) => p.id === n.parentId);
-        return {
-          id: n.id,
-          type: n.kind,
-          parentId: n.parentId,
-          position: { x: n.x - (parent?.x ?? 0), y: n.y - (parent?.y ?? 0) },
-          width: n.width,
-          height: n.height,
-          style: { width: n.width, height: n.height },
-          selected: snap.selected.includes(n.id),
-          data: {
-            label: n.label,
-            text: n.text ?? "",
-            tone: n.tone ?? "plain",
-            startEditing: editingText === n.id,
-            finish: () => store.finishTextEdit(),
-            update: (
-              patch: Pick<CanvasNode, "text" | "tone">,
-              history = true,
-            ) => store.updateText(n.id, patch, history),
-            referenceText: () => {
-              try {
-                onTextReference?.(n.id);
-              } catch (e) {
-                setOperationError((e as Error).message);
-              }
-            },
-            rename: (label: string) => store.renameNode(n.id, label),
-            info: demo.data?.images.some((i) => i.assetId === n.assetId)
-              ? () =>
-                  setExample(
-                    demo.data!.images.find((i) => i.assetId === n.assetId)!,
-                  )
-              : undefined,
-            assetId: n.assetId,
-            reference: onReference,
-            edit: onEdit,
-            derive:
-              n.assetId && onDerive
+      [...snap.document.nodes]
+        // React Flow must see each parent before its children.
+        .sort(compareCanvasPaintOrder)
+        .map((n) => {
+          const parent = snap.document.nodes.find((p) => p.id === n.parentId);
+          return {
+            id: n.id,
+            type: n.kind,
+            parentId: n.parentId,
+            position: { x: n.x - (parent?.x ?? 0), y: n.y - (parent?.y ?? 0) },
+            width: n.width,
+            height: n.height,
+            style: { width: n.width, height: n.height },
+            selected: snap.selected.includes(n.id),
+            data: {
+              label: n.label,
+              text: n.text ?? "",
+              tone: n.tone ?? "plain",
+              startEditing: editingText === n.id,
+              finish: () => store.finishTextEdit(),
+              update: (
+                patch: Pick<CanvasNode, "text" | "tone">,
+                history = true,
+              ) => store.updateText(n.id, patch, history),
+              referenceText: () => {
+                try {
+                  onTextReference?.(n.id);
+                } catch (e) {
+                  setOperationError((e as Error).message);
+                }
+              },
+              rename: (label: string) => store.renameNode(n.id, label),
+              info: demo.data?.images.some((i) => i.assetId === n.assetId)
                 ? () =>
-                    void onDerive(n.assetId!, n.label || "画布选稿").catch(
-                      (cause: Error) => setOperationError(cause.message),
+                    setExample(
+                      demo.data!.images.find((i) => i.assetId === n.assetId)!,
                     )
                 : undefined,
-            svgRevisions:
-              n.assetId && svgSources.has(n.assetId)
-                ? () => {
-                    const source = svgSources.get(n.assetId!);
-                    setSvgRevisions({
-                      sourceId: source ?? n.assetId!,
-                      initialRevisionId: source ? n.assetId : undefined,
-                    });
-                  }
-                : undefined,
-            reuse:
-              onReuse &&
-              tasks.some(
-                (t) =>
-                  !t.pendingReview &&
-                  !["queued", "running"].includes(t.state) &&
-                  t.settings &&
-                  t.outputs.some((a) => a.id === n.assetId),
-              )
-                ? () => {
-                    const task = tasks.find(
-                      (t) =>
-                        t.settings && t.outputs.some((a) => a.id === n.assetId),
-                    );
-                    if (task) onReuse(task);
-                  }
-                : undefined,
-          },
-        };
-      }),
+              assetId: n.assetId,
+              reference: onReference,
+              edit: onEdit,
+              derive:
+                n.assetId && onDerive
+                  ? () =>
+                      void onDerive(n.assetId!, n.label || "画布选稿").catch(
+                        (cause: Error) => setOperationError(cause.message),
+                      )
+                  : undefined,
+              svgRevisions:
+                n.assetId && svgSources.has(n.assetId)
+                  ? () => {
+                      const source = svgSources.get(n.assetId!);
+                      setSvgRevisions({
+                        sourceId: source ?? n.assetId!,
+                        initialRevisionId: source ? n.assetId : undefined,
+                      });
+                    }
+                  : undefined,
+              reuse:
+                onReuse &&
+                tasks.some(
+                  (t) =>
+                    !t.pendingReview &&
+                    !["queued", "running"].includes(t.state) &&
+                    t.settings &&
+                    t.outputs.some((a) => a.id === n.assetId),
+                )
+                  ? () => {
+                      const task = tasks.find(
+                        (t) =>
+                          t.settings &&
+                          t.outputs.some((a) => a.id === n.assetId),
+                      );
+                      if (task) onReuse(task);
+                    }
+                  : undefined,
+            },
+          };
+        }),
     [
       snap.document,
       editingText,
