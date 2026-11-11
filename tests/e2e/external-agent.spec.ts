@@ -2,14 +2,16 @@ import { randomUUID } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { loginAdmin } from "./admin-session";
 
-test("opens the current canvas from the Codex handoff and manages project access", async ({
+test("opens the current canvas from the Codex handoff and reuses account access across projects", async ({
   page,
   context,
   baseURL,
 }) => {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await loginAdmin(page);
-  const { csrfToken } = await (await page.request.get("/api/auth/me")).json();
+  const { csrfToken, user } = await (
+    await page.request.get("/api/auth/me")
+  ).json();
   const created = await page.request.post("/api/projects", {
     headers: { Origin: baseURL!, "X-CSRF-Token": csrfToken },
     data: { name: "Codex 合成验收" },
@@ -20,16 +22,16 @@ test("opens the current canvas from the Codex handoff and manages project access
   await page.getByRole("button", { name: "在 Codex 中继续" }).click();
   const dialog = page.getByRole("dialog", { name: "在 Codex 中继续" });
   await expect(
-    dialog.getByRole("heading", { name: "授权 Codex 访问此项目" }),
+    dialog.getByRole("heading", { name: "授权 Codex 访问你的项目" }),
   ).toBeVisible();
   await dialog.getByRole("button", { name: "签发令牌并继续" }).click();
   await expect(dialog.getByLabel("Codex MCP 配置")).toHaveValue(
     new RegExp(`${baseURL}/mcp`),
   );
   await expect(dialog.getByLabel("Codex MCP 配置")).toHaveValue(
-    new RegExp(`tuyile_${id.replaceAll("-", "")}`),
+    new RegExp(`tuyile_account_${user.id.replaceAll("-", "")}`),
   );
-  const token = await dialog.getByLabel("项目访问令牌").inputValue();
+  const token = await dialog.getByLabel("账号访问令牌").inputValue();
   expect(token).toMatch(/^tuyile_/);
   const call = (token: string, name: string, args: object = {}) =>
     page.request.post("/mcp", {
@@ -43,13 +45,16 @@ test("opens the current canvas from the Codex handoff and manages project access
         method: "tools/call",
         params: {
           name,
-          arguments: { projectUrl: `${baseURL}/projects/${id}`, ...args },
+          arguments:
+            name === "check_connection"
+              ? {}
+              : { projectUrl: `${baseURL}/projects/${id}`, ...args },
         },
       },
     });
   await dialog.getByRole("button", { name: "继续验证" }).click();
   await dialog.getByRole("button", { name: "检查连接" }).click();
-  await expect(dialog.getByText(/还未收到读取请求/)).toBeVisible();
+  await expect(dialog.getByText(/还未收到验证请求/)).toBeVisible();
   expect(
     (await (await call(token, "read_canvas")).json()).result.structuredContent,
   ).toMatchObject({
@@ -58,7 +63,7 @@ test("opens the current canvas from the Codex handoff and manages project access
   });
   await dialog.getByRole("button", { name: "检查连接" }).click();
   await expect(
-    dialog.getByRole("heading", { name: "此项目已验证连接" }),
+    dialog.getByRole("heading", { name: "Codex 已连接" }),
   ).toBeVisible();
   await dialog.getByRole("button", { name: "复制给 Codex" }).click();
   const prompt = await page.evaluate(() => navigator.clipboard.readText());
@@ -71,18 +76,22 @@ test("opens the current canvas from the Codex handoff and manages project access
     dialog.getByText("已签发 · 待验证", { exact: true }),
   ).toBeVisible();
   expect((await call(token, "read_canvas")).status()).toBe(401);
-  const configuredToken = await dialog.getByLabel("项目访问令牌").inputValue();
+  const configuredToken = await dialog.getByLabel("账号访问令牌").inputValue();
   expect((await call(configuredToken, "read_canvas")).ok()).toBe(true);
   await dialog.getByRole("button", { name: "继续验证" }).click();
 
-  // Another tab can replace and verify the project's grant before this tab checks.
-  const replacement = await page.request.post(
-    `/api/projects/${id}/external-agent`,
-    {
-      headers: { Origin: baseURL!, "X-CSRF-Token": csrfToken },
-      data: { action: "issue", allowCanvasWrite: true },
+  // Another tab can replace and verify the account grant before this tab checks.
+  const current = await (
+    await page.request.get("/api/account/external-agent")
+  ).json();
+  const replacement = await page.request.post("/api/account/external-agent", {
+    headers: { Origin: baseURL!, "X-CSRF-Token": csrfToken },
+    data: {
+      action: "issue",
+      allowCanvasWrite: true,
+      expectedGrantId: current.grant.id,
     },
-  );
+  });
   expect(replacement.ok()).toBe(true);
   const { token: replacementToken } = await replacement.json();
   expect((await call(configuredToken, "read_canvas")).status()).toBe(401);
@@ -95,23 +104,80 @@ test("opens the current canvas from the Codex handoff and manages project access
     dialog.getByRole("heading", { name: "需要重新配置 Codex" }),
   ).toBeVisible();
   await expect(
-    dialog.getByRole("heading", { name: "此项目已验证连接" }),
+    dialog.getByRole("heading", { name: "Codex 已连接" }),
   ).toHaveCount(0);
-  await expect(dialog.getByLabel("项目访问令牌")).toHaveCount(0);
+  await expect(dialog.getByLabel("账号访问令牌")).toHaveCount(0);
   await expect(
     dialog.getByRole("checkbox", { name: "允许编辑画布" }),
   ).toBeChecked();
 
   await dialog.getByRole("button", { name: "撤销令牌" }).click();
+  await page.getByRole("button", { name: "确认", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "请确认" })).not.toBeVisible();
   await expect(
-    dialog.getByRole("heading", { name: "授权 Codex 访问此项目" }),
+    dialog.getByRole("heading", { name: "授权 Codex 访问你的项目" }),
   ).toBeVisible();
   expect((await call(replacementToken, "read_canvas")).status()).toBe(401);
-  await dialog.getByRole("checkbox", { name: "允许编辑画布" }).check();
-  await dialog.getByRole("button", { name: "签发令牌并继续" }).click();
-  const writableToken = await dialog.getByLabel("项目访问令牌").inputValue();
   await page.keyboard.press("Escape");
   await expect(dialog).not.toBeVisible();
+  await page.getByRole("button", { name: "账户菜单" }).click();
+  await page.getByRole("menuitem", { name: "连接 Codex" }).click();
+  const accountDialog = page.getByRole("dialog", { name: "连接 Codex" });
+  await expect(
+    accountDialog.getByRole("checkbox", { name: "允许编辑画布" }),
+  ).toBeChecked();
+  await accountDialog.getByRole("button", { name: "签发令牌并继续" }).click();
+  const writableToken = await accountDialog
+    .getByLabel("账号访问令牌")
+    .inputValue();
+  await accountDialog.getByRole("button", { name: "继续验证" }).click();
+  await expect(accountDialog.getByLabel("给 Codex 的验证提示")).toHaveValue(
+    /check_connection/,
+  );
+  expect(
+    (await (await call(writableToken, "check_connection")).json()).result
+      .structuredContent,
+  ).toEqual({ connected: true });
+  await accountDialog.getByRole("button", { name: "检查连接" }).click();
+  await expect(
+    accountDialog.getByRole("heading", { name: "Codex 已连接" }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(accountDialog).not.toBeVisible();
+  await expect(page.getByRole("button", { name: "账户菜单" })).toBeFocused();
+
+  const second = await page.request.post("/api/projects", {
+    headers: { Origin: baseURL!, "X-CSRF-Token": csrfToken },
+    data: { name: "复用 Codex 账号连接" },
+  });
+  expect(second.ok()).toBe(true);
+  const { id: secondId } = await second.json();
+  const connectionReady = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/account/external-agent") && response.ok(),
+  );
+  await page.goto(`/projects/${secondId}`);
+  await connectionReady;
+  await page.getByRole("button", { name: "在 Codex 中继续" }).click();
+  await expect(
+    dialog.getByRole("heading", { name: "Codex 已连接" }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByText("已复制项目提示", { exact: true }),
+  ).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toContain(
+    `${baseURL}/projects/${secondId}`,
+  );
+  expect(
+    (
+      await (
+        await call(writableToken, "read_canvas", {
+          projectUrl: `${baseURL}/projects/${secondId}`,
+        })
+      ).json()
+    ).result.structuredContent.projectId,
+  ).toBe(secondId);
+  await page.goto(`/projects/${id}`);
 
   const id1 = randomUUID();
   const note = {
@@ -171,6 +237,17 @@ test("generates three project images through MCP and places them once on an open
   await loginAdmin(page);
   const { csrfToken } = await (await page.request.get("/api/auth/me")).json();
   const headers = { Origin: baseURL!, "X-CSRF-Token": csrfToken };
+  const current = await (
+    await page.request.get("/api/account/external-agent")
+  ).json();
+  expect(
+    (
+      await page.request.post("/api/account/external-agent", {
+        headers,
+        data: { action: "revoke", expectedGrantId: current.grant?.id ?? null },
+      })
+    ).ok(),
+  ).toBe(true);
   const project = await page.request.post("/api/projects", {
     headers,
     data: { name: "外部 Agent 生图验收" },
@@ -224,7 +301,7 @@ test("generates three project images through MCP and places them once on an open
     .getByRole("checkbox", { name: "允许提交生图", exact: false })
     .check();
   await dialog.getByRole("button", { name: "签发令牌并继续" }).click();
-  const token = await dialog.getByLabel("项目访问令牌").inputValue();
+  const token = await dialog.getByLabel("账号访问令牌").inputValue();
   await page.keyboard.press("Escape");
   await expect(dialog).not.toBeVisible();
   async function call(name: string, args: object = {}) {

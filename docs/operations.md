@@ -4,7 +4,7 @@
 
 ## 独立运行
 
-依赖和隔离地址见 [本地开发](development.md)。当前程序要求 schema 1—37（以[迁移目录](../migrations)及启动校验为准）；迁移由 migrator 显式执行，API/Worker 只检查兼容性，运行身份不能修改 schema。普通停止用 `docker compose ... stop api worker`，保留数据库与图片卷；不要用删除卷解决启动问题。
+依赖和隔离地址见 [本地开发](development.md)。当前程序要求 schema 1—38（以[迁移目录](../migrations)及启动校验为准）；迁移由 migrator 显式执行，API/Worker 只检查兼容性，运行身份不能修改 schema。普通停止用 `docker compose ... stop api worker`，保留数据库与图片卷；不要用删除卷解决启动问题。
 
 生图并发默认全站 10、单账号 2。迁移 0037 只为新实例和新建的个人策略采用新默认值。已有实例可在管理页调整全站和个人上限，个人上限在任务提交时保存。
 
@@ -26,7 +26,7 @@ PUBLIC_APP_ORIGIN=https://tuyile.example docker compose --env-file .env.docker -
 
 配置依据为 [Nginx proxy 模块](https://nginx.org/en/docs/http/ngx_http_proxy_module.html)与 [SSL 模块](https://nginx.org/en/docs/http/ngx_http_ssl_module.html)。本地演练用短期自签证书，仅在隔离浏览器上下文接受该证书，不修改系统信任，也不关闭应用 TLS 验证。
 
-外部 Agent 连接同一 HTTPS 域名的 `/mcp` 路由，由现有代理转发到 API。内网实例要求 Agent 所在设备能够访问该地址。项目连接和令牌管理位于画布的「在 Codex 中继续」。
+外部 Agent 连接同一 HTTPS 域名的 `/mcp` 路由，由现有代理转发到 API。内网实例要求 Agent 所在设备能够访问该地址。账号级连接可从右上角账户菜单的「连接 Codex」或画布的「在 Codex 中继续」配置。0038 保留已签发的项目令牌及其原有范围，用户可在原项目撤销旧令牌。
 
 ## 成套备份
 

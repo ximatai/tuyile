@@ -25,6 +25,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   KeyRound,
+  Bot,
   ChevronDown,
 } from "lucide-react";
 import type { SessionView } from "@tuyile/contracts";
@@ -67,6 +68,9 @@ const AdminPage = lazy(() =>
 );
 const PasswordDialog = lazy(() =>
   import("./accounts").then((m) => ({ default: m.PasswordDialog })),
+);
+const CodexAccountDialog = lazy(() =>
+  import("./codex-connection").then((m) => ({ default: m.CodexAccountDialog })),
 );
 const RequiredPasswordPage = lazy(() =>
   import("./auth").then((m) => ({ default: m.RequiredPasswordPage })),
@@ -145,6 +149,9 @@ function Shell() {
     path = useLocation().pathname;
   const accountButton = useRef<React.ComponentRef<typeof Button>>(null);
   const [passwordOpen, setPasswordOpen] = useState(false);
+  const [codexDialog, setCodexDialog] = useState<"open" | "closing" | null>(
+    null,
+  );
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [collapsed, setCollapsed] = useState(() => {
@@ -323,6 +330,11 @@ function Shell() {
               menu={{
                 items: [
                   {
+                    key: "codex",
+                    icon: <Bot size={16} />,
+                    label: "连接 Codex",
+                  },
+                  {
                     key: "password",
                     icon: <KeyRound size={16} />,
                     label: "修改密码",
@@ -336,6 +348,7 @@ function Shell() {
                   },
                 ],
                 onClick: ({ key }) => {
+                  if (key === "codex") setCodexDialog("open");
                   if (key === "password") setPasswordOpen(true);
                   if (key === "logout") void logout();
                 },
@@ -437,6 +450,16 @@ function Shell() {
           </Suspense>
         </main>
         <Suspense fallback={null}>
+          {codexDialog && (
+            <CodexAccountDialog
+              open={codexDialog === "open"}
+              onClose={() => setCodexDialog("closing")}
+              afterClose={() => {
+                setCodexDialog(null);
+                accountButton.current?.focus();
+              }}
+            />
+          )}
           <PasswordDialog
             csrfToken={session.csrfToken}
             open={passwordOpen}

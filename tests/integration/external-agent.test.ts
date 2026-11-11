@@ -1,11 +1,15 @@
 import { expect, it } from "vitest";
-import { randomUUID } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { CanvasService } from "@tuyile/core";
-import { PgCanvasStore, PgExternalAgentTokens } from "@tuyile/infrastructure";
+import {
+  PgCanvasStore,
+  PgExternalAgentTokens,
+  security,
+} from "@tuyile/infrastructure";
 import { emptyCanvas } from "@tuyile/contracts";
 import { createApp } from "../../apps/api/src/app.js";
 import { imageFixture } from "../creation-fixture.js";
-import { testPassword } from "../test-database.js";
+import { finishTemporaryPassword, testPassword } from "../test-database.js";
 
 const origin = "https://tuyile.example";
 it("limits remote MCP to the authorized project and invalidates rotated, revoked and password-bound tokens", async () => {
@@ -45,17 +49,25 @@ it("limits remote MCP to the authorized project and invalidates rotated, revoked
         body: JSON.stringify({ action }),
       });
     async function issue(allowCanvasWrite = false, allowGeneration = false) {
-      const response = await app.request(path, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          action: "issue",
-          allowCanvasWrite,
-          allowGeneration,
-        }),
-      });
-      expect(response.status).toBe(201);
-      return (await response.json()).token as string;
+      // Simulate a project grant already present when the instance upgraded.
+      const token = `tuyile_${randomBytes(32).toString("base64url")}`;
+      const scopes = ["canvas:read"];
+      if (allowCanvasWrite) scopes.push("canvas:write");
+      if (allowGeneration) scopes.push("images:generate");
+      await f.pool.query(
+        `INSERT INTO external_agent_tokens(project_id,workspace_id,user_id,execution_version,token_hash,expires_at,scopes)
+         VALUES ($1,$2,$3,$4,$5,now()+interval '7 days',$6)
+         ON CONFLICT(project_id) DO UPDATE SET token_hash=excluded.token_hash,scopes=excluded.scopes,verified_at=NULL`,
+        [
+          f.project.id,
+          f.principal.workspaceId,
+          f.principal.id,
+          f.principal.executionVersion,
+          security.digest(token),
+          scopes,
+        ],
+      );
+      return token;
     }
     function rpc(
       token: string,
@@ -98,6 +110,7 @@ it("limits remote MCP to the authorized project and invalidates rotated, revoked
     expect(
       (await manage("issue", { ...headers, "X-CSRF-Token": "wrong" })).status,
     ).toBe(403);
+    expect((await manage("issue")).status).toBe(409);
     const first = await issue();
     const status = await app.request(path, { headers });
     expect(await status.json()).toMatchObject({
@@ -331,12 +344,123 @@ it("limits remote MCP to the authorized project and invalidates rotated, revoked
     expect((await undo(4)).status).toBe(409);
     expect(await canvas.load(f.principal, f.project.id)).toEqual(later);
     const third = await issue();
+    const accountPath = "/api/account/external-agent";
+    const accountStatus = async () =>
+      (await app.request(accountPath, { headers })).json();
+    const accountChange = async (
+      body: object,
+      expectedGrantId?: string | null,
+    ) => {
+      if (expectedGrantId === undefined)
+        expectedGrantId = (await accountStatus()).grant?.id ?? null;
+      return app.request(accountPath, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ ...body, expectedGrantId }),
+      });
+    };
+    expect(await accountStatus()).toEqual({ grant: null, savedScopes: [] });
+    expect((await app.request(accountPath)).status).toBe(401);
+    const issued = await accountChange({
+      action: "issue",
+      allowCanvasWrite: true,
+      allowGeneration: true,
+    });
+    expect(issued.status).toBe(201);
+    const { token: accountToken, grant: issuedGrant } = await issued.json();
+    expect(await accountStatus()).toMatchObject({
+      grant: { verifiedAt: null },
+    });
+    const check = await rpc(accountToken, "tools/call", {
+      name: "check_connection",
+      arguments: {},
+    });
+    expect((await check.json()).result.structuredContent).toEqual({
+      connected: true,
+    });
+    expect(await accountStatus()).toMatchObject({
+      grant: { verifiedAt: expect.any(String) },
+    });
+    expect(JSON.stringify(await accountStatus())).not.toContain(accountToken);
+
+    const otherUrl = `${origin}/projects/${other.id}`;
+    for (const [url, projectId] of [
+      [projectUrl, f.project.id],
+      [otherUrl, other.id],
+    ])
+      expect(
+        (await (await read(accountToken, url)).json()).result.structuredContent
+          .projectId,
+      ).toBe(projectId);
+    expect((await (await read(third, otherUrl)).json()).result.isError).toBe(
+      true,
+    );
+    const member = await f.service.createUser(f.principal, "mcp_other_account");
+    await finishTemporaryPassword(f.service, member);
+    const memberSession = await f.service.login(
+      member.user.username,
+      testPassword,
+    );
+    const { user: memberPrincipal } = await f.service.authenticate(
+      memberSession.token,
+    );
+    const foreign = await f.service.createProject(
+      memberPrincipal,
+      "Private project",
+    );
+    const foreignUrl = `${origin}/projects/${foreign.id}`;
+    expect(
+      (await (await read(accountToken, foreignUrl)).json()).result,
+    ).toMatchObject({
+      isError: true,
+      content: [{ text: "NOT_FOUND" }],
+    });
+    const accountEdit = batch(0, [
+      { action: "add_text", node: { ...node, kind: undefined } },
+    ]);
+    accountEdit.arguments.projectUrl = otherUrl;
+    expect(
+      (await (await rpc(accountToken, "tools/call", accountEdit)).json()).result
+        .structuredContent,
+    ).toMatchObject({ projectId: other.id, revision: 1 });
+    expect(
+      (
+        await submit(accountToken, {
+          ...image,
+          projectUrl: otherUrl,
+          requestKey: randomUUID(),
+        })
+      ).structuredContent,
+    ).toMatchObject({ projectId: other.id, state: "queued" });
+
+    const { token: replacement } = await (
+      await accountChange({ action: "issue", allowCanvasWrite: true })
+    ).json();
+    expect((await read(accountToken)).status).toBe(401);
+    expect((await read(third)).status).toBe(200);
+    expect(
+      (await accountChange({ action: "revoke" }, issuedGrant.id)).status,
+    ).toBe(409);
+    expect(
+      (await accountChange({ action: "issue" }, issuedGrant.id)).status,
+    ).toBe(409);
+    expect((await read(replacement)).status).toBe(200);
+    expect(await (await accountChange({ action: "revoke" })).json()).toEqual({
+      grant: null,
+      savedScopes: ["canvas:read", "canvas:write"],
+    });
+    expect((await read(replacement)).status).toBe(401);
+    expect((await read(third)).status).toBe(200);
+    const { token: passwordBoundAccount } = await (
+      await accountChange({ action: "issue" })
+    ).json();
     await f.service.changePassword(
       f.principal,
       testPassword,
       `${testPassword}-new`,
     );
     expect((await read(third)).status).toBe(401);
+    expect((await read(passwordBoundAccount)).status).toBe(401);
   } finally {
     await f.cleanup();
   }

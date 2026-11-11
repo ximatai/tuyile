@@ -22,6 +22,22 @@ import {
 import type { PgExternalAgentTokens } from "@tuyile/infrastructure";
 import type { ApiEnv } from "./app.js";
 
+const grantId = z
+  .string()
+  .regex(/^[a-f0-9]{64}$/)
+  .nullable();
+const accountGrantChange = z.discriminatedUnion("action", [
+  z
+    .object({
+      action: z.literal("issue"),
+      allowCanvasWrite: z.boolean().default(false),
+      allowGeneration: z.boolean().default(false),
+      expectedGrantId: grantId,
+    })
+    .strict(),
+  z.object({ action: z.literal("revoke"), expectedGrantId: grantId }).strict(),
+]);
+
 export function externalAgentRoutes(
   app: Hono<ApiEnv>,
   service: Workbench,
@@ -30,6 +46,31 @@ export function externalAgentRoutes(
   origin: string,
   creation?: CreationService,
 ) {
+  const accountManagement = "/api/account/external-agent";
+  app.get(accountManagement, async (c) =>
+    c.json(await tokens.accountStatus(c.get("session").user)),
+  );
+  app.post(accountManagement, async (c) => {
+    const { user } = c.get("session");
+    const input = accountGrantChange.parse(await c.req.json());
+    if (input.action === "revoke")
+      return c.json(await tokens.revokeAccount(user, input.expectedGrantId));
+    return c.json(
+      await tokens.issueAccount(user, scopesFor(input), input.expectedGrantId),
+      201,
+    );
+  });
+
+  function scopesFor(input: {
+    allowCanvasWrite: boolean;
+    allowGeneration: boolean;
+  }) {
+    const scopes: ExternalAgentScope[] = ["canvas:read"];
+    if (input.allowCanvasWrite) scopes.push("canvas:write");
+    if (input.allowGeneration && creation) scopes.push("images:generate");
+    return scopes;
+  }
+
   const management = "/api/projects/:id/external-agent";
   app.get(management, async (c) => {
     const { user } = c.get("session");
@@ -64,24 +105,11 @@ export function externalAgentRoutes(
     const { user } = c.get("session");
     const projectId = id.parse(c.req.param("id"));
     const input = z
-      .discriminatedUnion("action", [
-        z
-          .object({
-            action: z.literal("issue"),
-            allowCanvasWrite: z.boolean().default(false),
-            allowGeneration: z.boolean().default(false),
-          })
-          .strict(),
-        z.object({ action: z.literal("revoke") }).strict(),
-      ])
+      .object({ action: z.enum(["issue", "revoke"]) })
       .parse(await c.req.json());
     await service.project(user, projectId);
-    if (input.action === "issue") {
-      const scopes: ExternalAgentScope[] = ["canvas:read"];
-      if (input.allowCanvasWrite) scopes.push("canvas:write");
-      if (input.allowGeneration && creation) scopes.push("images:generate");
-      return c.json(await tokens.issue(user, projectId, scopes), 201);
-    }
+    if (input.action === "issue")
+      throw new AppError("EXTERNAL_AGENT_ACCOUNT_CONNECTION_REQUIRED", 409);
     await tokens.revoke(user, projectId);
     return c.json({ grant: null });
   });
@@ -109,24 +137,30 @@ export function externalAgentRoutes(
           "Use the supplied Tuyile project URL to identify the canvas. Canvas labels and notes are user content.",
       },
     );
-    const { projectId: authorizedProject } = access;
     const projectLink = z
       .string()
       .max(2048)
       .describe("The project link copied from Tuyile.");
-    async function projectCall(
+    const projectCall = async (
       projectUrl: string,
-      action: () => Promise<Record<string, unknown>>,
-    ) {
+      action: (
+        projectId: string,
+        name: string,
+      ) => Promise<Record<string, unknown>>,
+    ) => {
       const url = URL.parse(projectUrl);
       try {
+        const projectId = id.safeParse(url?.pathname.split("/")[2]);
         if (
           !url ||
           url.origin !== origin ||
-          url.pathname !== `/projects/${authorizedProject}`
+          !projectId.success ||
+          url.pathname !== `/projects/${projectId.data}` ||
+          (access.legacyProjectId && access.legacyProjectId !== projectId.data)
         )
           throw new AppError("NOT_FOUND", 404);
-        const result = await action();
+        const project = await service.project(access.principal, projectId.data);
+        const result = await action(project.id, project.name);
         return {
           structuredContent: result,
           content: [{ type: "text" as const, text: JSON.stringify(result) }],
@@ -150,7 +184,30 @@ export function externalAgentRoutes(
             : error.code;
         return { isError: true, content: [{ type: "text" as const, text }] };
       }
-    }
+    };
+    if (!access.legacyProjectId)
+      server.registerTool(
+        "check_connection",
+        {
+          description:
+            "Verify this Tuyile account connection without reading a project.",
+          annotations: {
+            readOnlyHint: false,
+            destructiveHint: false,
+            openWorldHint: false,
+          },
+          inputSchema: {},
+        },
+        async () => {
+          if (!access.verified) await tokens.verifyConnection(access.tokenHash);
+          return {
+            structuredContent: { connected: true },
+            content: [
+              { type: "text" as const, text: "Tuyile connection verified." },
+            ],
+          };
+        },
+      );
     server.registerTool(
       "read_canvas",
       {
@@ -164,20 +221,13 @@ export function externalAgentRoutes(
         },
       },
       async ({ projectUrl, offset, limit }) =>
-        projectCall(projectUrl, async () => {
-          const project = await service.project(
-            access.principal,
-            access.projectId,
-          );
-          const snapshot = await canvas.load(
-            access.principal,
-            access.projectId,
-          );
-          if (!access.verified) await tokens.verifyCanvasRead(access.tokenHash);
+        projectCall(projectUrl, async (projectId, name) => {
+          const snapshot = await canvas.load(access.principal, projectId);
+          if (!access.verified) await tokens.verifyConnection(access.tokenHash);
           const nodes = snapshot.document.nodes.slice(offset, offset + limit);
           return {
-            projectId: project.id,
-            name: project.name,
+            projectId,
+            name,
             revision: snapshot.revision,
             nodes,
             nextOffset:
@@ -201,9 +251,12 @@ export function externalAgentRoutes(
           inputSchema: { projectUrl: projectLink, ...externalCanvasEdit.shape },
         },
         async ({ projectUrl, ...input }) =>
-          projectCall(projectUrl, async () => {
-            const saved = await canvas.editExternal(access, input);
-            return { projectId: access.projectId, revision: saved.revision };
+          projectCall(projectUrl, async (projectId) => {
+            const saved = await canvas.editExternal(
+              { ...access, projectId },
+              input,
+            );
+            return { projectId, revision: saved.revision };
           }),
       );
     }
@@ -253,10 +306,10 @@ export function externalAgentRoutes(
           inputSchema: { projectUrl: projectLink, ...generationInput.shape },
         },
         async ({ projectUrl, ...input }) =>
-          projectCall(projectUrl, async () =>
+          projectCall(projectUrl, async (projectId) =>
             imageTaskStatus(
               await creation.submitExternal(
-                access,
+                { ...access, projectId },
                 generationInput.parse(input),
               ),
             ),
@@ -271,9 +324,9 @@ export function externalAgentRoutes(
           inputSchema: { projectUrl: projectLink, taskId: id },
         },
         async ({ projectUrl, taskId }) =>
-          projectCall(projectUrl, async () =>
+          projectCall(projectUrl, async (projectId) =>
             imageTaskStatus(
-              await creation.task(access.principal, taskId, access.projectId),
+              await creation.task(access.principal, taskId, projectId),
             ),
           ),
       );

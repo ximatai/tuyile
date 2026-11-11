@@ -112,6 +112,10 @@ const messages: Record<string, string> = {
   NOT_FOUND: "内容不存在或你无权访问。",
   RATE_LIMITED: "操作过于频繁，请在 15 分钟后重试。",
   INVALID_CSRF: "会话已改变，请刷新后重试。",
+  EXTERNAL_AGENT_GRANT_CHANGED:
+    "账号连接已在其他页面变更，请核对当前令牌后再操作。",
+  EXTERNAL_AGENT_ACCOUNT_CONNECTION_REQUIRED:
+    "请刷新页面，使用账号级 Codex 连接。",
   INVALID_ORIGIN: "访问来源不匹配，请使用配置的应用地址。",
 };
 export class ApiError extends Error {

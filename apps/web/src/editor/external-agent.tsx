@@ -1,17 +1,13 @@
 import {
   Button,
-  Checkbox,
-  Collapse,
-  Input,
   Modal,
   Notice,
   Table,
-  Steps,
   Tabs,
   Tag,
   useConfirm,
 } from "@tuyile/ui";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type {
   CanvasSnapshot,
@@ -19,12 +15,12 @@ import type {
   ExternalAgentConnection,
   ImageTask,
 } from "@tuyile/contracts";
-import { ArrowUpRight, CheckCircle2, Copy } from "lucide-react";
 import { TaskDetails } from "../task-details";
 import { taskStates } from "../task-presentation";
 import { client } from "../api";
 import type { EditorStore } from "./store";
 import { useSessionState } from "../session-state";
+import { CodexConnection } from "../codex-connection";
 
 const activityLabels: Record<ExternalAgentActivity["action"], string> = {
   grant_issued: "签发令牌",
@@ -42,10 +38,12 @@ const scopeLabels = {
 export function ExternalAgentDialog({
   projectId,
   editor,
+  handoffCopied,
   onClose,
 }: {
   projectId: string;
   editor: EditorStore;
+  handoffCopied: boolean;
   onClose: () => void;
 }) {
   const state = useSessionState();
@@ -54,23 +52,8 @@ export function ExternalAgentDialog({
   const undoKey = useRef<{ revision: number; requestKey: string }>(undefined);
   const { session } = state;
   const path = `/projects/${projectId}/external-agent`;
-  const projectUrl = new URL(`/projects/${projectId}`, location.origin).href;
-  const mcpUrl = new URL("/mcp", location.origin).href;
-  const connectionName = `tuyile_${projectId.replaceAll("-", "")}`;
-  const tokenVariable = `${connectionName.toUpperCase()}_TOKEN`;
-  const prompt = `请用图一乐 MCP（${connectionName}）读取这个项目的最新画布：${projectUrl}。接下来我会告诉你如何处理。`;
-  const config = `[mcp_servers.${connectionName}]
-url = "${mcpUrl}"
-bearer_token_env_var = "${tokenVariable}"`;
-  const [connection, setConnection] = useState<ExternalAgentConnection>();
-  const [loadError, setLoadError] = useState("");
-  const [loadAttempt, setLoadAttempt] = useState(0);
-  const [allowCanvasWrite, setAllowCanvasWrite] = useState(false);
-  const [allowGeneration, setAllowGeneration] = useState(false);
-  const [token, setToken] = useState("");
-  const [grantReplaced, setGrantReplaced] = useState(false);
-  const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [connectionBusy, setConnectionBusy] = useState(false);
   const [error, setError] = useState("");
   const [feedback, setFeedback] = useState("");
   const csrf = session.csrfToken;
@@ -96,50 +79,20 @@ bearer_token_env_var = "${tokenVariable}"`;
         undoRevision: number | null;
       }>(`${path}/activity?offset=${offset}`, undefined, signal),
   });
-  useEffect(() => {
-    const controller = new AbortController();
-    void client(csrf)<ExternalAgentConnection>(
-      path,
-      undefined,
-      controller.signal,
-    )
-      .then((result) => {
-        setConnection(result);
-        setAllowGeneration(
-          result.grant?.scopes.includes("images:generate") ?? false,
-        );
-        setAllowCanvasWrite(
-          result.grant?.scopes.includes("canvas:write") ?? false,
-        );
-        setStep(result.grant ? 1 : 0);
-      })
-      .catch((cause: Error) => {
-        if (!controller.signal.aborted) setLoadError(cause.message);
-      });
-    return () => controller.abort();
-  }, [csrf, path, loadAttempt]);
+  const legacyConnection = useQuery({
+    queryKey: state.key("external-agent-legacy", projectId),
+    queryFn: ({ signal }) =>
+      client(csrf)<ExternalAgentConnection>(path, undefined, signal),
+  });
 
-  async function change(action: "issue" | "revoke") {
+  async function revokeLegacy() {
+    if (!(await confirm("撤销旧项目令牌。账号级 Codex 连接可以继续使用。")))
+      return;
     setBusy(true);
     setError("");
-    setFeedback("");
     try {
-      const response = await client(csrf)<
-        ExternalAgentConnection & { token?: string }
-      >(
-        path,
-        action === "issue"
-          ? { action, allowCanvasWrite, allowGeneration }
-          : { action },
-      );
-      setConnection(response);
-      setToken(response.token ?? "");
-      setGrantReplaced(false);
-      setStep(response.grant ? 1 : 0);
-      if (!response.grant) {
-        setAllowCanvasWrite(false);
-        setAllowGeneration(false);
-      }
+      await client(csrf)(path, { action: "revoke" });
+      await legacyConnection.refetch();
       await state.queries.invalidateQueries({ queryKey: activityKey });
     } catch (cause) {
       setError((cause as Error).message);
@@ -147,7 +100,6 @@ bearer_token_env_var = "${tokenVariable}"`;
       setBusy(false);
     }
   }
-
   const undoRevision = activity.data?.undoRevision;
   function canUndo(revision: number) {
     const current = editor.get();
@@ -192,305 +144,6 @@ bearer_token_env_var = "${tokenVariable}"`;
     }
   }
 
-  async function copy(value: string, label: string) {
-    try {
-      await navigator.clipboard.writeText(value);
-      setFeedback(label);
-    } catch {
-      setFeedback("无法写入剪贴板，请从输入框手动复制。");
-    }
-  }
-
-  async function checkConnection() {
-    setBusy(true);
-    setError("");
-    setFeedback("");
-    try {
-      const latest = await client(csrf)<ExternalAgentConnection>(path);
-      setConnection(latest);
-      if (!latest.grant) {
-        setToken("");
-        setAllowCanvasWrite(false);
-        setAllowGeneration(false);
-        setStep(0);
-        setGrantReplaced(false);
-        setFeedback("令牌已失效，请重新签发。");
-      } else if (latest.grant.id !== connection?.grant?.id) {
-        setToken("");
-        setAllowCanvasWrite(latest.grant.scopes.includes("canvas:write"));
-        setAllowGeneration(latest.grant.scopes.includes("images:generate"));
-        setGrantReplaced(true);
-        setStep(0);
-      } else if (!latest.grant.verifiedAt) {
-        setFeedback("还未收到读取请求。请先在 Codex 发送验证提示。");
-      } else {
-        setToken("");
-      }
-    } catch (cause) {
-      setError((cause as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const grant = connection?.grant;
-  const verified = !!grant?.verifiedAt && !grantReplaced;
-  const configBlock = (
-    <>
-      <Input.TextArea
-        className="external-agent-code"
-        aria-label="Codex MCP 配置"
-        value={config}
-        readOnly
-        rows={3}
-      />
-      <Button
-        type="button"
-        onClick={() => void copy(config, "已复制 MCP 配置")}
-      >
-        <Copy size={14} />
-        复制配置
-      </Button>
-    </>
-  );
-  const connectionPanel = !connection ? (
-    loadError ? (
-      <div className="external-agent-stack">
-        <Notice error>{loadError}</Notice>
-        <Button
-          onClick={() => {
-            setLoadError("");
-            setLoadAttempt(loadAttempt + 1);
-          }}
-        >
-          重试读取连接状态
-        </Button>
-      </div>
-    ) : (
-      <div className="external-agent-muted" role="status">
-        正在读取连接状态…
-      </div>
-    )
-  ) : verified && step !== 0 ? (
-    <>
-      <div className="external-agent-card external-agent-ready">
-        <div className="external-agent-ready-icon">
-          <CheckCircle2 size={21} />
-        </div>
-        <div>
-          <h3>此项目已验证连接</h3>
-          <p>复制项目提示，粘贴到 Codex 后告诉它你想做什么。</p>
-        </div>
-      </div>
-      <Input.TextArea
-        aria-label="给 Codex 的项目提示"
-        value={prompt}
-        readOnly
-        rows={3}
-      />
-      <div className="external-agent-actions">
-        <Button
-          className="primary"
-          onClick={() => void copy(prompt, "已复制项目提示")}
-        >
-          <Copy size={15} />
-          复制给 Codex
-        </Button>
-      </div>
-      <Collapse
-        ghost
-        size="small"
-        items={[
-          {
-            key: "manage",
-            label: "配置与令牌管理",
-            children: (
-              <div className="external-agent-stack">
-                {configBlock}
-                <div className="external-agent-actions">
-                  <Button disabled={busy} onClick={() => setStep(0)}>
-                    更换权限或令牌
-                  </Button>
-                  <Button disabled={busy} onClick={() => void change("revoke")}>
-                    撤销令牌
-                  </Button>
-                </div>
-              </div>
-            ),
-          },
-        ]}
-      />
-    </>
-  ) : (
-    <>
-      <Steps
-        current={step}
-        size="small"
-        items={[
-          { title: "选择权限" },
-          { title: "配置 Codex" },
-          { title: "验证读取" },
-        ]}
-      />
-      {step === 0 && (
-        <div className="external-agent-card external-agent-stack">
-          <div>
-            <h3>
-              {grantReplaced
-                ? "需要重新配置 Codex"
-                : grant
-                  ? "更换项目令牌"
-                  : "授权 Codex 访问此项目"}
-            </h3>
-            <p>
-              {grantReplaced
-                ? "此项目的令牌已在其他页面换发。请签发新令牌并重新配置 Codex。"
-                : grant
-                  ? "签发新令牌后，旧令牌立即失效。"
-                  : "默认只允许读取当前画布。按需要开放更多操作。"}
-            </p>
-          </div>
-          <div className="external-agent-permissions">
-            <Checkbox checked disabled>
-              读取画布
-            </Checkbox>
-            <Checkbox
-              checked={allowCanvasWrite}
-              disabled={busy}
-              onChange={(event) => setAllowCanvasWrite(event.target.checked)}
-            >
-              允许编辑画布
-            </Checkbox>
-            <Checkbox
-              checked={allowGeneration}
-              disabled={busy}
-              onChange={(event) => setAllowGeneration(event.target.checked)}
-            >
-              允许提交生图{" "}
-              <span className="external-agent-muted">· 成功图片计入额度</span>
-            </Checkbox>
-          </div>
-        </div>
-      )}
-      {step === 1 && (
-        <div className="external-agent-card external-agent-stack">
-          <div>
-            <h3>在 Codex 中添加图一乐</h3>
-            <p>
-              把下面的配置加入 <code>~/.codex/config.toml</code>。
-            </p>
-          </div>
-          {configBlock}
-          <div className="external-agent-token">
-            <p>
-              将项目令牌设为下方环境变量，再从能读取该变量的环境启动 Codex。
-            </p>
-            <code className="external-agent-env">{tokenVariable}</code>
-            {token ? (
-              <div className="external-agent-token-row">
-                <Input.Password
-                  aria-label="项目访问令牌"
-                  value={token}
-                  readOnly
-                  autoComplete="off"
-                />
-                <Button onClick={() => void copy(token, "已复制访问令牌")}>
-                  复制令牌
-                </Button>
-              </div>
-            ) : (
-              <p>已签发的令牌只显示一次。若未保存，请更换令牌。</p>
-            )}
-          </div>
-        </div>
-      )}
-      {step === 2 && (
-        <div className="external-agent-card external-agent-stack">
-          <div>
-            <h3>在 Codex 中读取一次画布</h3>
-            <p>
-              复制验证提示并在 Codex 中发送。看到 Codex
-              返回画布后，回来检查连接。
-            </p>
-          </div>
-          <Input.TextArea
-            aria-label="给 Codex 的项目提示"
-            value={prompt}
-            readOnly
-            rows={3}
-          />
-          <Button onClick={() => void copy(prompt, "已复制验证提示")}>
-            复制验证提示
-          </Button>
-        </div>
-      )}
-      <div className="external-agent-actions">
-        {step === 0 ? (
-          <>
-            {grant && !grantReplaced && (
-              <Button disabled={busy} onClick={() => setStep(1)}>
-                返回
-              </Button>
-            )}
-            <Button
-              className="primary"
-              loading={busy}
-              onClick={() => void change("issue")}
-            >
-              {grant ? "替换令牌并继续" : "签发令牌并继续"}
-            </Button>
-          </>
-        ) : (
-          <>
-            <Button disabled={busy} onClick={() => setStep(step - 1)}>
-              上一步
-            </Button>
-            {step === 1 ? (
-              <Button className="primary" onClick={() => setStep(2)}>
-                继续验证 <ArrowUpRight size={15} />
-              </Button>
-            ) : (
-              <Button
-                className="primary"
-                loading={busy}
-                onClick={() => void checkConnection()}
-              >
-                检查连接
-              </Button>
-            )}
-          </>
-        )}
-      </div>
-    </>
-  );
-
-  const connectionContent = (
-    <>
-      {grant && (
-        <div className="external-agent-grant">
-          <Tag color={verified ? "success" : "blue"}>
-            {grantReplaced
-              ? "令牌已换发"
-              : verified
-                ? "已验证"
-                : "已签发 · 待验证"}
-          </Tag>
-          <span>
-            {grant.scopes.map((scope) => scopeLabels[scope]).join("、")}
-          </span>
-          <span>
-            有效至 {new Date(grant.expiresAt).toLocaleDateString("zh-CN")}
-          </span>
-          {!verified && (
-            <Button disabled={busy} onClick={() => void change("revoke")}>
-              撤销令牌
-            </Button>
-          )}
-        </div>
-      )}
-      {connectionPanel}
-    </>
-  );
   const activityContent = taskId ? (
     <div className="external-agent-stack">
       <div className="external-agent-actions">
@@ -616,17 +269,17 @@ bearer_token_env_var = "${tokenVariable}"`;
     <Modal
       open
       title="在 Codex 中继续"
-      onCancel={busy ? undefined : onClose}
-      closable={!busy}
-      mask={{ closable: !busy }}
-      keyboard={!busy}
+      onCancel={busy || connectionBusy ? undefined : onClose}
+      closable={!busy && !connectionBusy}
+      mask={{ closable: !busy && !connectionBusy }}
+      keyboard={!busy && !connectionBusy}
       footer={null}
       width={680}
     >
       <Tabs
         activeKey={tab}
-        destroyOnHidden
         onChange={(key) => {
+          if (busy || connectionBusy) return;
           setTab(key);
           setFeedback("");
           setError("");
@@ -637,8 +290,27 @@ bearer_token_env_var = "${tokenVariable}"`;
             label: "连接设置",
             children: (
               <div className="external-agent-dialog">
-                {connectionContent}
-                {feedbackContent}
+                <CodexConnection
+                  projectId={projectId}
+                  handoffCopied={handoffCopied}
+                  onBusyChange={setConnectionBusy}
+                />
+                {legacyConnection.data?.grant && (
+                  <div className="external-agent-card external-agent-stack">
+                    <div>
+                      此项目仍有一枚旧项目令牌，可在账号连接配置完成后撤销。
+                    </div>
+                    <div className="external-agent-actions">
+                      <Button
+                        disabled={busy || connectionBusy}
+                        onClick={() => void revokeLegacy()}
+                      >
+                        撤销旧项目令牌
+                      </Button>
+                    </div>
+                    {error && <Notice error>{error}</Notice>}
+                  </div>
+                )}
               </div>
             ),
           },

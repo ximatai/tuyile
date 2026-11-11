@@ -52,26 +52,65 @@ export class PgExternalAgentTokens {
     return { grant: rows[0] ? grant(rows[0]) : null };
   }
 
-  async issue(
+  async accountStatus(
     principal: Principal,
-    projectId: string,
+    database: pg.Pool | pg.PoolClient = this.pool,
+  ) {
+    const { rows } = await database.query<
+      Omit<GrantRow, "token_hash"> & {
+        token_hash: string | null;
+        active: boolean;
+      }
+    >(
+      `SELECT token_hash,expires_at,scopes,verified_at,
+              execution_version=$3 AND expires_at>clock_timestamp() AS active
+       FROM external_agent_tokens WHERE project_id IS NULL AND user_id=$1 AND workspace_id=$2`,
+      [principal.id, principal.workspaceId, principal.executionVersion],
+    );
+    const row = rows[0];
+    return {
+      grant:
+        row?.active && row.token_hash
+          ? grant({ ...row, token_hash: row.token_hash })
+          : null,
+      savedScopes: row?.scopes ?? [],
+    };
+  }
+
+  private async requireCurrentAccountGrant(
+    client: pg.PoolClient,
+    principal: Principal,
+    expectedGrantId: string | null,
+  ) {
+    const { grant } = await this.accountStatus(principal, client);
+    if ((grant?.id ?? null) !== expectedGrantId)
+      throw new AppError("EXTERNAL_AGENT_GRANT_CHANGED", 409);
+  }
+
+  async issueAccount(
+    principal: Principal,
     scopes: ExternalAgentScope[],
+    expectedGrantId: string | null,
   ) {
     const token = `tuyile_${randomBytes(32).toString("base64url")}`;
     return this.transactions.write(
       async (client) => {
+        await this.requireCurrentAccountGrant(
+          client,
+          principal,
+          expectedGrantId,
+        );
         const { rows } = await client.query<GrantRow>(
-          `INSERT INTO external_agent_tokens(project_id,workspace_id,user_id,token_hash,execution_version,expires_at,scopes)
-         SELECT p.id,p.workspace_id,u.id,$5,u.execution_version,now()+interval '168 hours',$6
-         FROM projects p JOIN workspaces w ON w.id=p.workspace_id
-         JOIN users u ON u.id=w.owner_id
-         WHERE p.id=$1 AND u.id=$2 AND p.workspace_id=$3 AND u.execution_version=$4
-           AND p.deleted_at IS NULL AND u.enabled AND NOT u.must_change_password
-         ON CONFLICT(project_id) DO UPDATE SET token_hash=excluded.token_hash,
-           execution_version=excluded.execution_version,expires_at=excluded.expires_at,scopes=excluded.scopes,verified_at=NULL
-         RETURNING token_hash,expires_at,scopes,verified_at`,
+          `INSERT INTO external_agent_tokens(workspace_id,user_id,token_hash,execution_version,expires_at,scopes)
+           SELECT w.id,u.id,$4,u.execution_version,now()+interval '168 hours',$5
+           FROM users u JOIN workspaces w ON w.owner_id=u.id
+           WHERE u.id=$1 AND w.id=$2 AND u.execution_version=$3
+             AND u.enabled AND u.password_hash IS NOT NULL AND NOT u.must_change_password
+           ON CONFLICT(user_id) WHERE project_id IS NULL DO UPDATE SET token_hash=excluded.token_hash,
+             workspace_id=excluded.workspace_id,execution_version=excluded.execution_version,
+             expires_at=excluded.expires_at,scopes=excluded.scopes,verified_at=NULL
+           RETURNING token_hash,expires_at,scopes,verified_at`,
           [
-            projectId,
             principal.id,
             principal.workspaceId,
             principal.executionVersion,
@@ -80,11 +119,28 @@ export class PgExternalAgentTokens {
           ],
         );
         if (!rows[0]) throw new AppError("NOT_FOUND", 404);
-        await recordExternalAgentActivity(client, principal, projectId, {
-          action: "grant_issued",
-          scopes,
-        });
-        return { token, grant: grant(rows[0]) };
+        return { token, grant: grant(rows[0]), savedScopes: scopes };
+      },
+      [principal.id],
+    );
+  }
+
+  async revokeAccount(principal: Principal, expectedGrantId: string | null) {
+    return this.transactions.write(
+      async (client) => {
+        await this.requireCurrentAccountGrant(
+          client,
+          principal,
+          expectedGrantId,
+        );
+        const { rows } = await client.query<{ scopes: ExternalAgentScope[] }>(
+          `UPDATE external_agent_tokens t SET token_hash=NULL,verified_at=NULL
+           FROM users u WHERE t.project_id IS NULL AND t.user_id=$1 AND t.workspace_id=$2
+             AND u.id=t.user_id AND u.execution_version=$3 AND t.execution_version=$3
+           RETURNING t.scopes`,
+          [principal.id, principal.workspaceId, principal.executionVersion],
+        );
+        return { grant: null, savedScopes: rows[0]?.scopes ?? [] };
       },
       [principal.id],
     );
@@ -140,7 +196,7 @@ export class PgExternalAgentTokens {
     });
   }
 
-  async verifyCanvasRead(tokenHash: string) {
+  async verifyConnection(tokenHash: string) {
     await this.pool.query(
       "UPDATE external_agent_tokens SET verified_at=now() WHERE token_hash=$1 AND verified_at IS NULL AND expires_at>now()",
       [tokenHash],
@@ -153,18 +209,18 @@ export class PgExternalAgentTokens {
     const tokenHash = security.digest(token);
     const { rows } = await this.pool.query<{
       principal: Principal;
-      projectId: string;
+      legacyProjectId: string | null;
       verified: boolean;
       scopes: ExternalAgentScope[];
     }>(
-      `SELECT t.project_id AS "projectId",t.scopes,t.verified_at IS NOT NULL AS verified,
+      `SELECT t.project_id AS "legacyProjectId",t.scopes,t.verified_at IS NOT NULL AS verified,
          json_build_object('id',u.id,'username',u.username,'role',u.role,
            'enabled',u.enabled,'activated',true,'workspaceId',t.workspace_id,
            'executionVersion',u.execution_version) AS principal
        FROM external_agent_tokens t
-       JOIN projects p ON (p.workspace_id,p.id)=(t.workspace_id,t.project_id)
+       LEFT JOIN projects p ON (p.workspace_id,p.id)=(t.workspace_id,t.project_id) AND p.deleted_at IS NULL
        JOIN users u ON u.id=t.user_id
-       WHERE t.token_hash=$1 AND t.expires_at>now() AND p.deleted_at IS NULL
+       WHERE t.token_hash=$1 AND t.expires_at>now() AND (t.project_id IS NULL OR p.id IS NOT NULL)
          AND u.enabled AND u.password_hash IS NOT NULL AND NOT u.must_change_password
          AND t.execution_version=u.execution_version`,
       [tokenHash],
@@ -181,10 +237,17 @@ export async function requireExternalAgentScope(
 ) {
   const { rows } = await client.query(
     `SELECT 1 FROM external_agent_tokens t JOIN users u ON u.id=t.user_id
-     WHERE t.project_id=$1 AND t.user_id=$2 AND t.token_hash=$3 AND $4=ANY(t.scopes)
-       AND t.expires_at>now() AND t.execution_version=u.execution_version
+     WHERE (t.project_id IS NULL OR t.project_id=$1) AND t.user_id=$2
+       AND t.token_hash=$3 AND $4=ANY(t.scopes) AND t.workspace_id=$5
+       AND t.expires_at>clock_timestamp() AND t.execution_version=u.execution_version
        AND u.enabled AND NOT u.must_change_password`,
-    [access.projectId, access.principal.id, access.tokenHash, scope],
+    [
+      access.projectId,
+      access.principal.id,
+      access.tokenHash,
+      scope,
+      access.principal.workspaceId,
+    ],
   );
   if (!rows.length)
     throw new AppError("EXTERNAL_AGENT_PERMISSION_REQUIRED", 403);

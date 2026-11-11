@@ -1,4 +1,8 @@
 import { ExternalAgentDialog } from "./external-agent";
+import {
+  codexProjectPrompt,
+  useCodexAccountConnection,
+} from "../codex-connection";
 import { useCardActions } from "./use-card-actions";
 import { toolbarPlacement } from "./toolbar-placement";
 import { highlightLineage } from "./lineage";
@@ -848,6 +852,18 @@ function CanvasView({
     [sources.data],
   );
   const [externalAgentOpen, setExternalAgentOpen] = useState(false);
+  const [handoffCopied, setHandoffCopied] = useState(false);
+  const accountConnection = useCodexAccountConnection();
+  function openCodex() {
+    setHandoffCopied(false);
+    const grant = accountConnection.data?.grant;
+    if (grant?.verifiedAt && Date.parse(grant.expiresAt) > Date.now())
+      void navigator.clipboard
+        ?.writeText(codexProjectPrompt(state.session.user.id, projectId))
+        .then(() => setHandoffCopied(true))
+        .catch(() => {});
+    setExternalAgentOpen(true);
+  }
   const [svgRevisions, setSvgRevisions] = useState<{
     sourceId: string;
     initialRevisionId?: string;
@@ -1397,10 +1413,7 @@ function CanvasView({
           </span>
           <span className="canvas-status-revision">v{snap.revision}</span>
         </div>
-        <Button
-          className="canvas-codex-button"
-          onClick={() => setExternalAgentOpen(true)}
-        >
+        <Button className="canvas-codex-button" onClick={openCodex}>
           <Bot size={16} />在 Codex 中继续
         </Button>
       </div>
@@ -1408,6 +1421,7 @@ function CanvasView({
         <ExternalAgentDialog
           projectId={projectId}
           editor={store}
+          handoffCopied={handoffCopied}
           onClose={() => setExternalAgentOpen(false)}
         />
       )}

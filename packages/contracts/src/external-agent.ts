@@ -18,6 +18,10 @@ export interface ExternalAgentConnection {
   grant: ExternalAgentGrant | null;
 }
 
+export interface ExternalAgentAccountConnection extends ExternalAgentConnection {
+  savedScopes: ExternalAgentScope[];
+}
+
 export const externalCanvasEdit = z
   .object({
     revision: z.number().int().min(0).max(2147483647),

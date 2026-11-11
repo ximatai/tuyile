@@ -150,13 +150,17 @@ export function Notice({
 }
 export function useConfirm() {
   const { modal } = App.useApp();
-  return (content: string) =>
+  return (content: string, afterClose?: () => void) =>
     new Promise<boolean>((resolve) => {
       modal.confirm({
         title: "请确认",
         content,
         okText: "确认",
         cancelText: "取消",
+        ...(afterClose && {
+          afterClose,
+          focusable: { focusTriggerAfterClose: false },
+        }),
         onOk: () => {
           resolve(true);
         },
