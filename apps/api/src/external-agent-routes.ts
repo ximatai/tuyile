@@ -20,7 +20,10 @@ import {
   type CreationService,
   type Workbench,
 } from "@tuyile/core";
-import type { PgExternalAgentTokens } from "@tuyile/infrastructure";
+import {
+  renderCanvasPreview,
+  type PgExternalAgentTokens,
+} from "@tuyile/infrastructure";
 import type { ApiEnv } from "./app.js";
 
 const grantId = z
@@ -47,6 +50,14 @@ const imageDownload = z.object({
     .transform(Number),
   signature: z.string().regex(/^[a-f0-9]{64}$/),
 });
+const canvasPreviewRegion = z
+  .object({
+    x: z.number().finite().min(-110000).max(110000),
+    y: z.number().finite().min(-110000).max(110000),
+    width: z.number().finite().min(40).max(220000),
+    height: z.number().finite().min(40).max(220000),
+  })
+  .strict();
 
 export function externalAgentRoutes(
   app: Hono<ApiEnv>,
@@ -266,7 +277,7 @@ export function externalAgentRoutes(
       "read_canvas",
       {
         description:
-          "Read the saved Tuyile project canvas and its revision. Use read_image with an image node's asset ID to see it. Continue with nextOffset to read additional nodes; check that the revision is consistent across pages.",
+          "Read exact nodes, coordinates, and revision from the saved Tuyile project canvas. Use read_canvas_preview to see the layout, or read_image for one asset. Continue with nextOffset to read additional nodes; check that the revision is consistent across pages.",
         annotations: { readOnlyHint: true, openWorldHint: false },
         inputSchema: {
           projectUrl: projectLink,
@@ -292,6 +303,45 @@ export function externalAgentRoutes(
         }),
     );
     if (creation && access.scopes.includes("canvas:read")) {
+      server.registerTool(
+        "read_canvas_preview",
+        {
+          description:
+            "View the saved canvas as a layout thumbnail with its revision and bounds. Omit region for the full canvas, or supply a region in canvas coordinates to zoom in. Use read_canvas for exact nodes and coordinates before editing.",
+          annotations: { readOnlyHint: true, openWorldHint: false },
+          inputSchema: {
+            projectUrl: projectLink,
+            region: canvasPreviewRegion
+              .optional()
+              .describe("Optional crop in absolute canvas coordinates."),
+          },
+        },
+        async ({ projectUrl, region }) =>
+          projectTool(projectUrl, async (projectId) => {
+            const { bytes, ...preview } = await renderCanvasPreview(
+              () => canvas.load(access.principal, projectId),
+              region,
+              async (assetId) =>
+                (await creation.bytes(access.principal, assetId, true)).bytes,
+            );
+            if (!access.verified)
+              await tokens.verifyConnection(access.tokenHash);
+            return {
+              // Codex prefers structuredContent over image content when both are present.
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify({ projectId, ...preview }),
+                },
+                {
+                  type: "image",
+                  mimeType: "image/webp",
+                  data: bytes.toString("base64"),
+                },
+              ],
+            };
+          }),
+      );
       const imageInputSchema = { projectUrl: projectLink, assetId: id };
       server.registerTool(
         "read_image",

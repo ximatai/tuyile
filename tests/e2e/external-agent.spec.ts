@@ -414,6 +414,18 @@ test("generates three project images through MCP and places them once on an open
   await expect(page.locator(".react-flow__node-image")).toHaveCount(4);
   await expect(page.locator(".react-flow__node-text")).toHaveCount(3);
   await expect(page.locator(".canvas-status")).toContainText("v2");
+  const canvasPreview = await call("read_canvas_preview", {}, true);
+  expect(canvasPreview).not.toHaveProperty("structuredContent");
+  expect(JSON.parse(canvasPreview.content[0].text)).toMatchObject({
+    projectId: id,
+    revision: 2,
+    visibleNodes: 7,
+    imagePlaceholders: 0,
+  });
+  expect(canvasPreview.content[1]).toMatchObject({
+    type: "image",
+    mimeType: "image/webp",
+  });
   await expect(
     dialog.getByRole("row").filter({ hasText: "外部 Agent 修改画布" }),
   ).toHaveCount(1);

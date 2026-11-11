@@ -1,5 +1,6 @@
 import { expect, it, vi } from "vitest";
 import { randomBytes, randomUUID } from "node:crypto";
+import sharp from "sharp";
 import { CanvasService } from "@tuyile/core";
 import {
   PgCanvasStore,
@@ -130,7 +131,12 @@ it("limits remote MCP to the authorized project and invalidates rotated, revoked
       (await tools.json()).result.tools.map(
         (tool: { name: string }) => tool.name,
       ),
-    ).toEqual(["read_canvas", "read_image", "get_image_download_link"]);
+    ).toEqual([
+      "read_canvas",
+      "read_canvas_preview",
+      "read_image",
+      "get_image_download_link",
+    ]);
     expect(
       (await (await read(first)).json()).result.structuredContent,
     ).toMatchObject({
@@ -470,7 +476,71 @@ it("limits remote MCP to the authorized project and invalidates rotated, revoked
       revision: 1,
       requestKey: randomUUID(),
       placements: [],
-      document: { ...emptyCanvas(), nodes: [imageNode] },
+      document: {
+        ...emptyCanvas(),
+        nodes: [
+          imageNode,
+          { ...node, label: "<&> 便签", text: "布局 <svg> & 检查" },
+        ],
+      },
+    });
+    const canvasPreview = async (
+      url: string,
+      region?: object,
+      token = accountToken,
+    ) =>
+      (
+        await (
+          await rpc(token, "tools/call", {
+            name: "read_canvas_preview",
+            arguments: { projectUrl: url, region },
+          })
+        ).json()
+      ).result;
+    const overview = await canvasPreview(otherUrl);
+    expect(overview).not.toHaveProperty("structuredContent");
+    expect(JSON.parse(overview.content[0].text)).toMatchObject({
+      projectId: other.id,
+      revision: 2,
+      visibleNodes: 2,
+      imagePlaceholders: 0,
+      bounds: { x: -24, y: -24 },
+    });
+    const region = { x: 0, y: 0, width: 40, height: 40 };
+    const crop = await canvasPreview(otherUrl, region);
+    expect(JSON.parse(crop.content[0].text)).toMatchObject({
+      bounds: region,
+      visibleNodes: 1,
+      width: 1200,
+      height: 1200,
+    });
+    expect(crop.content[1]).toMatchObject({
+      type: "image",
+      mimeType: "image/webp",
+    });
+    const {
+      data: [red, green, blue],
+    } = await sharp(Buffer.from(crop.content[1].data, "base64"))
+      .extract({ left: 600, top: 600, width: 1, height: 1 })
+      .raw()
+      .toBuffer({ resolveWithObject: true });
+    expect(red).toBeLessThan(20);
+    expect(green).toBeGreaterThan(70);
+    expect(blue).toBeGreaterThan(145);
+    const narrow = await canvasPreview(otherUrl, {
+      x: -100000,
+      y: -60,
+      width: 220000,
+      height: 40,
+    });
+    expect(JSON.parse(narrow.content[0].text)).toMatchObject({
+      width: 1200,
+      height: 1,
+      visibleNodes: 0,
+    });
+    expect(await canvasPreview(foreignUrl)).toMatchObject({ isError: true });
+    expect(await canvasPreview(otherUrl, undefined, third)).toMatchObject({
+      isError: true,
     });
     expect(
       await imageTool("read_image", unlinked.id, projectUrl),
