@@ -29,6 +29,7 @@
 
 ```mermaid
 flowchart LR
+  Codex[本地 Agent] -->|HTTPS /mcp| Proxy
   Browser[浏览器] -->|HTTPS 提交与查询| Proxy[反向代理]
   Proxy --> API[API 与静态 Web]
   API --> DB[(PostgreSQL 任务与业务状态)]
@@ -39,6 +40,8 @@ flowchart LR
 ```
 
 API 和 Worker 可使用同一个镜像、不同入口，进程生命周期分开。首版单主机 Compose 提供 API、一个 Worker、PostgreSQL 和私有卷；数据库不暴露公网。API 不通过 HTTP 请求的 AbortSignal 控制已准入任务，Worker 不持有浏览器 Cookie。
+
+远程 MCP 由同一 Hono 进程提供，使用逐请求验证的项目 Bearer 令牌。数据库保存令牌摘要、权限、到期时间和账号执行授权版本。Web 端签发和撤销仍使用会话及 CSRF 校验。
 
 ## 3. 分层、模块与工程组织
 

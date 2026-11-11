@@ -16,6 +16,7 @@ import {
   PrivateImageFiles,
   PgCreationStore,
   PgCanvasStore,
+  PgExternalAgentTokens,
   PgLibraryStore,
   PgAdministrationStore,
 } from "@tuyile/infrastructure";
@@ -67,6 +68,7 @@ const app = createApp(
     new CompatibleModelDirectory(imageConfig.fakeAllowed),
   ),
   new DemoService(new PgDemoStore(pool), files),
+  new PgExternalAgentTokens(pool),
 );
 // Public app shell contains no private data. API routes always run first.
 app.get("/assets/*", serveStatic({ root: "./apps/web/dist" }));

@@ -1030,6 +1030,16 @@ form {
   font-size: 12px;
   color: #65748b;
 }
+.external-agent-dialog {
+  display: grid;
+  gap: 12px;
+}
+.canvas-external-agent {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  z-index: 4;
+}
 .canvas-error {
   position: absolute;
   top: 46px;

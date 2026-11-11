@@ -13,3 +13,4 @@ export * from "./library.js";
 export * from "./administration.js";
 export * from "./model-directory.js";
 export * from "./demo.js";
+export * from "./external-agent.js";

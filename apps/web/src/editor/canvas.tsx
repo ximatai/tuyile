@@ -1,3 +1,4 @@
+import { ExternalAgentDialog } from "./external-agent";
 import { useCardActions } from "./use-card-actions";
 import { toolbarPlacement } from "./toolbar-placement";
 import { highlightLineage } from "./lineage";
@@ -811,6 +812,7 @@ function CanvasView({
       ),
     [sources.data],
   );
+  const [externalAgentOpen, setExternalAgentOpen] = useState(false);
   const [svgRevisions, setSvgRevisions] = useState<{
     sourceId: string;
     initialRevisionId?: string;
@@ -1324,6 +1326,17 @@ function CanvasView({
         {snap.saving ? "正在保存…" : snap.dirty ? "有未保存修改" : "画布已保存"}{" "}
         · v{snap.revision}
       </div>
+      <div className="canvas-external-agent">
+        <Button onClick={() => setExternalAgentOpen(true)}>
+          在 Codex 中继续
+        </Button>
+      </div>
+      {externalAgentOpen && (
+        <ExternalAgentDialog
+          projectId={projectId}
+          onClose={() => setExternalAgentOpen(false)}
+        />
+      )}
       {copyMessage && (
         <div className="canvas-copy-message">
           <Notice>{copyMessage}</Notice>

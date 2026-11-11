@@ -21,4 +21,4 @@
 
 图片模型能力的依据与校准边界见[模型能力校准](model-capabilities.md)。
 
-工程计划状态统一由[当前能力与后续方向](delivery-roadmap.md)维护。目前无活跃工程计划；[已完成的图片创作治理方案](image-creation-governance.md)仅保留范围与决策依据，不作为待办执行。
+工程计划状态统一由[当前能力与后续方向](delivery-roadmap.md)维护。当前推进外部 Agent 接入；[已完成的图片创作治理方案](image-creation-governance.md)仅保留范围与决策依据，不作为待办执行。
