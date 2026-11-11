@@ -1,11 +1,21 @@
-import { Button, Checkbox, Input, Modal, Notice, Table } from "@tuyile/ui";
-import { useEffect, useState } from "react";
+import {
+  Button,
+  Checkbox,
+  Input,
+  Modal,
+  Notice,
+  Table,
+  useConfirm,
+} from "@tuyile/ui";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type {
+  CanvasSnapshot,
   ExternalAgentActivity,
   ExternalAgentConnection,
 } from "@tuyile/contracts";
 import { client } from "../api";
+import type { EditorStore } from "./store";
 import { useSessionState } from "../session-state";
 
 const activityLabels: Record<ExternalAgentActivity["action"], string> = {
@@ -23,12 +33,17 @@ const scopeLabels = {
 
 export function ExternalAgentDialog({
   projectId,
+  editor,
   onClose,
 }: {
   projectId: string;
+  editor: EditorStore;
   onClose: () => void;
 }) {
   const state = useSessionState();
+  const confirm = useConfirm();
+  const activityToggle = useRef<HTMLButtonElement>(null);
+  const undoKey = useRef<{ revision: number; requestKey: string }>(undefined);
   const { session } = state;
   const path = `/projects/${projectId}/external-agent`;
   const projectUrl = new URL(`/projects/${projectId}`, location.origin).href;
@@ -52,14 +67,14 @@ bearer_token_env_var = "${tokenVariable}"`;
   const [offset, setOffset] = useState(0);
   const activityKey = state.key("external-agent-activity", projectId);
   const activity = useQuery({
-    queryKey: [...activityKey, offset],
+    queryKey: [...activityKey, editor.get().revision, offset],
     enabled: showActivity,
     queryFn: ({ signal }) =>
-      client(csrf)<{ items: ExternalAgentActivity[]; hasMore: boolean }>(
-        `${path}/activity?offset=${offset}`,
-        undefined,
-        signal,
-      ),
+      client(csrf)<{
+        items: ExternalAgentActivity[];
+        hasMore: boolean;
+        undoRevision: number | null;
+      }>(`${path}/activity?offset=${offset}`, undefined, signal),
   });
   useEffect(() => {
     const controller = new AbortController();
@@ -107,6 +122,50 @@ bearer_token_env_var = "${tokenVariable}"`;
     }
   }
 
+  const undoRevision = activity.data?.undoRevision;
+  function canUndo(revision: number) {
+    const current = editor.get();
+    return (
+      current.revision === revision &&
+      !current.dirty &&
+      !current.saving &&
+      !current.conflict
+    );
+  }
+
+  async function undo(revision: number) {
+    if (!canUndo(revision)) return;
+    if (
+      !(await confirm(
+        "将画布恢复到最近一次外部编辑前的版本。已生成的图片仍保留在图库。",
+      ))
+    )
+      return;
+    if (!canUndo(revision)) {
+      setError("画布有新版本或未保存修改，请先检查画布。");
+      return;
+    }
+    setBusy(true);
+    setError("");
+    setFeedback("");
+    try {
+      if (undoKey.current?.revision !== revision)
+        undoKey.current = { revision, requestKey: crypto.randomUUID() };
+      const restored = await client(csrf)<CanvasSnapshot>(
+        `${path}/undo`,
+        undoKey.current,
+      );
+      editor.receiveRemote(restored);
+      setFeedback(`已撤销外部编辑，当前画布版本为 v${restored.revision}。`);
+    } catch (cause) {
+      setError((cause as Error).message);
+    } finally {
+      await state.queries.invalidateQueries({ queryKey: activityKey });
+      setBusy(false);
+      activityToggle.current?.focus();
+    }
+  }
+
   async function copy(value: string, label: string) {
     try {
       await navigator.clipboard.writeText(value);
@@ -144,7 +203,10 @@ bearer_token_env_var = "${tokenVariable}"`;
           <Button onClick={() => setShowSetup((value) => !value)}>
             {showSetup ? "收起连接设置" : "首次连接与授权"}
           </Button>
-          <Button onClick={() => setShowActivity((value) => !value)}>
+          <Button
+            ref={activityToggle}
+            onClick={() => setShowActivity((value) => !value)}
+          >
             {showActivity ? "收起活动记录" : "项目活动记录"}
           </Button>
         </div>
@@ -219,6 +281,19 @@ bearer_token_env_var = "${tokenVariable}"`;
         )}
         {showActivity && (
           <>
+            {undoRevision != null && (
+              <div className="actions">
+                <Button
+                  disabled={busy || !canUndo(undoRevision)}
+                  onClick={() => void undo(undoRevision)}
+                >
+                  撤销最近一次外部编辑
+                </Button>
+                {!canUndo(undoRevision) && (
+                  <span>请先处理未保存修改或同步画布。</span>
+                )}
+              </div>
+            )}
             {activity.error && <Notice error>{activity.error.message}</Notice>}
             <Table<ExternalAgentActivity>
               size="small"

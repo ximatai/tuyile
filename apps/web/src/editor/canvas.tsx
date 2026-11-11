@@ -1375,6 +1375,7 @@ function CanvasView({
       {externalAgentOpen && (
         <ExternalAgentDialog
           projectId={projectId}
+          editor={store}
           onClose={() => setExternalAgentOpen(false)}
         />
       )}

@@ -105,19 +105,28 @@ export class PgExternalAgentTokens {
   }
 
   async activity(principal: Principal, projectId: string, offset: number) {
-    const { rows } = await this.pool.query<ExternalAgentActivityRow>(
-      `SELECT a.id,u.username AS actor,a.action,a.scopes,a.revision,a.task_id AS "taskId",a.created_at AS "createdAt"
+    return this.transactions.read(async (client) => {
+      const { rows } = await client.query<ExternalAgentActivityRow>(
+        `SELECT a.id,u.username AS actor,a.action,a.scopes,a.revision,a.task_id AS "taskId",a.created_at AS "createdAt"
        FROM external_agent_activity a JOIN users u ON u.id=a.user_id
        WHERE a.workspace_id=$1 AND a.project_id=$2 AND a.user_id=$3
        ORDER BY a.id DESC LIMIT 21 OFFSET $4`,
-      [principal.workspaceId, projectId, principal.id, offset],
-    );
-    return {
-      items: rows
-        .slice(0, 20)
-        .map((row) => ({ ...row, createdAt: row.createdAt.toISOString() })),
-      hasMore: rows.length > 20,
-    };
+        [principal.workspaceId, projectId, principal.id, offset],
+      );
+      const undo = await client.query<{ revision: number }>(
+        `SELECT u.revision FROM external_agent_canvas_undo u
+       JOIN project_documents d ON d.project_id=u.project_id AND d.revision=u.revision
+       WHERE u.workspace_id=$1 AND u.project_id=$2`,
+        [principal.workspaceId, projectId],
+      );
+      return {
+        items: rows
+          .slice(0, 20)
+          .map((row) => ({ ...row, createdAt: row.createdAt.toISOString() })),
+        hasMore: rows.length > 20,
+        undoRevision: undo.rows[0]?.revision ?? null,
+      };
+    });
   }
 
   async authenticate(authorization: string | undefined) {

@@ -5,6 +5,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import {
   externalCanvasEdit,
+  externalCanvasUndo,
   id,
   imageInput,
   pageOffset,
@@ -45,6 +46,17 @@ export function externalAgentRoutes(
         user,
         projectId,
         pageOffset.parse(c.req.query("offset")),
+      ),
+    );
+  });
+  app.post(`${management}/undo`, async (c) => {
+    const { user } = c.get("session");
+    const projectId = id.parse(c.req.param("id"));
+    return c.json(
+      await canvas.undoExternal(
+        user,
+        projectId,
+        externalCanvasUndo.parse(await c.req.json()),
       ),
     );
   });

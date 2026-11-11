@@ -97,3 +97,11 @@ export interface ExternalAgentActivity {
   taskId: string | null;
   createdAt: string;
 }
+
+export const externalCanvasUndo = z
+  .object({
+    revision: z.number().int().min(1).max(2147483647),
+    requestKey: z.uuid(),
+  })
+  .strict();
+export type ExternalCanvasUndo = z.infer<typeof externalCanvasUndo>;

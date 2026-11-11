@@ -62,6 +62,7 @@ const messages: Record<string, string> = {
   PLAN_NOT_READY: "规划尚未完成，请等待结果。",
   PLANNING_PROVIDER_UNAVAILABLE: "绑定的规划服务已撤销，请重新规划。",
 
+  EXTERNAL_UNDO_CONFLICT: "画布已更新，无法撤销这次外部编辑。",
   CANVAS_CONFLICT:
     "画布已在其他页面修改。本地内容已保留，请重新加载或另存副本。",
   PLAN_SELECTION_INVALID:

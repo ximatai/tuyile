@@ -61,7 +61,7 @@ unset ADMIN_USERNAME ADMIN_PASSWORD
 
 ## 数据库与配置
 
-PostgreSQL初始化分别建立migrator和runtime角色：前者拥有tuyile schema，后者只有schema usage和业务表DML，不能改schema或迁移记录。迁移显式执行并校验checksum；API/Worker只检查schema兼容性和运行身份，发现缺失、不兼容或过度授权即拒绝启动。当前迁移1—34，实际版本以[migrations](../migrations)和启动校验为准。
+PostgreSQL初始化分别建立migrator和runtime角色：前者拥有tuyile schema，后者只有schema usage和业务表DML，不能改schema或迁移记录。迁移显式执行并校验checksum；API/Worker只检查schema兼容性和运行身份，发现缺失、不兼容或过度授权即拒绝启动。当前迁移1—35，实际版本以[migrations](../migrations)和启动校验为准。
 
 模型服务通过命名连接管理Base URL和加密Key，从GET /models取得候选，也可手动登记；对话/图片分别发布开放池并指定默认项。目录刷新不自动改动开放范围，能力由管理员声明，已接受任务绑定不可变版本。普通用户只收到允许模型与能力，不收到地址或Key；个人策略按池条目ID与全局开放池取交集。
 
@@ -189,4 +189,4 @@ PR 中根 `package.json` 经 Git 对比确认只变更稳定版本号时，按�
 
 候选镜像离线运行 `node dist/svg/check.js`（Docker 使用 `--network none`），在目标架构验证最大 SVG、真正终止后恢复、队列边界和 Linux 原生分配/CPU 硬限。Docker 冒烟通过应用接口验证 SVG 私有预览、下载和栅格副本，并用同一入口的 `--linux-limits-only` 模式验证 Linux 硬限。独立检查不加载应用配置、不连接数据库或调用模型。不能从 macOS/arm64 的通过外推 Linux/amd64。
 
-外部 Agent 专项可运行 `corepack pnpm test:e2e -- tests/e2e/external-agent.spec.ts`，通过实际 MCP HTTP 入口及合成 Provider 验证项目授权、画布同步、版本冲突、任务结果和显式放置。
+外部 Agent 专项可运行 `corepack pnpm test:e2e -- tests/e2e/external-agent.spec.ts`，通过实际 MCP HTTP 入口及合成 Provider 验证项目授权、画布同步、版本冲突、任务结果、显式放置、项目活动记录和撤销。

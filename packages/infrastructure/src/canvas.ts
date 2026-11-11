@@ -17,6 +17,7 @@ import {
   type Principal,
   type CanvasSave,
   type ExternalCanvasEdit,
+  type ExternalCanvasUndo,
   type CanvasSnapshot,
   type CanvasOutput,
   type CanvasSources,
@@ -93,6 +94,10 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
     );
     await this.c.query(
       "DELETE FROM external_agent_activity WHERE project_id=$1",
+      [id],
+    );
+    await this.c.query(
+      "DELETE FROM external_agent_canvas_undo WHERE project_id=$1",
       [id],
     );
     await this.c.query(
@@ -270,8 +275,52 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
       },
       hash,
     );
+    await this.c.query(
+      "INSERT INTO external_agent_canvas_undo(project_id,workspace_id,revision,document) VALUES($1,$2,$3,$4)",
+      [projectId, principal.workspaceId, saved.revision, current.document],
+    );
     await recordExternalAgentActivity(this.c, principal, projectId, {
       action: "canvas_edited",
+      revision: saved.revision,
+    });
+    return saved;
+  }
+  async undoExternal(p: Principal, project: string, input: ExternalCanvasUndo) {
+    await this.project(p, project);
+    const { rows } = await this.c.query(
+      `SELECT d.document,d.revision,d.request_key,d.request_hash,u.document AS previous
+       FROM project_documents d LEFT JOIN external_agent_canvas_undo u
+         ON u.project_id=d.project_id AND u.revision=d.revision
+       WHERE d.project_id=$1 AND d.workspace_id=$2`,
+      [project, p.workspaceId],
+    );
+    const current = rows[0];
+    const hash = createHash("sha256")
+      .update(JSON.stringify({ externalCanvasUndo: input }))
+      .digest("hex");
+    if (current?.request_key === input.requestKey) {
+      if (current.request_hash !== hash)
+        throw new AppError("IDEMPOTENCY_CONFLICT", 409);
+      return {
+        document: canvasDocument.parse(current.document),
+        revision: current.revision,
+      };
+    }
+    if (current?.revision !== input.revision || !current.previous)
+      throw new AppError("EXTERNAL_UNDO_CONFLICT", 409);
+    // Placement receipts stay consumed, even if the restored canvas removes their nodes.
+    const saved = await this.save(
+      p,
+      project,
+      {
+        ...input,
+        document: canvasDocument.parse(current.previous),
+        placements: [],
+      },
+      hash,
+    );
+    await recordExternalAgentActivity(this.c, p, project, {
+      action: "canvas_undone",
       revision: saved.revision,
     });
     return saved;
@@ -336,6 +385,10 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
     await this.c.query(
       "INSERT INTO output_placements(workspace_id,project_id,output_id) SELECT $1,$2,unnest($3::uuid[]) ON CONFLICT DO NOTHING",
       [p.workspaceId, project, placements],
+    );
+    await this.c.query(
+      "DELETE FROM external_agent_canvas_undo WHERE project_id=$1",
+      [project],
     );
     return { document: input.document, revision };
   }

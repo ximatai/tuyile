@@ -4,7 +4,7 @@
 
 ## 独立运行
 
-依赖和隔离地址见 [本地开发](development.md)。当前程序要求 schema 1—34（以[迁移目录](../migrations)及启动校验为准）；迁移由 migrator 显式执行，API/Worker 只检查兼容性，运行身份不能修改 schema。普通停止用 `docker compose ... stop api worker`，保留数据库与图片卷；不要用删除卷解决启动问题。
+依赖和隔离地址见 [本地开发](development.md)。当前程序要求 schema 1—35（以[迁移目录](../migrations)及启动校验为准）；迁移由 migrator 显式执行，API/Worker 只检查兼容性，运行身份不能修改 schema。普通停止用 `docker compose ... stop api worker`，保留数据库与图片卷；不要用删除卷解决启动问题。
 
 本地 Docker 使用 `.env.docker`、项目 `tuyile-docker`、数据库 `tuyile_docker`/55441 和应用8792。专用自动测试只使用 `tuyile_test`/55440。其他实例的数据、凭据与后台服务不参与本实例运行或构建。
 

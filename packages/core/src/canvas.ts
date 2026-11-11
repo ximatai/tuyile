@@ -4,6 +4,8 @@ import {
   type ProjectDraftSnapshot,
   canvasSave,
   externalCanvasEdit,
+  externalCanvasUndo,
+  type ExternalCanvasUndo,
   type ExternalCanvasEdit,
   type CanvasSave,
   type CanvasSnapshot,
@@ -17,6 +19,11 @@ export interface CanvasRepository {
   editExternal(
     access: ExternalAgentAccess,
     input: ExternalCanvasEdit,
+  ): Promise<CanvasSnapshot>;
+  undoExternal(
+    p: Principal,
+    projectId: string,
+    input: ExternalCanvasUndo,
   ): Promise<CanvasSnapshot>;
   loadDraft(p: Principal, projectId: string): Promise<ProjectDraftSnapshot>;
   saveDraft(
@@ -66,6 +73,10 @@ export class CanvasService {
     return this.store.write(access.principal.id, (r) =>
       r.editExternal(access, parsed),
     );
+  }
+  undoExternal(p: Principal, project: string, input: ExternalCanvasUndo) {
+    const parsed = externalCanvasUndo.parse(input);
+    return this.store.write(p.id, (r) => r.undoExternal(p, project, parsed));
   }
   copy(p: Principal, project: string, input: CanvasSave) {
     const parsed = canvasSave.parse(input);

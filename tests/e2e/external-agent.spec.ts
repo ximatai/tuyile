@@ -264,13 +264,19 @@ test("generates three project images through MCP and places them once on an open
     requestKey: randomUUID(),
     operations,
   };
+  await page.getByRole("button", { name: "在 Codex 中继续" }).click();
+  await dialog.getByRole("button", { name: "项目活动记录" }).click();
+  await expect(
+    dialog.getByRole("row").filter({ hasText: "外部 Agent 提交生图" }),
+  ).toContainText(queued.taskId);
+  await expect(
+    dialog.getByRole("button", { name: "撤销最近一次外部编辑" }),
+  ).toHaveCount(0);
   expect((await call("edit_canvas", edit)).revision).toBe(2);
   expect((await call("edit_canvas", edit)).revision).toBe(2);
   await expect(page.locator(".react-flow__node-image")).toHaveCount(4);
   await expect(page.locator(".react-flow__node-text")).toHaveCount(3);
   await expect(page.locator(".canvas-status")).toContainText("v2");
-  await page.getByRole("button", { name: "在 Codex 中继续" }).click();
-  await dialog.getByRole("button", { name: "项目活动记录" }).click();
   await expect(
     dialog.getByRole("row").filter({ hasText: "外部 Agent 修改画布" }),
   ).toHaveCount(1);
@@ -286,4 +292,16 @@ test("generates three project images through MCP and places them once on an open
     state: "succeeded",
     used: 3,
   });
+  await dialog.getByRole("button", { name: "撤销最近一次外部编辑" }).click();
+  await page.getByRole("button", { name: "确认", exact: true }).click();
+  await expect(
+    dialog.getByRole("row").filter({ hasText: "撤销外部编辑" }),
+  ).toContainText("v3");
+  await dialog.getByRole("button", { name: "关闭", exact: true }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(page.locator(".react-flow__node-image")).toHaveCount(1);
+  await expect(page.locator(".react-flow__node-text")).toHaveCount(0);
+  const completedAfterUndo = await status();
+  expect(completedAfterUndo).toMatchObject({ state: "succeeded", used: 3 });
+  expect(completedAfterUndo.outputs).toHaveLength(3);
 });

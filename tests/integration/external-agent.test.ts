@@ -269,7 +269,67 @@ it("limits remote MCP to the authorized project and invalidates rotated, revoked
       `/api/projects/${other.id}/external-agent/activity`,
       { headers },
     );
-    expect(await otherActivity.json()).toEqual({ items: [], hasMore: false });
+    expect(await otherActivity.json()).toEqual({
+      items: [],
+      hasMore: false,
+      undoRevision: null,
+    });
+    const undoPath = path + "/undo";
+    const undo = (
+      revision: number,
+      requestKey = randomUUID(),
+      requestHeaders = headers,
+    ) =>
+      app.request(undoPath, {
+        method: "POST",
+        headers: requestHeaders,
+        body: JSON.stringify({ revision, requestKey }),
+      });
+    const undoKey = randomUUID();
+    expect((await undo(1)).status).toBe(409);
+    expect(
+      (await undo(2, undoKey, { ...headers, "X-CSRF-Token": "wrong" })).status,
+    ).toBe(403);
+    const reverted = await undo(2, undoKey);
+    expect(reverted.status).toBe(200);
+    expect(await reverted.json()).toMatchObject({
+      revision: 3,
+      document: { nodes: [node] },
+    });
+    expect((await (await undo(2, undoKey)).json()).revision).toBe(3);
+    expect((await undo(3)).status).toBe(409);
+    const postUndo = await (
+      await app.request(path + "/activity", { headers })
+    ).json();
+    expect(postUndo.undoRevision).toBeNull();
+    expect(
+      postUndo.items.filter(
+        (item: { action: string }) => item.action === "canvas_undone",
+      ),
+    ).toMatchObject([{ revision: 3 }]);
+    const anotherWriteToken = await issue(true);
+    expect(
+      (
+        await (
+          await rpc(
+            anotherWriteToken,
+            "tools/call",
+            batch(3, [{ action: "move_node", nodeId: node.id, x: 90, y: 90 }]),
+          )
+        ).json()
+      ).result.structuredContent.revision,
+    ).toBe(4);
+    const later = await canvas.save(f.principal, f.project.id, {
+      revision: 4,
+      requestKey: randomUUID(),
+      placements: [],
+      document: {
+        ...emptyCanvas(),
+        nodes: [{ ...node, label: "Saved afterwards" }],
+      },
+    });
+    expect((await undo(4)).status).toBe(409);
+    expect(await canvas.load(f.principal, f.project.id)).toEqual(later);
     const third = await issue();
     await f.service.changePassword(
       f.principal,
