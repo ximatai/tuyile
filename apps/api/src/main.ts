@@ -68,7 +68,7 @@ const app = createApp(
     new CompatibleModelDirectory(imageConfig.fakeAllowed),
   ),
   new DemoService(new PgDemoStore(pool), files),
-  new PgExternalAgentTokens(pool),
+  new PgExternalAgentTokens(pool, imageConfig.masterKey),
 );
 // Public app shell contains no private data. API routes always run first.
 app.get("/assets/*", serveStatic({ root: "./apps/web/dist" }));

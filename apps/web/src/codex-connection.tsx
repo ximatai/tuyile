@@ -327,12 +327,12 @@ bearer_token_env_var = "${tokenVariable}"`;
                 ? "账号令牌已在其他页面换发。请签发新令牌并重新配置 Codex。"
                 : grant
                   ? "签发新令牌后，旧令牌立即失效。"
-                  : "权限适用于你能访问的所有项目。默认只允许读取画布。"}
+                  : "权限适用于你能访问的所有项目。读取权限包含项目图片预览，也可按需生成原图短时下载链接。"}
             </p>
           </div>
           <div className="external-agent-permissions">
             <Checkbox checked disabled>
-              读取画布
+              读取画布和项目图片
             </Checkbox>
             <Checkbox
               checked={allowCanvasWrite}

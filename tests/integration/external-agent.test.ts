@@ -1,4 +1,4 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { randomBytes, randomUUID } from "node:crypto";
 import { CanvasService } from "@tuyile/core";
 import {
@@ -16,7 +16,10 @@ it("limits remote MCP to the authorized project and invalidates rotated, revoked
   const f = await imageFixture();
   try {
     const canvas = new CanvasService(new PgCanvasStore(f.pool));
-    const tokens = new PgExternalAgentTokens(f.pool);
+    const tokens = new PgExternalAgentTokens(
+      f.pool,
+      process.env.APP_MASTER_KEY!,
+    );
     const app = createApp(
       f.service,
       f.store,
@@ -127,7 +130,7 @@ it("limits remote MCP to the authorized project and invalidates rotated, revoked
       (await tools.json()).result.tools.map(
         (tool: { name: string }) => tool.name,
       ),
-    ).toEqual(["read_canvas"]);
+    ).toEqual(["read_canvas", "read_image", "get_image_download_link"]);
     expect(
       (await (await read(first)).json()).result.structuredContent,
     ).toMatchObject({
@@ -433,10 +436,85 @@ it("limits remote MCP to the authorized project and invalidates rotated, revoked
       ).structuredContent,
     ).toMatchObject({ projectId: other.id, state: "queued" });
 
+    const imageTool = async (
+      name: string,
+      assetId: string,
+      url = otherUrl,
+      token = accountToken,
+    ) =>
+      (
+        await (
+          await rpc(token, "tools/call", {
+            name,
+            arguments: { projectUrl: url, assetId },
+          })
+        ).json()
+      ).result;
+    expect(await imageTool("read_image", unlinked.id)).toMatchObject({
+      isError: true,
+    });
+    expect(
+      await imageTool("get_image_download_link", unlinked.id),
+    ).toMatchObject({ isError: true });
+    const imageNode = {
+      kind: "image" as const,
+      id: randomUUID(),
+      assetId: unlinked.id,
+      label: "Linked upload",
+      x: 0,
+      y: 0,
+      width: 128,
+      height: 128,
+    };
+    await canvas.save(f.principal, other.id, {
+      revision: 1,
+      requestKey: randomUUID(),
+      placements: [],
+      document: { ...emptyCanvas(), nodes: [imageNode] },
+    });
+    expect(
+      await imageTool("read_image", unlinked.id, projectUrl),
+    ).toMatchObject({ isError: true });
+    expect(
+      await imageTool("read_image", unlinked.id, otherUrl, third),
+    ).toMatchObject({ isError: true });
+    const preview = await imageTool("read_image", unlinked.id);
+    expect(preview).toMatchObject({
+      content: [{ type: "image", mimeType: "image/webp" }],
+    });
+    expect(preview).not.toHaveProperty("structuredContent");
+    expect(
+      Buffer.from(preview.content[0].data, "base64").subarray(8, 12).toString(),
+    ).toBe("WEBP");
+    const { url: downloadUrl, expiresAt } = (
+      await imageTool("get_image_download_link", unlinked.id)
+    ).structuredContent;
+    const download = await app.request(downloadUrl);
+    expect(download.status).toBe(200);
+    expect(download.headers.get("Cache-Control")).toBe("private, no-store");
+    expect(download.headers.get("Content-Disposition")).toMatch(/^attachment;/);
+    expect(Buffer.from(await download.arrayBuffer())).toEqual(f.png);
+    const tampered = new URL(downloadUrl);
+    tampered.pathname = tampered.pathname.replace(unlinked.id, randomUUID());
+    expect((await app.request(tampered)).status).toBe(404);
+    const shorterExpiry = new URL(downloadUrl);
+    shorterExpiry.searchParams.set(
+      "expires",
+      String(Date.parse(expiresAt) / 1000 - 10),
+    );
+    expect((await app.request(shorterExpiry)).status).toBe(404);
+    const clock = vi.spyOn(Date, "now").mockReturnValue(Date.parse(expiresAt));
+    try {
+      expect((await app.request(downloadUrl)).status).toBe(404);
+    } finally {
+      clock.mockRestore();
+    }
+
     const { token: replacement } = await (
       await accountChange({ action: "issue", allowCanvasWrite: true })
     ).json();
     expect((await read(accountToken)).status).toBe(401);
+    expect((await app.request(downloadUrl)).status).toBe(404);
     expect((await read(third)).status).toBe(200);
     expect(
       (await accountChange({ action: "revoke" }, issuedGrant.id)).status,

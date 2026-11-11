@@ -304,7 +304,7 @@ test("generates three project images through MCP and places them once on an open
   const token = await dialog.getByLabel("账号访问令牌").inputValue();
   await page.keyboard.press("Escape");
   await expect(dialog).not.toBeVisible();
-  async function call(name: string, args: object = {}) {
+  async function call(name: string, args: object = {}, image = false) {
     const response = await page.request.post("/mcp", {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -323,7 +323,7 @@ test("generates three project images through MCP and places them once on an open
     expect(response.ok()).toBe(true);
     const { result } = await response.json();
     expect(result.isError, result.content?.[0]?.text).not.toBe(true);
-    return result.structuredContent;
+    return image ? result : result.structuredContent;
   }
   const snapshot = await call("read_canvas");
   expect(snapshot.nodes[0].assetId).toBe(source.id);
@@ -349,6 +349,18 @@ test("generates three project images through MCP and places them once on an open
   const complete = await status();
   expect(complete.outputs).toHaveLength(3);
   expect(complete.used).toBe(3);
+  const preview = await call(
+    "read_image",
+    { assetId: complete.outputs[1].assetId },
+    true,
+  );
+  expect(preview).not.toHaveProperty("structuredContent");
+  expect(preview.content).toMatchObject([
+    { type: "image", mimeType: "image/webp" },
+  ]);
+  expect(
+    Buffer.from(preview.content[0].data, "base64").subarray(8, 12).toString(),
+  ).toBe("WEBP");
   const pending = await (
     await page.request.get(`/api/projects/${id}/canvas/outputs`)
   ).json();

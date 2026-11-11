@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type pg from "pg";
 import type {
   ExternalAgentGrant,
@@ -20,6 +20,20 @@ type GrantRow = {
   scopes: ExternalAgentScope[];
 };
 
+const imageDownloadLifetime = 5 * 60;
+
+function imageDownloadSignature(
+  key: Buffer,
+  tokenHash: string,
+  projectId: string,
+  assetId: string,
+  expires: number,
+) {
+  return createHmac("sha256", key)
+    .update(`${tokenHash}:${projectId}:${assetId}:${expires}`)
+    .digest();
+}
+
 function grant(row: GrantRow): ExternalAgentGrant {
   return {
     // Derive a public identifier without exposing the bearer credential or its stored digest.
@@ -32,9 +46,18 @@ function grant(row: GrantRow): ExternalAgentGrant {
 
 export class PgExternalAgentTokens {
   private readonly transactions: PgTransactions;
+  private readonly imageDownloadKey: Buffer;
 
-  constructor(private readonly pool: pg.Pool) {
+  constructor(
+    private readonly pool: pg.Pool,
+    masterKey: string,
+  ) {
+    if (!/^[a-f0-9]{64}$/.test(masterKey))
+      throw new Error("INVALID_MASTER_KEY");
     this.transactions = new PgTransactions(pool);
+    this.imageDownloadKey = createHmac("sha256", Buffer.from(masterKey, "hex"))
+      .update("tuyile:mcp:image-download:v1")
+      .digest();
   }
 
   async status(principal: Principal, projectId: string) {
@@ -203,6 +226,93 @@ export class PgExternalAgentTokens {
     );
   }
 
+  async requireImage(access: ExternalAgentAccess, assetId: string) {
+    return this.transactions.read(async (client) => {
+      const grantExpires = await requireExternalAgentScope(
+        client,
+        access,
+        "canvas:read",
+      );
+      await requireProjectAssets(
+        client,
+        access.principal.workspaceId,
+        access.projectId,
+        [assetId],
+      );
+      return grantExpires;
+    });
+  }
+
+  async issueImageDownload(access: ExternalAgentAccess, assetId: string) {
+    const grantExpires = await this.requireImage(access, assetId);
+    const expires = Math.min(
+      Math.floor(Date.now() / 1000) + imageDownloadLifetime,
+      Math.floor(grantExpires.getTime() / 1000),
+    );
+    return {
+      expires,
+      signature: imageDownloadSignature(
+        this.imageDownloadKey,
+        access.tokenHash,
+        access.projectId,
+        assetId,
+        expires,
+      ).toString("hex"),
+    };
+  }
+
+  async verifyImageDownload(
+    projectId: string,
+    assetId: string,
+    expires: number,
+    signature: string,
+  ) {
+    const now = Math.floor(Date.now() / 1000);
+    if (expires <= now || expires > now + imageDownloadLifetime)
+      throw new AppError("NOT_FOUND", 404);
+    const received = Buffer.from(signature, "hex");
+    return this.transactions.read(async (client) => {
+      const { rows } = await client.query<{
+        token_hash: string;
+        principal: Principal;
+      }>(
+        `SELECT t.token_hash,
+           json_build_object('id',u.id,'username',u.username,'role',u.role,
+             'enabled',u.enabled,'activated',true,'workspaceId',t.workspace_id,
+             'executionVersion',u.execution_version) AS principal
+         FROM projects p JOIN external_agent_tokens t ON t.workspace_id=p.workspace_id
+         JOIN users u ON u.id=t.user_id
+         WHERE p.id=$1 AND p.deleted_at IS NULL AND (t.project_id IS NULL OR t.project_id=p.id)
+           AND t.token_hash IS NOT NULL AND 'canvas:read'=ANY(t.scopes)
+           AND t.expires_at>clock_timestamp() AND t.execution_version=u.execution_version
+           AND u.enabled AND u.password_hash IS NOT NULL AND NOT u.must_change_password`,
+        [projectId],
+      );
+      const grant = rows.find((row) => {
+        const expected = imageDownloadSignature(
+          this.imageDownloadKey,
+          row.token_hash,
+          projectId,
+          assetId,
+          expires,
+        );
+        return (
+          received.length === expected.length &&
+          timingSafeEqual(received, expected)
+        );
+      });
+      if (!grant || expires <= Math.floor(Date.now() / 1000))
+        throw new AppError("NOT_FOUND", 404);
+      await requireProjectAssets(
+        client,
+        grant.principal.workspaceId,
+        projectId,
+        [assetId],
+      );
+      return grant.principal;
+    });
+  }
+
   async authenticate(authorization: string | undefined) {
     const token = /^Bearer (tuyile_[\w-]{43})$/i.exec(authorization ?? "")?.[1];
     if (!token) return null;
@@ -235,8 +345,8 @@ export async function requireExternalAgentScope(
   access: ExternalAgentAccess,
   scope: ExternalAgentScope,
 ) {
-  const { rows } = await client.query(
-    `SELECT 1 FROM external_agent_tokens t JOIN users u ON u.id=t.user_id
+  const { rows } = await client.query<{ expires_at: Date }>(
+    `SELECT t.expires_at FROM external_agent_tokens t JOIN users u ON u.id=t.user_id
      WHERE (t.project_id IS NULL OR t.project_id=$1) AND t.user_id=$2
        AND t.token_hash=$3 AND $4=ANY(t.scopes) AND t.workspace_id=$5
        AND t.expires_at>clock_timestamp() AND t.execution_version=u.execution_version
@@ -251,6 +361,7 @@ export async function requireExternalAgentScope(
   );
   if (!rows.length)
     throw new AppError("EXTERNAL_AGENT_PERMISSION_REQUIRED", 403);
+  return rows[0].expires_at;
 }
 
 export async function requireProjectAssets(
