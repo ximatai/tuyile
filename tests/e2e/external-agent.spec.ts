@@ -71,11 +71,42 @@ test("opens the current canvas from the Codex handoff and manages project access
     dialog.getByText("已签发 · 待验证", { exact: true }),
   ).toBeVisible();
   expect((await call(token, "read_canvas")).status()).toBe(401);
+  const configuredToken = await dialog.getByLabel("项目访问令牌").inputValue();
+  expect((await call(configuredToken, "read_canvas")).ok()).toBe(true);
+  await dialog.getByRole("button", { name: "继续验证" }).click();
+
+  // Another tab can replace and verify the project's grant before this tab checks.
+  const replacement = await page.request.post(
+    `/api/projects/${id}/external-agent`,
+    {
+      headers: { Origin: baseURL!, "X-CSRF-Token": csrfToken },
+      data: { action: "issue", allowCanvasWrite: true },
+    },
+  );
+  expect(replacement.ok()).toBe(true);
+  const { token: replacementToken } = await replacement.json();
+  expect((await call(configuredToken, "read_canvas")).status()).toBe(401);
+  const replacementRead = await call(replacementToken, "read_canvas");
+  expect(
+    (await replacementRead.json()).result.structuredContent.projectId,
+  ).toBe(id);
+  await dialog.getByRole("button", { name: "检查连接" }).click();
+  await expect(
+    dialog.getByRole("heading", { name: "需要重新配置 Codex" }),
+  ).toBeVisible();
+  await expect(
+    dialog.getByRole("heading", { name: "此项目已验证连接" }),
+  ).toHaveCount(0);
+  await expect(dialog.getByLabel("项目访问令牌")).toHaveCount(0);
+  await expect(
+    dialog.getByRole("checkbox", { name: "允许编辑画布" }),
+  ).toBeChecked();
+
   await dialog.getByRole("button", { name: "撤销令牌" }).click();
   await expect(
     dialog.getByRole("heading", { name: "授权 Codex 访问此项目" }),
   ).toBeVisible();
-  expect((await call(token, "read_canvas")).status()).toBe(401);
+  expect((await call(replacementToken, "read_canvas")).status()).toBe(401);
   await dialog.getByRole("checkbox", { name: "允许编辑画布" }).check();
   await dialog.getByRole("button", { name: "签发令牌并继续" }).click();
   const writableToken = await dialog.getByLabel("项目访问令牌").inputValue();
@@ -309,8 +340,20 @@ test("generates three project images through MCP and places them once on an open
     state: "succeeded",
     used: 3,
   });
+  // Serve an active snapshot once so the task detail must refresh on its own.
+  await page.route(
+    `**/api/images/tasks/${queued.taskId}`,
+    async (route) => {
+      const response = await route.fetch();
+      const task = await response.json();
+      await route.fulfill({ response, json: { ...task, state: "running" } });
+    },
+    { times: 1 },
+  );
   await dialog.getByRole("button", { name: "查看任务" }).click();
   await expect(dialog.getByText(queued.taskId, { exact: true })).toBeVisible();
+  await expect(dialog.getByText("执行中", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("已完成", { exact: true })).toBeVisible();
   await dialog.getByRole("button", { name: "返回活动记录" }).click();
   await dialog.getByRole("button", { name: "撤销 v2" }).click();
   await page.getByRole("button", { name: "确认", exact: true }).click();

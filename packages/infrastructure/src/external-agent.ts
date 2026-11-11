@@ -14,6 +14,7 @@ import { security } from "./security.js";
 import { PgTransactions } from "./transactions.js";
 
 type GrantRow = {
+  token_hash: string;
   expires_at: Date;
   verified_at: Date | null;
   scopes: ExternalAgentScope[];
@@ -21,6 +22,8 @@ type GrantRow = {
 
 function grant(row: GrantRow): ExternalAgentGrant {
   return {
+    // Derive a public identifier without exposing the bearer credential or its stored digest.
+    id: security.digest(`external-agent-grant:${row.token_hash}`),
     expiresAt: row.expires_at.toISOString(),
     verifiedAt: row.verified_at?.toISOString() ?? null,
     scopes: row.scopes,
@@ -36,7 +39,7 @@ export class PgExternalAgentTokens {
 
   async status(principal: Principal, projectId: string) {
     const { rows } = await this.pool.query<GrantRow>(
-      `SELECT expires_at,scopes,verified_at FROM external_agent_tokens
+      `SELECT token_hash,expires_at,scopes,verified_at FROM external_agent_tokens
        WHERE project_id=$1 AND user_id=$2 AND workspace_id=$3
          AND execution_version=$4 AND expires_at>now()`,
       [
@@ -66,7 +69,7 @@ export class PgExternalAgentTokens {
            AND p.deleted_at IS NULL AND u.enabled AND NOT u.must_change_password
          ON CONFLICT(project_id) DO UPDATE SET token_hash=excluded.token_hash,
            execution_version=excluded.execution_version,expires_at=excluded.expires_at,scopes=excluded.scopes,verified_at=NULL
-         RETURNING expires_at,scopes,verified_at`,
+         RETURNING token_hash,expires_at,scopes,verified_at`,
           [
             projectId,
             principal.id,

@@ -9,6 +9,7 @@ export const externalAgentScope = z.enum([
 export type ExternalAgentScope = z.infer<typeof externalAgentScope>;
 
 export interface ExternalAgentGrant {
+  id: string;
   expiresAt: string;
   verifiedAt: string | null;
   scopes: ExternalAgentScope[];

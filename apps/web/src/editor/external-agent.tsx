@@ -68,6 +68,7 @@ bearer_token_env_var = "${tokenVariable}"`;
   const [allowCanvasWrite, setAllowCanvasWrite] = useState(false);
   const [allowGeneration, setAllowGeneration] = useState(false);
   const [token, setToken] = useState("");
+  const [grantReplaced, setGrantReplaced] = useState(false);
   const [step, setStep] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -80,6 +81,8 @@ bearer_token_env_var = "${tokenVariable}"`;
     enabled: tab === "activity" && !!taskId,
     queryFn: ({ signal }) =>
       client(csrf)<ImageTask>(`/images/tasks/${taskId}`, undefined, signal),
+    refetchInterval: ({ state: { data } }) =>
+      data?.state === "queued" || data?.state === "running" ? 1500 : false,
   });
   const [offset, setOffset] = useState(0);
   const activityKey = state.key("external-agent-activity", projectId);
@@ -131,6 +134,7 @@ bearer_token_env_var = "${tokenVariable}"`;
       );
       setConnection(response);
       setToken(response.token ?? "");
+      setGrantReplaced(false);
       setStep(response.grant ? 1 : 0);
       if (!response.grant) {
         setAllowCanvasWrite(false);
@@ -209,7 +213,14 @@ bearer_token_env_var = "${tokenVariable}"`;
         setAllowCanvasWrite(false);
         setAllowGeneration(false);
         setStep(0);
+        setGrantReplaced(false);
         setFeedback("令牌已失效，请重新签发。");
+      } else if (latest.grant.id !== connection?.grant?.id) {
+        setToken("");
+        setAllowCanvasWrite(latest.grant.scopes.includes("canvas:write"));
+        setAllowGeneration(latest.grant.scopes.includes("images:generate"));
+        setGrantReplaced(true);
+        setStep(0);
       } else if (!latest.grant.verifiedAt) {
         setFeedback("还未收到读取请求。请先在 Codex 发送验证提示。");
       } else {
@@ -223,7 +234,7 @@ bearer_token_env_var = "${tokenVariable}"`;
   }
 
   const grant = connection?.grant;
-  const verified = !!grant?.verifiedAt;
+  const verified = !!grant?.verifiedAt && !grantReplaced;
   const configBlock = (
     <>
       <Input.TextArea
@@ -324,11 +335,19 @@ bearer_token_env_var = "${tokenVariable}"`;
       {step === 0 && (
         <div className="external-agent-card external-agent-stack">
           <div>
-            <h3>{grant ? "更换项目令牌" : "授权 Codex 访问此项目"}</h3>
+            <h3>
+              {grantReplaced
+                ? "需要重新配置 Codex"
+                : grant
+                  ? "更换项目令牌"
+                  : "授权 Codex 访问此项目"}
+            </h3>
             <p>
-              {grant
-                ? "签发新令牌后，旧令牌立即失效。"
-                : "默认只允许读取当前画布。按需要开放更多操作。"}
+              {grantReplaced
+                ? "此项目的令牌已在其他页面换发。请签发新令牌并重新配置 Codex。"
+                : grant
+                  ? "签发新令牌后，旧令牌立即失效。"
+                  : "默认只允许读取当前画布。按需要开放更多操作。"}
             </p>
           </div>
           <div className="external-agent-permissions">
@@ -408,7 +427,7 @@ bearer_token_env_var = "${tokenVariable}"`;
       <div className="external-agent-actions">
         {step === 0 ? (
           <>
-            {grant && (
+            {grant && !grantReplaced && (
               <Button disabled={busy} onClick={() => setStep(1)}>
                 返回
               </Button>
@@ -450,7 +469,11 @@ bearer_token_env_var = "${tokenVariable}"`;
       {grant && (
         <div className="external-agent-grant">
           <Tag color={verified ? "success" : "blue"}>
-            {verified ? "已验证" : "已签发 · 待验证"}
+            {grantReplaced
+              ? "令牌已换发"
+              : verified
+                ? "已验证"
+                : "已签发 · 待验证"}
           </Tag>
           <span>
             {grant.scopes.map((scope) => scopeLabels[scope]).join("、")}
