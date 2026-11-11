@@ -255,9 +255,11 @@ export {
   Descriptions,
   Empty,
   Tabs,
+  Steps,
   Form,
   ConfigProvider as ControlScope,
 } from "antd";
+export { Alert };
 export { Select, AutoComplete } from "antd";
 export {
   Drawer,

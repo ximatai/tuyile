@@ -77,6 +77,7 @@ export type CanvasSave = z.infer<typeof canvasSave>;
 export interface CanvasSnapshot {
   document: CanvasDocument;
   revision: number;
+  externalEdit?: boolean;
 }
 export interface CanvasOutput {
   outputId: string;

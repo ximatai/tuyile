@@ -327,7 +327,12 @@ function referenceConflictHelpers(
   canvas: ReturnType<Page["locator"]>,
   editor: ReturnType<Page["locator"]>,
 ) {
+  const canvasRead = "**/api/projects/*/canvas";
   async function editFromOtherTab(text: string) {
+    // Keep this tab's preview stale until the server rejects the stale submission.
+    await page.route(canvasRead, (route) =>
+      route.request().method() === "GET" ? route.abort() : route.fallback(),
+    );
     await expect(page.locator(".canvas-status")).toContainText("画布已保存");
     const other = await page.context().newPage();
     try {
@@ -348,11 +353,15 @@ function referenceConflictHelpers(
     }
   }
   async function reloadPreview() {
-    await canvas.getByRole("button", { name: "重新加载", exact: true }).click();
+    await expect(
+      canvas.getByRole("button", { name: "另存当前修改", exact: true }),
+    ).toHaveCount(0);
+    await page.unroute(canvasRead);
+    await canvas.getByRole("button", { name: "加载新版", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "请确认", exact: true });
     await dialog.getByRole("button", { name: "确认", exact: true }).click();
     await expect(
-      canvas.getByRole("button", { name: "重新加载", exact: true }),
+      canvas.getByRole("button", { name: "加载新版", exact: true }),
     ).toHaveCount(0);
   }
 

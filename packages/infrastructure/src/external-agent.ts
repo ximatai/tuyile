@@ -13,10 +13,18 @@ import {
 import { security } from "./security.js";
 import { PgTransactions } from "./transactions.js";
 
-type GrantRow = { expires_at: Date; scopes: ExternalAgentScope[] };
+type GrantRow = {
+  expires_at: Date;
+  verified_at: Date | null;
+  scopes: ExternalAgentScope[];
+};
 
 function grant(row: GrantRow): ExternalAgentGrant {
-  return { expiresAt: row.expires_at.toISOString(), scopes: row.scopes };
+  return {
+    expiresAt: row.expires_at.toISOString(),
+    verifiedAt: row.verified_at?.toISOString() ?? null,
+    scopes: row.scopes,
+  };
 }
 
 export class PgExternalAgentTokens {
@@ -28,7 +36,7 @@ export class PgExternalAgentTokens {
 
   async status(principal: Principal, projectId: string) {
     const { rows } = await this.pool.query<GrantRow>(
-      `SELECT expires_at,scopes FROM external_agent_tokens
+      `SELECT expires_at,scopes,verified_at FROM external_agent_tokens
        WHERE project_id=$1 AND user_id=$2 AND workspace_id=$3
          AND execution_version=$4 AND expires_at>now()`,
       [
@@ -57,8 +65,8 @@ export class PgExternalAgentTokens {
          WHERE p.id=$1 AND u.id=$2 AND p.workspace_id=$3 AND u.execution_version=$4
            AND p.deleted_at IS NULL AND u.enabled AND NOT u.must_change_password
          ON CONFLICT(project_id) DO UPDATE SET token_hash=excluded.token_hash,
-           execution_version=excluded.execution_version,expires_at=excluded.expires_at,scopes=excluded.scopes
-         RETURNING expires_at,scopes`,
+           execution_version=excluded.execution_version,expires_at=excluded.expires_at,scopes=excluded.scopes,verified_at=NULL
+         RETURNING expires_at,scopes,verified_at`,
           [
             projectId,
             principal.id,
@@ -129,6 +137,13 @@ export class PgExternalAgentTokens {
     });
   }
 
+  async verifyCanvasRead(tokenHash: string) {
+    await this.pool.query(
+      "UPDATE external_agent_tokens SET verified_at=now() WHERE token_hash=$1 AND verified_at IS NULL AND expires_at>now()",
+      [tokenHash],
+    );
+  }
+
   async authenticate(authorization: string | undefined) {
     const token = /^Bearer (tuyile_[\w-]{43})$/i.exec(authorization ?? "")?.[1];
     if (!token) return null;
@@ -136,9 +151,10 @@ export class PgExternalAgentTokens {
     const { rows } = await this.pool.query<{
       principal: Principal;
       projectId: string;
+      verified: boolean;
       scopes: ExternalAgentScope[];
     }>(
-      `SELECT t.project_id AS "projectId",t.scopes,
+      `SELECT t.project_id AS "projectId",t.scopes,t.verified_at IS NOT NULL AS verified,
          json_build_object('id',u.id,'username',u.username,'role',u.role,
            'enabled',u.enabled,'activated',true,'workspaceId',t.workspace_id,
            'executionVersion',u.execution_version) AS principal

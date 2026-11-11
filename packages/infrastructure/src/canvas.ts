@@ -222,12 +222,19 @@ class PgCanvasRepository extends PgCreationContext implements CanvasRepository {
     await this.project(p, project);
     const r = (
       await this.c.query(
-        "SELECT document,revision FROM project_documents WHERE project_id=$1",
+        `SELECT d.document,d.revision,(u.revision IS NOT NULL) AS external_edit
+         FROM project_documents d LEFT JOIN external_agent_canvas_undo u
+           ON u.project_id=d.project_id AND u.revision=d.revision
+         WHERE d.project_id=$1`,
         [project],
       )
     ).rows[0];
     return r
-      ? { document: canvasDocument.parse(r.document), revision: r.revision }
+      ? {
+          document: canvasDocument.parse(r.document),
+          revision: r.revision,
+          ...(r.external_edit ? { externalEdit: true } : {}),
+        }
       : { document: emptyCanvas(), revision: 0 };
   }
   async editExternal(access: ExternalAgentAccess, input: ExternalCanvasEdit) {

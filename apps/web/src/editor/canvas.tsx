@@ -60,6 +60,7 @@ import {
   Bot,
 } from "lucide-react";
 import {
+  Alert,
   Button,
   Dropdown,
   Image,
@@ -796,6 +797,7 @@ function CanvasView({
   });
   const surface = useRef<HTMLElement>(null);
   const [movingNode, setMovingNode] = useState(false);
+  const [syncedRevision, setSyncedRevision] = useState<number>();
   const remoteRevision = outputs.data?.revision ?? snap.revision;
   const remoteCanvas = useQuery({
     queryKey: state.key("canvas-remote", projectId, String(remoteRevision)),
@@ -808,8 +810,12 @@ function CanvasView({
     const editing =
       active?.matches(".react-flow__node input, .react-flow__node textarea") &&
       surface.current?.contains(active);
-    if (remoteCanvas.data && !editing && !movingNode)
+    if (remoteCanvas.data && !editing && !movingNode) {
+      const before = store.get().revision;
       store.receiveRemote(remoteCanvas.data);
+      if (remoteCanvas.data.externalEdit && store.get().revision > before)
+        setSyncedRevision(remoteCanvas.data.revision);
+    }
   }, [
     remoteCanvas.data,
     outputs.dataUpdatedAt,
@@ -818,6 +824,11 @@ function CanvasView({
     snap.revision,
     store,
   ]);
+  useEffect(() => {
+    if (syncedRevision === undefined) return;
+    const timer = setTimeout(() => setSyncedRevision(undefined), 5000);
+    return () => clearTimeout(timer);
+  }, [syncedRevision]);
   const sources = useQuery({
     queryKey: state.key("canvas-sources", projectId, String(snap.revision)),
     queryFn: ({ signal }) =>
@@ -1167,7 +1178,10 @@ function CanvasView({
     store.edit({ ...snap.document, nodes: next });
   }
   async function reload() {
-    if (!(await confirm("重新加载将放弃本地尚未保存的画布修改。"))) return;
+    const message = store.get().dirty
+      ? "加载新版将放弃本地尚未保存的画布修改。"
+      : "加载服务器上的最新画布？";
+    if (!(await confirm(message))) return;
     setOperationError("");
     setCopyMessage("");
     try {
@@ -1363,13 +1377,31 @@ function CanvasView({
           松开以将图片上传到画布（每批最多20张）
         </div>
       )}
-      <div className="canvas-status" role="status">
-        {snap.saving ? "正在保存…" : snap.dirty ? "有未保存修改" : "画布已保存"}{" "}
-        · v{snap.revision}
-      </div>
-      <div className="canvas-external-agent">
-        <Button onClick={() => setExternalAgentOpen(true)}>
-          在 Codex 中继续
+      <div className="canvas-topbar">
+        <div className="canvas-status" role="status">
+          <span
+            className={
+              snap.dirty || snap.saving
+                ? "canvas-status-dot pending"
+                : "canvas-status-dot"
+            }
+          />
+          <span>
+            {snap.saving
+              ? "正在保存…"
+              : snap.dirty
+                ? "有未保存修改"
+                : syncedRevision === snap.revision
+                  ? "已同步外部编辑"
+                  : "画布已保存"}
+          </span>
+          <span className="canvas-status-revision">v{snap.revision}</span>
+        </div>
+        <Button
+          className="canvas-codex-button"
+          onClick={() => setExternalAgentOpen(true)}
+        >
+          <Bot size={16} />在 Codex 中继续
         </Button>
       </div>
       {externalAgentOpen && (
@@ -1384,28 +1416,63 @@ function CanvasView({
           <Notice>{copyMessage}</Notice>
         </div>
       )}
-      {(snap.error || operationError || outputs.error) && (
-        <div className="canvas-error">
-          <Notice error>
-            {operationError || snap.error || outputs.error?.message}
-          </Notice>
-          {snap.error && (
-            <div className="actions">
-              <Button
-                onClick={() => void store.flush().catch(() => {})}
-                disabled={snap.conflict}
-              >
-                重试保存
-              </Button>
-              <Button disabled={copyBusy} onClick={() => void reload()}>
-                重新加载
-              </Button>
-              <Button disabled={copyBusy} onClick={() => void copy()}>
-                另存副本
-              </Button>
-            </div>
-          )}
+      {snap.conflict ? (
+        <div className="canvas-error canvas-conflict">
+          <Alert
+            type="warning"
+            showIcon
+            title="画布已有新版本"
+            description={
+              <div className="canvas-conflict-content">
+                <span>
+                  {snap.dirty
+                    ? "当前修改尚未保存。加载新版会放弃这些修改。"
+                    : snap.error}
+                </span>
+                {operationError && <Notice error>{operationError}</Notice>}
+                <div className="actions">
+                  {snap.dirty && (
+                    <Button
+                      className="primary"
+                      disabled={copyBusy}
+                      onClick={() => void copy()}
+                    >
+                      另存当前修改
+                    </Button>
+                  )}
+                  <Button
+                    className={snap.dirty ? undefined : "primary"}
+                    disabled={copyBusy}
+                    onClick={() => void reload()}
+                  >
+                    加载新版
+                  </Button>
+                </div>
+              </div>
+            }
+          />
         </div>
+      ) : (
+        (snap.error || operationError || outputs.error) && (
+          <div className="canvas-error">
+            <Notice error>
+              {operationError || snap.error || outputs.error?.message}
+            </Notice>
+            {snap.error && (
+              <div className="actions">
+                <Button onClick={() => void store.flush().catch(() => {})}>
+                  重试保存
+                </Button>
+                <Button disabled={copyBusy} onClick={() => void reload()}>
+                  重新加载
+                </Button>
+                <Button disabled={copyBusy} onClick={() => void copy()}>
+                  另存副本
+                </Button>
+              </div>
+            )}
+          </div>
+        )
       )}
       {svgRevisions && (
         <SvgRevisions

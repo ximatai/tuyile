@@ -10,6 +10,7 @@ export type ExternalAgentScope = z.infer<typeof externalAgentScope>;
 
 export interface ExternalAgentGrant {
   expiresAt: string;
+  verifiedAt: string | null;
   scopes: ExternalAgentScope[];
 }
 export interface ExternalAgentConnection {

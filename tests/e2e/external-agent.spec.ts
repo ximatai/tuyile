@@ -19,19 +19,18 @@ test("opens the current canvas from the Codex handoff and manages project access
   await page.goto(`/projects/${id}`);
   await page.getByRole("button", { name: "在 Codex 中继续" }).click();
   const dialog = page.getByRole("dialog", { name: "在 Codex 中继续" });
+  await expect(
+    dialog.getByRole("heading", { name: "授权 Codex 访问此项目" }),
+  ).toBeVisible();
+  await dialog.getByRole("button", { name: "签发令牌并继续" }).click();
   await expect(dialog.getByLabel("Codex MCP 配置")).toHaveValue(
     new RegExp(`${baseURL}/mcp`),
   );
   await expect(dialog.getByLabel("Codex MCP 配置")).toHaveValue(
     new RegExp(`tuyile_${id.replaceAll("-", "")}`),
   );
-  await dialog.getByRole("button", { name: "签发令牌" }).click();
   const token = await dialog.getByLabel("项目访问令牌").inputValue();
   expect(token).toMatch(/^tuyile_/);
-  await dialog.getByRole("button", { name: "复制给 Codex" }).click();
-  const prompt = await page.evaluate(() => navigator.clipboard.readText());
-  expect(prompt).toContain(`${baseURL}/projects/${id}`);
-  expect(prompt).not.toContain(token);
   const call = (token: string, name: string, args: object = {}) =>
     page.request.post("/mcp", {
       headers: {
@@ -48,19 +47,37 @@ test("opens the current canvas from the Codex handoff and manages project access
         },
       },
     });
+  await dialog.getByRole("button", { name: "继续验证" }).click();
+  await dialog.getByRole("button", { name: "检查连接" }).click();
+  await expect(dialog.getByText(/还未收到读取请求/)).toBeVisible();
   expect(
     (await (await call(token, "read_canvas")).json()).result.structuredContent,
   ).toMatchObject({
     projectId: id,
     revision: 0,
   });
+  await dialog.getByRole("button", { name: "检查连接" }).click();
+  await expect(
+    dialog.getByRole("heading", { name: "此项目已验证连接" }),
+  ).toBeVisible();
+  await dialog.getByRole("button", { name: "复制给 Codex" }).click();
+  const prompt = await page.evaluate(() => navigator.clipboard.readText());
+  expect(prompt).toContain(`${baseURL}/projects/${id}`);
+  expect(prompt).not.toContain(token);
+  await dialog.getByRole("button", { name: "配置与令牌管理" }).click();
+  await dialog.getByRole("button", { name: "更换权限或令牌" }).click();
+  await dialog.getByRole("button", { name: "替换令牌并继续" }).click();
+  await expect(
+    dialog.getByText("已签发 · 待验证", { exact: true }),
+  ).toBeVisible();
+  expect((await call(token, "read_canvas")).status()).toBe(401);
   await dialog.getByRole("button", { name: "撤销令牌" }).click();
   await expect(
-    dialog.getByText("当前项目尚未授权。", { exact: false }),
+    dialog.getByRole("heading", { name: "授权 Codex 访问此项目" }),
   ).toBeVisible();
   expect((await call(token, "read_canvas")).status()).toBe(401);
   await dialog.getByRole("checkbox", { name: "允许编辑画布" }).check();
-  await dialog.getByRole("button", { name: "签发令牌" }).click();
+  await dialog.getByRole("button", { name: "签发令牌并继续" }).click();
   const writableToken = await dialog.getByLabel("项目访问令牌").inputValue();
   await page.keyboard.press("Escape");
   await expect(dialog).not.toBeVisible();
@@ -104,7 +121,9 @@ test("opens the current canvas from the Codex handoff and manages project access
   await expect(
     page.getByText("本地尚未提交的标题", { exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: "另存副本" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "另存当前修改" }),
+  ).toBeVisible();
   const serverCanvas = await (
     await page.request.get(`/api/projects/${id}/canvas`)
   ).json();
@@ -173,7 +192,7 @@ test("generates three project images through MCP and places them once on an open
   await dialog
     .getByRole("checkbox", { name: "允许提交生图", exact: false })
     .check();
-  await dialog.getByRole("button", { name: "签发令牌" }).click();
+  await dialog.getByRole("button", { name: "签发令牌并继续" }).click();
   const token = await dialog.getByLabel("项目访问令牌").inputValue();
   await page.keyboard.press("Escape");
   await expect(dialog).not.toBeVisible();
@@ -265,13 +284,11 @@ test("generates three project images through MCP and places them once on an open
     operations,
   };
   await page.getByRole("button", { name: "在 Codex 中继续" }).click();
-  await dialog.getByRole("button", { name: "项目活动记录" }).click();
+  await dialog.getByRole("tab", { name: "项目活动记录" }).click();
   await expect(
     dialog.getByRole("row").filter({ hasText: "外部 Agent 提交生图" }),
-  ).toContainText(queued.taskId);
-  await expect(
-    dialog.getByRole("button", { name: "撤销最近一次外部编辑" }),
-  ).toHaveCount(0);
+  ).toContainText("查看任务");
+  await expect(dialog.getByRole("button", { name: "撤销 v2" })).toHaveCount(0);
   expect((await call("edit_canvas", edit)).revision).toBe(2);
   expect((await call("edit_canvas", edit)).revision).toBe(2);
   await expect(page.locator(".react-flow__node-image")).toHaveCount(4);
@@ -282,7 +299,7 @@ test("generates three project images through MCP and places them once on an open
   ).toHaveCount(1);
   await expect(
     dialog.getByRole("row").filter({ hasText: "外部 Agent 提交生图" }),
-  ).toContainText(queued.taskId);
+  ).toContainText("查看任务");
   const tasks = await (
     await page.request.get(`/api/images/tasks?projectId=${id}`)
   ).json();
@@ -292,7 +309,10 @@ test("generates three project images through MCP and places them once on an open
     state: "succeeded",
     used: 3,
   });
-  await dialog.getByRole("button", { name: "撤销最近一次外部编辑" }).click();
+  await dialog.getByRole("button", { name: "查看任务" }).click();
+  await expect(dialog.getByText(queued.taskId, { exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "返回活动记录" }).click();
+  await dialog.getByRole("button", { name: "撤销 v2" }).click();
   await page.getByRole("button", { name: "确认", exact: true }).click();
   await expect(
     dialog.getByRole("row").filter({ hasText: "撤销外部编辑" }),

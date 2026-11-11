@@ -173,6 +173,7 @@ export function externalAgentRoutes(
             access.principal,
             access.projectId,
           );
+          if (!access.verified) await tokens.verifyCanvasRead(access.tokenHash);
           const nodes = snapshot.document.nodes.slice(offset, offset + limit);
           return {
             projectId: project.id,
