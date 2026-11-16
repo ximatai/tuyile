@@ -6,7 +6,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
   externalAgentTokenLifetime,
-  externalAgentTokenLifetimeDays,
+  externalAgentTokenLifetimes,
   externalCanvasEdit,
   externalCanvasUndo,
   id,
@@ -40,7 +40,7 @@ const accountGrantChange = z.discriminatedUnion("action", [
       allowGeneration: z.boolean().default(false),
       allowDownload: z.boolean().default(false),
       lifetimeDays: externalAgentTokenLifetime.default(
-        externalAgentTokenLifetimeDays[0],
+        externalAgentTokenLifetimes[0],
       ),
       expectedGrantId: grantId,
     })

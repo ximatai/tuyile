@@ -9,17 +9,15 @@ export const externalAgentScope = z.enum([
 ]);
 export type ExternalAgentScope = z.infer<typeof externalAgentScope>;
 
-export const externalAgentTokenLifetimeDays = [7, 30, 90, 365] as const;
-export const externalAgentTokenLifetime = z.literal(
-  externalAgentTokenLifetimeDays,
-);
+export const externalAgentTokenLifetimes = [7, 30, 90, 365, "unlimited"] as const;
+export const externalAgentTokenLifetime = z.literal(externalAgentTokenLifetimes);
 export type ExternalAgentTokenLifetime = z.infer<
   typeof externalAgentTokenLifetime
 >;
 
 export interface ExternalAgentGrant {
   id: string;
-  expiresAt: string;
+  expiresAt: string | null;
   verifiedAt: string | null;
   scopes: ExternalAgentScope[];
 }

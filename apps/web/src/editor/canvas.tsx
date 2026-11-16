@@ -858,7 +858,10 @@ function CanvasView({
   function openCodex() {
     setHandoffCopied(false);
     const grant = accountConnection.data?.grant;
-    if (grant?.verifiedAt && Date.parse(grant.expiresAt) > Date.now())
+    if (
+      grant?.verifiedAt &&
+      (grant.expiresAt === null || Date.parse(grant.expiresAt) > Date.now())
+    )
       void navigator.clipboard
         ?.writeText(codexProjectPrompt(state.session.user.id, projectId))
         .then(() => setHandoffCopied(true))

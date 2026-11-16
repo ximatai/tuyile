@@ -5,15 +5,15 @@ import {
   Input,
   Modal,
   Notice,
-  Select,
+  Radio,
   Steps,
   Tag,
   useConfirm,
 } from "@tuyile/ui";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
-  externalAgentTokenLifetimeDays,
+  externalAgentTokenLifetimes,
   type ExternalAgentAccountConnection,
   type ExternalAgentScope,
   type ExternalAgentTokenLifetime,
@@ -30,6 +30,10 @@ const scopeLabels = {
 };
 const accountConnectionPath = "/account/external-agent";
 const accountConnectionKey = "codex-account-connection";
+const lifetimeOptions = externalAgentTokenLifetimes.map((value) => ({
+  value,
+  label: value === "unlimited" ? "长期有效" : `${value} 天`,
+}));
 
 function codexConnectionName(accountId: string) {
   return `tuyile_account_${accountId.replaceAll("-", "")}`;
@@ -91,8 +95,9 @@ bearer_token_env_var = "${tokenVariable}"`;
     permissionsFromScopes([]),
   );
   const [lifetimeDays, setLifetimeDays] = useState<ExternalAgentTokenLifetime>(
-    externalAgentTokenLifetimeDays[0],
+    externalAgentTokenLifetimes[0],
   );
+  const lifetimeLabelId = useId();
   const [token, setToken] = useState("");
   const [grantReplaced, setGrantReplaced] = useState(false);
   const [step, setStep] = useState(0);
@@ -390,19 +395,16 @@ bearer_token_env_var = "${tokenVariable}"`;
               </span>
             </Checkbox>
           </div>
-          <label className="field">
-            <span>令牌有效期</span>
-            <Select
-              aria-label="令牌有效期"
+          <div className="field">
+            <span id={lifetimeLabelId}>令牌有效期</span>
+            <Radio.Group
+              aria-labelledby={lifetimeLabelId}
               disabled={busy}
               value={lifetimeDays}
-              options={externalAgentTokenLifetimeDays.map((days) => ({
-                value: days,
-                label: `${days} 天`,
-              }))}
-              onChange={setLifetimeDays}
+              options={lifetimeOptions}
+              onChange={(event) => setLifetimeDays(event.target.value)}
             />
-          </label>
+          </div>
         </div>
       )}
       {step === 1 && (
@@ -515,7 +517,9 @@ bearer_token_env_var = "${tokenVariable}"`;
             {grant.scopes.map((scope) => scopeLabels[scope]).join("、")}
           </span>
           <span>
-            有效至 {new Date(grant.expiresAt).toLocaleDateString("zh-CN")}
+            {grant.expiresAt === null
+              ? "长期有效"
+              : `有效至 ${new Date(grant.expiresAt).toLocaleDateString("zh-CN")}`}
           </span>
           {!verified && (
             <Button disabled={busy} onClick={() => void change("revoke")}>

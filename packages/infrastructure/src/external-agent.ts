@@ -14,9 +14,12 @@ import {
 import { security } from "./security.js";
 import { PgTransactions } from "./transactions.js";
 
+// pg parses PostgreSQL's infinite timestamps as numbers.
+type TokenExpiry = Date | number;
+
 type GrantRow = {
   token_hash: string;
-  expires_at: Date;
+  expires_at: TokenExpiry;
   verified_at: Date | null;
   scopes: ExternalAgentScope[];
 };
@@ -39,7 +42,8 @@ function grant(row: GrantRow): ExternalAgentGrant {
   return {
     // Derive a public identifier without exposing the bearer credential or its stored digest.
     id: security.digest(`external-agent-grant:${row.token_hash}`),
-    expiresAt: row.expires_at.toISOString(),
+    expiresAt:
+      row.expires_at instanceof Date ? row.expires_at.toISOString() : null,
     verifiedAt: row.verified_at?.toISOString() ?? null,
     scopes: row.scopes,
   };
@@ -127,7 +131,8 @@ export class PgExternalAgentTokens {
         );
         const { rows } = await client.query<GrantRow>(
           `INSERT INTO external_agent_tokens(workspace_id,user_id,token_hash,execution_version,expires_at,scopes)
-           SELECT w.id,u.id,$4,u.execution_version,clock_timestamp()+interval '24 hours'*$6::integer,$5
+           SELECT w.id,u.id,$4,u.execution_version,
+             coalesce(clock_timestamp()+interval '24 hours'*$6::integer, 'infinity'::timestamptz),$5
            FROM users u JOIN workspaces w ON w.owner_id=u.id
            WHERE u.id=$1 AND w.id=$2 AND u.execution_version=$3
              AND u.enabled AND u.password_hash IS NOT NULL AND NOT u.must_change_password
@@ -141,7 +146,7 @@ export class PgExternalAgentTokens {
             principal.executionVersion,
             security.digest(token),
             scopes,
-            lifetimeDays,
+            lifetimeDays === "unlimited" ? null : lifetimeDays,
           ],
         );
         if (!rows[0]) throw new AppError("NOT_FOUND", 404);
@@ -262,7 +267,9 @@ export class PgExternalAgentTokens {
     );
     const expires = Math.min(
       Math.floor(Date.now() / 1000) + imageDownloadLifetime,
-      Math.floor(grantExpires.getTime() / 1000),
+      grantExpires instanceof Date
+        ? Math.floor(grantExpires.getTime() / 1000)
+        : grantExpires,
     );
     return {
       expires,
@@ -387,7 +394,7 @@ export async function requireExternalAgentScope(
   access: ExternalAgentAccess,
   scope: ExternalAgentScope,
 ) {
-  const { rows } = await client.query<{ expires_at: Date }>(
+  const { rows } = await client.query<{ expires_at: TokenExpiry }>(
     `SELECT t.expires_at FROM external_agent_tokens t JOIN users u ON u.id=t.user_id
      WHERE (t.project_id IS NULL OR t.project_id=$1) AND t.user_id=$2
        AND t.token_hash=$3 AND $4=ANY(t.scopes) AND t.workspace_id=$5

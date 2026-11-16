@@ -27,8 +27,11 @@ test("opens the current canvas from the Codex handoff and reuses account access 
   await expect(
     dialog.getByRole("checkbox", { name: /允许生成原图下载链接/ }),
   ).not.toBeChecked();
-  await dialog.getByRole("combobox", { name: "令牌有效期" }).click();
-  await page.getByText("365 天", { exact: true }).click();
+  const lifetime = dialog.getByRole("radiogroup", { name: "令牌有效期" });
+  await expect(
+    lifetime.getByRole("radio", { name: "7 天", exact: true }),
+  ).toBeChecked();
+  await lifetime.getByRole("radio", { name: "365 天" }).check();
   const issuedAfter = Date.now();
   await dialog.getByRole("button", { name: "签发令牌并继续" }).click();
   await expect(dialog.getByLabel("Codex MCP 配置")).toHaveValue(
@@ -82,10 +85,12 @@ test("opens the current canvas from the Codex handoff and reuses account access 
   expect(prompt).not.toContain(token);
   await dialog.getByRole("button", { name: "配置与令牌管理" }).click();
   await dialog.getByRole("button", { name: "更换权限或令牌" }).click();
+  await lifetime.getByRole("radio", { name: "长期有效" }).check();
   await dialog.getByRole("button", { name: "替换令牌并继续" }).click();
   await expect(
     dialog.getByText("已签发 · 待验证", { exact: true }),
   ).toBeVisible();
+  await expect(dialog.getByText("长期有效", { exact: true })).toBeVisible();
   expect((await call(token, "read_canvas")).status()).toBe(401);
   const configuredToken = await dialog.getByLabel("账号访问令牌").inputValue();
   expect((await call(configuredToken, "read_canvas")).ok()).toBe(true);
@@ -137,6 +142,7 @@ test("opens the current canvas from the Codex handoff and reuses account access 
   await expect(
     accountDialog.getByRole("checkbox", { name: "允许编辑画布" }),
   ).toBeChecked();
+  await accountDialog.getByRole("radio", { name: "长期有效" }).check();
   await accountDialog.getByRole("button", { name: "签发令牌并继续" }).click();
   const writableToken = await accountDialog
     .getByLabel("账号访问令牌")
