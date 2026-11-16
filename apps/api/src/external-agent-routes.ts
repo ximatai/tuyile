@@ -5,6 +5,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import {
+  externalAgentTokenLifetime,
+  externalAgentTokenLifetimes,
   externalCanvasEdit,
   externalCanvasUndo,
   id,
@@ -37,6 +39,9 @@ const accountGrantChange = z.discriminatedUnion("action", [
       allowCanvasWrite: z.boolean().default(false),
       allowGeneration: z.boolean().default(false),
       allowDownload: z.boolean().default(false),
+      lifetimeDays: externalAgentTokenLifetime.default(
+        externalAgentTokenLifetimes[0],
+      ),
       expectedGrantId: grantId,
     })
     .strict(),
@@ -78,7 +83,12 @@ export function externalAgentRoutes(
     if (input.action === "revoke")
       return c.json(await tokens.revokeAccount(user, input.expectedGrantId));
     return c.json(
-      await tokens.issueAccount(user, scopesFor(input), input.expectedGrantId),
+      await tokens.issueAccount(
+        user,
+        scopesFor(input),
+        input.expectedGrantId,
+        input.lifetimeDays,
+      ),
       201,
     );
   });

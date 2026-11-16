@@ -26,7 +26,7 @@ PUBLIC_APP_ORIGIN=https://tuyile.example docker compose --env-file .env.docker -
 
 配置依据为 [Nginx proxy 模块](https://nginx.org/en/docs/http/ngx_http_proxy_module.html)与 [SSL 模块](https://nginx.org/en/docs/http/ngx_http_ssl_module.html)。本地演练用短期自签证书，仅在隔离浏览器上下文接受该证书，不修改系统信任，也不关闭应用 TLS 验证。
 
-外部 Agent 连接同一 HTTPS 域名的 `/mcp` 路由，由现有代理转发到 API。内网实例要求 Agent 所在设备能够访问该地址。账号级连接可从右上角账户菜单的「连接 Codex」或画布的「在 Codex 中继续」配置。0038 保留已签发的项目令牌及其原有范围，用户可在原项目撤销旧令牌。
+外部 Agent 连接同一 HTTPS 域名的 `/mcp` 路由，由现有代理转发到 API。内网实例要求 Agent 所在设备能够访问该地址。账号级连接可从右上角账户菜单的「连接 Codex」或画布的「在 Codex 中继续」配置。签发或换发时可选择 7、30、90、365 天或长期有效，默认 7 天。长期有效的令牌不会自动到期，可随时撤销。若要回退到支持长期令牌之前的版本，先在当前版本撤销长期令牌或换发为有期限的令牌。换发后旧令牌立即失效，需要在 Codex 中更新令牌。0038 保留已签发的项目令牌及其原有范围，用户可在原项目撤销旧令牌。
 
 MCP 原图下载地址包含短时签名。反向代理应禁用 `/mcp/download/` 的访问日志，或使用不记录查询参数的日志格式。示例 Nginx 配置关闭访问日志。
 

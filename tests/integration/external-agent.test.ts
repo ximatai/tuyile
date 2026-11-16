@@ -469,6 +469,7 @@ it("shares an account token across owned projects and invalidates old credential
   const third = await issue();
   expect(await accountStatus()).toEqual({ grant: null, savedScopes: [] });
   expect((await app.request(accountPath)).status).toBe(401);
+  const issuedAfter = Date.now();
   const issued = await accountChange({
     action: "issue",
     allowCanvasWrite: true,
@@ -476,8 +477,13 @@ it("shares an account token across owned projects and invalidates old credential
   });
   expect(issued.status).toBe(201);
   const { token: accountToken, grant: issuedGrant } = await issued.json();
+  const signedAt = Date.parse(issuedGrant.expiresAt) - 7 * 24 * 60 * 60 * 1000;
+  expect(Math.abs(signedAt - issuedAfter)).toBeLessThan(60_000);
+  expect(
+    (await accountChange({ action: "issue", lifetimeDays: 366 })).status,
+  ).toBe(400);
   expect(await accountStatus()).toMatchObject({
-    grant: { verifiedAt: null },
+    grant: { id: issuedGrant.id, verifiedAt: null },
   });
   const check = await rpc(accountToken, "tools/call", {
     name: "check_connection",
@@ -529,9 +535,15 @@ it("shares an account token across owned projects and invalidates old credential
       })
     ).structuredContent,
   ).toMatchObject({ projectId: other.id, state: "queued" });
-  const { token: replacement } = await (
-    await accountChange({ action: "issue", allowCanvasWrite: true })
+  const { token: replacement, grant: replacementGrant } = await (
+    await accountChange({
+      action: "issue",
+      allowCanvasWrite: true,
+      lifetimeDays: "unlimited",
+    })
   ).json();
+  expect(replacementGrant.expiresAt).toBeNull();
+  expect(await accountStatus()).toMatchObject({ grant: { expiresAt: null } });
   expect((await read(accountToken)).status).toBe(401);
   expect((await read(third)).status).toBe(200);
   expect(
@@ -548,7 +560,7 @@ it("shares an account token across owned projects and invalidates old credential
   expect((await read(replacement)).status).toBe(401);
   expect((await read(third)).status).toBe(200);
   const { token: passwordBoundAccount } = await (
-    await accountChange({ action: "issue" })
+    await accountChange({ action: "issue", lifetimeDays: "unlimited" })
   ).json();
   await f.service.changePassword(
     f.principal,
@@ -686,7 +698,11 @@ it("reads project images and requires permission for revocable short download li
   const projectUrl = `${origin}/projects/${f.project.id}`;
   const third = await issue();
   const { token: accountToken } = await (
-    await accountChange({ action: "issue", allowDownload: true })
+    await accountChange({
+      action: "issue",
+      allowDownload: true,
+      lifetimeDays: "unlimited",
+    })
   ).json();
   const unlinked = await f.creation.upload(f.principal, f.png);
   const imageTool = async (
@@ -729,9 +745,13 @@ it("reads project images and requires permission for revocable short download li
   expect(
     Buffer.from(preview.content[0].data, "base64").subarray(8, 12).toString(),
   ).toBe("WEBP");
+  const issuedAfter = Math.floor(Date.now() / 1000);
   const { url: downloadUrl, expiresAt } = (
     await imageTool("get_image_download_link", unlinked.id)
   ).structuredContent;
+  const linkExpires = Date.parse(expiresAt) / 1000;
+  expect(linkExpires).toBeGreaterThanOrEqual(issuedAfter + 5 * 60);
+  expect(linkExpires).toBeLessThanOrEqual(Math.floor(Date.now() / 1000) + 5 * 60);
   const download = await app.request(downloadUrl);
   expect(download.status).toBe(200);
   expect(download.headers.get("Cache-Control")).toBe("private, no-store");

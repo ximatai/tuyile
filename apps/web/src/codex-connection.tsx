@@ -5,15 +5,18 @@ import {
   Input,
   Modal,
   Notice,
+  Radio,
   Steps,
   Tag,
   useConfirm,
 } from "@tuyile/ui";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type {
-  ExternalAgentAccountConnection,
-  ExternalAgentScope,
+import {
+  externalAgentTokenLifetimes,
+  type ExternalAgentAccountConnection,
+  type ExternalAgentScope,
+  type ExternalAgentTokenLifetime,
 } from "@tuyile/contracts";
 import { ArrowUpRight, CheckCircle2, Copy } from "lucide-react";
 import { ApiError, client } from "./api";
@@ -27,6 +30,10 @@ const scopeLabels = {
 };
 const accountConnectionPath = "/account/external-agent";
 const accountConnectionKey = "codex-account-connection";
+const lifetimeOptions = externalAgentTokenLifetimes.map((value) => ({
+  value,
+  label: value === "unlimited" ? "长期有效" : `${value} 天`,
+}));
 
 function codexConnectionName(accountId: string) {
   return `tuyile_account_${accountId.replaceAll("-", "")}`;
@@ -87,6 +94,10 @@ bearer_token_env_var = "${tokenVariable}"`;
   const [permissions, setPermissions] = useState(() =>
     permissionsFromScopes([]),
   );
+  const [lifetimeDays, setLifetimeDays] = useState<ExternalAgentTokenLifetime>(
+    externalAgentTokenLifetimes[0],
+  );
+  const lifetimeLabelId = useId();
   const [token, setToken] = useState("");
   const [grantReplaced, setGrantReplaced] = useState(false);
   const [step, setStep] = useState(0);
@@ -139,7 +150,7 @@ bearer_token_env_var = "${tokenVariable}"`;
       >(
         accountConnectionPath,
         action === "issue"
-          ? { action, ...permissions, expectedGrantId }
+          ? { action, ...permissions, expectedGrantId, lifetimeDays }
           : { action, expectedGrantId },
       );
       setConnection(response);
@@ -316,7 +327,7 @@ bearer_token_env_var = "${tokenVariable}"`;
         current={step}
         size="small"
         items={[
-          { title: "选择权限" },
+          { title: "设置授权" },
           { title: "配置 Codex" },
           { title: "验证连接" },
         ]}
@@ -383,6 +394,16 @@ bearer_token_env_var = "${tokenVariable}"`;
                 · 链接有效期内，持有者可下载原图
               </span>
             </Checkbox>
+          </div>
+          <div className="field">
+            <span id={lifetimeLabelId}>令牌有效期</span>
+            <Radio.Group
+              aria-labelledby={lifetimeLabelId}
+              disabled={busy}
+              value={lifetimeDays}
+              options={lifetimeOptions}
+              onChange={(event) => setLifetimeDays(event.target.value)}
+            />
           </div>
         </div>
       )}
@@ -496,7 +517,9 @@ bearer_token_env_var = "${tokenVariable}"`;
             {grant.scopes.map((scope) => scopeLabels[scope]).join("、")}
           </span>
           <span>
-            有效至 {new Date(grant.expiresAt).toLocaleDateString("zh-CN")}
+            {grant.expiresAt === null
+              ? "长期有效"
+              : `有效至 ${new Date(grant.expiresAt).toLocaleDateString("zh-CN")}`}
           </span>
           {!verified && (
             <Button disabled={busy} onClick={() => void change("revoke")}>
