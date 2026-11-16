@@ -27,6 +27,9 @@ test("opens the current canvas from the Codex handoff and reuses account access 
   await expect(
     dialog.getByRole("checkbox", { name: /允许生成原图下载链接/ }),
   ).not.toBeChecked();
+  await dialog.getByRole("combobox", { name: "令牌有效期" }).click();
+  await page.getByText("365 天", { exact: true }).click();
+  const issuedAfter = Date.now();
   await dialog.getByRole("button", { name: "签发令牌并继续" }).click();
   await expect(dialog.getByLabel("Codex MCP 配置")).toHaveValue(
     new RegExp(`${baseURL}/mcp`),
@@ -36,6 +39,11 @@ test("opens the current canvas from the Codex handoff and reuses account access 
   );
   const token = await dialog.getByLabel("账号访问令牌").inputValue();
   expect(token).toMatch(/^tuyile_/);
+  const { grant } = await (
+    await page.request.get("/api/account/external-agent")
+  ).json();
+  const signedAt = Date.parse(grant.expiresAt) - 365 * 24 * 60 * 60 * 1000;
+  expect(Math.abs(signedAt - issuedAfter)).toBeLessThan(60_000);
   const call = (token: string, name: string, args: object = {}) =>
     page.request.post("/mcp", {
       headers: {

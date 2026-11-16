@@ -3,6 +3,7 @@ import type pg from "pg";
 import type {
   ExternalAgentGrant,
   ExternalAgentScope,
+  ExternalAgentTokenLifetime,
   Principal,
 } from "@tuyile/contracts";
 import { AppError, type ExternalAgentAccess } from "@tuyile/core";
@@ -114,6 +115,7 @@ export class PgExternalAgentTokens {
     principal: Principal,
     scopes: ExternalAgentScope[],
     expectedGrantId: string | null,
+    lifetimeDays: ExternalAgentTokenLifetime,
   ) {
     const token = `tuyile_${randomBytes(32).toString("base64url")}`;
     return this.transactions.write(
@@ -125,7 +127,7 @@ export class PgExternalAgentTokens {
         );
         const { rows } = await client.query<GrantRow>(
           `INSERT INTO external_agent_tokens(workspace_id,user_id,token_hash,execution_version,expires_at,scopes)
-           SELECT w.id,u.id,$4,u.execution_version,now()+interval '168 hours',$5
+           SELECT w.id,u.id,$4,u.execution_version,clock_timestamp()+interval '24 hours'*$6::integer,$5
            FROM users u JOIN workspaces w ON w.owner_id=u.id
            WHERE u.id=$1 AND w.id=$2 AND u.execution_version=$3
              AND u.enabled AND u.password_hash IS NOT NULL AND NOT u.must_change_password
@@ -139,6 +141,7 @@ export class PgExternalAgentTokens {
             principal.executionVersion,
             security.digest(token),
             scopes,
+            lifetimeDays,
           ],
         );
         if (!rows[0]) throw new AppError("NOT_FOUND", 404);

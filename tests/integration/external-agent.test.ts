@@ -469,6 +469,7 @@ it("shares an account token across owned projects and invalidates old credential
   const third = await issue();
   expect(await accountStatus()).toEqual({ grant: null, savedScopes: [] });
   expect((await app.request(accountPath)).status).toBe(401);
+  const issuedAfter = Date.now();
   const issued = await accountChange({
     action: "issue",
     allowCanvasWrite: true,
@@ -476,8 +477,13 @@ it("shares an account token across owned projects and invalidates old credential
   });
   expect(issued.status).toBe(201);
   const { token: accountToken, grant: issuedGrant } = await issued.json();
+  const signedAt = Date.parse(issuedGrant.expiresAt) - 7 * 24 * 60 * 60 * 1000;
+  expect(Math.abs(signedAt - issuedAfter)).toBeLessThan(60_000);
+  expect(
+    (await accountChange({ action: "issue", lifetimeDays: 366 })).status,
+  ).toBe(400);
   expect(await accountStatus()).toMatchObject({
-    grant: { verifiedAt: null },
+    grant: { id: issuedGrant.id, verifiedAt: null },
   });
   const check = await rpc(accountToken, "tools/call", {
     name: "check_connection",

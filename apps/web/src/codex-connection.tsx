@@ -5,15 +5,18 @@ import {
   Input,
   Modal,
   Notice,
+  Select,
   Steps,
   Tag,
   useConfirm,
 } from "@tuyile/ui";
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type {
-  ExternalAgentAccountConnection,
-  ExternalAgentScope,
+import {
+  externalAgentTokenLifetimeDays,
+  type ExternalAgentAccountConnection,
+  type ExternalAgentScope,
+  type ExternalAgentTokenLifetime,
 } from "@tuyile/contracts";
 import { ArrowUpRight, CheckCircle2, Copy } from "lucide-react";
 import { ApiError, client } from "./api";
@@ -87,6 +90,9 @@ bearer_token_env_var = "${tokenVariable}"`;
   const [permissions, setPermissions] = useState(() =>
     permissionsFromScopes([]),
   );
+  const [lifetimeDays, setLifetimeDays] = useState<ExternalAgentTokenLifetime>(
+    externalAgentTokenLifetimeDays[0],
+  );
   const [token, setToken] = useState("");
   const [grantReplaced, setGrantReplaced] = useState(false);
   const [step, setStep] = useState(0);
@@ -139,7 +145,7 @@ bearer_token_env_var = "${tokenVariable}"`;
       >(
         accountConnectionPath,
         action === "issue"
-          ? { action, ...permissions, expectedGrantId }
+          ? { action, ...permissions, expectedGrantId, lifetimeDays }
           : { action, expectedGrantId },
       );
       setConnection(response);
@@ -316,7 +322,7 @@ bearer_token_env_var = "${tokenVariable}"`;
         current={step}
         size="small"
         items={[
-          { title: "选择权限" },
+          { title: "设置授权" },
           { title: "配置 Codex" },
           { title: "验证连接" },
         ]}
@@ -384,6 +390,19 @@ bearer_token_env_var = "${tokenVariable}"`;
               </span>
             </Checkbox>
           </div>
+          <label className="field">
+            <span>令牌有效期</span>
+            <Select
+              aria-label="令牌有效期"
+              disabled={busy}
+              value={lifetimeDays}
+              options={externalAgentTokenLifetimeDays.map((days) => ({
+                value: days,
+                label: `${days} 天`,
+              }))}
+              onChange={setLifetimeDays}
+            />
+          </label>
         </div>
       )}
       {step === 1 && (
